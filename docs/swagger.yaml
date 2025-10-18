@@ -1,0 +1,4428 @@
+basePath: /api/v1
+consumes:
+- application/json
+definitions:
+  handlers.AppleOAuthRequest:
+    properties:
+      device_info:
+        type: string
+      id_token:
+        type: string
+    required:
+    - id_token
+    type: object
+  handlers.FacebookOAuthRequest:
+    properties:
+      access_token:
+        type: string
+      device_info:
+        type: string
+    required:
+    - access_token
+    type: object
+  handlers.GoogleOAuthRequest:
+    properties:
+      device_info:
+        type: string
+      id_token:
+        type: string
+    required:
+    - id_token
+    type: object
+  handlers.HealthResponse:
+    properties:
+      services:
+        additionalProperties:
+          type: string
+        type: object
+      status:
+        type: string
+      timestamp:
+        type: string
+    type: object
+  models.AuthResponse:
+    properties:
+      mfa_challenge_id:
+        type: string
+      profile:
+        $ref: '#/definitions/models.ProfileResponse'
+      requires_mfa:
+        type: boolean
+      tokens:
+        $ref: '#/definitions/models.TokenPair'
+      user:
+        $ref: '#/definitions/models.UserResponse'
+    type: object
+  models.AuthorInfo:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      first_name:
+        type: string
+      full_name:
+        type: string
+      last_name:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.BusinessCategory:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      name:
+        type: string
+    type: object
+  models.BusinessHoursRequest:
+    properties:
+      close_time:
+        type: string
+      day:
+        enum:
+        - Monday
+        - Tuesday
+        - Wednesday
+        - Thursday
+        - Friday
+        - Saturday
+        - Sunday
+        type: string
+      is_closed:
+        type: boolean
+      open_time:
+        type: string
+    required:
+    - day
+    type: object
+  models.BusinessHoursResponse:
+    properties:
+      close_time:
+        type: string
+      day:
+        type: string
+      is_closed:
+        type: boolean
+      open_time:
+        type: string
+    type: object
+  models.BusinessInfo:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      business_id:
+        type: string
+      name:
+        type: string
+    type: object
+  models.BusinessResponse:
+    properties:
+      additional_info:
+        type: string
+      address:
+        type: string
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      categories:
+        items:
+          $ref: '#/definitions/models.BusinessCategory'
+        type: array
+      cover:
+        $ref: '#/definitions/models.Photo'
+      created_at:
+        type: string
+      description:
+        type: string
+      email:
+        type: string
+      gallery:
+        items:
+          $ref: '#/definitions/models.Photo'
+        type: array
+      hours:
+        items:
+          $ref: '#/definitions/models.BusinessHoursResponse'
+        type: array
+      id:
+        type: string
+      is_following:
+        type: boolean
+      license_no:
+        type: string
+      location:
+        $ref: '#/definitions/models.LocationInfo'
+      name:
+        type: string
+      phone_number:
+        type: string
+      show_location:
+        type: boolean
+      status:
+        type: boolean
+      total_follow:
+        type: integer
+      total_views:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: string
+      website:
+        type: string
+    type: object
+  models.BusinessSearchResult:
+    properties:
+      address:
+        type: string
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      categories:
+        items:
+          type: string
+        type: array
+      cover:
+        $ref: '#/definitions/models.Photo'
+      description:
+        type: string
+      distance:
+        description: Distance in km from search point
+        type: number
+      id:
+        type: string
+      is_following:
+        type: boolean
+      location:
+        $ref: '#/definitions/models.Location'
+      name:
+        type: string
+      phone_number:
+        type: string
+      total_follow:
+        type: integer
+      total_views:
+        type: integer
+      website:
+        type: string
+    type: object
+  models.CategoryInfo:
+    properties:
+      color:
+        type: string
+      icon:
+        $ref: '#/definitions/models.Icon'
+      id:
+        type: string
+      name:
+        type: string
+    type: object
+  models.ChangePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        minLength: 8
+        type: string
+    required:
+    - current_password
+    - new_password
+    type: object
+  models.CommentResponse:
+    properties:
+      attachments:
+        items:
+          $ref: '#/definitions/models.Photo'
+        type: array
+      author:
+        $ref: '#/definitions/models.AuthorInfo'
+      created_at:
+        type: string
+      id:
+        type: string
+      liked_by_me:
+        type: boolean
+      location:
+        $ref: '#/definitions/models.LocationInfo'
+      parent_comment_id:
+        type: string
+      post_id:
+        type: string
+      replies:
+        items:
+          $ref: '#/definitions/models.CommentResponse'
+        type: array
+      text:
+        type: string
+      total_likes:
+        type: integer
+      total_replies:
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  models.CreateBusinessRequest:
+    properties:
+      additional_info:
+        type: string
+      address:
+        maxLength: 500
+        type: string
+      category_ids:
+        items:
+          type: string
+        type: array
+      country:
+        maxLength: 100
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      district:
+        maxLength: 100
+        type: string
+      email:
+        type: string
+      latitude:
+        type: number
+      license_no:
+        maxLength: 100
+        type: string
+      longitude:
+        type: number
+      name:
+        maxLength: 255
+        minLength: 2
+        type: string
+      neighborhood:
+        maxLength: 100
+        type: string
+      phone_number:
+        maxLength: 20
+        type: string
+      province:
+        maxLength: 100
+        type: string
+      show_location:
+        type: boolean
+      website:
+        type: string
+    required:
+    - name
+    type: object
+  models.CreateCommentRequest:
+    properties:
+      attachments:
+        description: Photo URLs
+        items:
+          type: string
+        type: array
+      latitude:
+        type: number
+      longitude:
+        type: number
+      parent_comment_id:
+        type: string
+      text:
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - text
+    type: object
+  models.CreatePollRequest:
+    properties:
+      options:
+        items:
+          type: string
+        maxItems: 10
+        minItems: 2
+        type: array
+    required:
+    - options
+    type: object
+  models.CreatePostRequest:
+    properties:
+      attachments:
+        description: Attachments (photo URLs - already uploaded)
+        items:
+          type: string
+        type: array
+      category_id:
+        type: string
+      contact_no:
+        type: string
+      country:
+        maxLength: 100
+        type: string
+      country_code:
+        type: string
+      currency:
+        description: Sell-specific
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      discount:
+        maximum: 100
+        minimum: 0
+        type: number
+      district:
+        maxLength: 100
+        type: string
+      end_date:
+        type: string
+      end_time:
+        type: string
+      free:
+        type: boolean
+      latitude:
+        description: Location
+        type: number
+      longitude:
+        type: number
+      neighborhood:
+        maxLength: 100
+        type: string
+      original_post_id:
+        description: For shared posts
+        type: string
+      price:
+        minimum: 0
+        type: number
+      province:
+        maxLength: 100
+        type: string
+      start_date:
+        description: Event-specific
+        type: string
+      start_time:
+        type: string
+      title:
+        description: Content
+        maxLength: 255
+        type: string
+      type:
+        allOf:
+        - $ref: '#/definitions/models.PostType'
+        enum:
+        - FEED
+        - EVENT
+        - SELL
+        - PULL
+      visibility:
+        allOf:
+        - $ref: '#/definitions/models.PostVisibility'
+        enum:
+        - PUBLIC
+        - FRIENDS
+        - PRIVATE
+    required:
+    - type
+    type: object
+  models.DiscoverBusiness:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      categories:
+        items:
+          type: string
+        type: array
+      description:
+        type: string
+      distance:
+        description: Distance in km from search point
+        type: number
+      id:
+        type: string
+      location:
+        $ref: '#/definitions/models.Location'
+      name:
+        type: string
+      total_follow:
+        type: integer
+    type: object
+  models.DiscoverPost:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      distance:
+        description: Distance in km from search point
+        type: number
+      id:
+        type: string
+      location:
+        $ref: '#/definitions/models.Location'
+      price:
+        type: number
+      start_date:
+        description: For EVENT type
+        type: string
+      start_time:
+        type: string
+      thumbnail:
+        allOf:
+        - $ref: '#/definitions/models.Photo'
+        description: First attachment
+      title:
+        type: string
+      type:
+        $ref: '#/definitions/models.PostType'
+    type: object
+  models.DiscoverResponse:
+    properties:
+      businesses:
+        items:
+          $ref: '#/definitions/models.DiscoverBusiness'
+        type: array
+      posts:
+        items:
+          $ref: '#/definitions/models.DiscoverPost'
+        type: array
+      total:
+        type: integer
+    type: object
+  models.EventInterestRequest:
+    properties:
+      event_state:
+        allOf:
+        - $ref: '#/definitions/models.EventInterestState'
+        enum:
+        - interested
+        - going
+        - not_interested
+    required:
+    - event_state
+    type: object
+  models.EventInterestResponse:
+    properties:
+      going_count:
+        type: integer
+      interested_count:
+        type: integer
+      post_id:
+        type: string
+      user_event_state:
+        $ref: '#/definitions/models.EventInterestState'
+    type: object
+  models.EventInterestState:
+    enum:
+    - interested
+    - going
+    - not_interested
+    type: string
+    x-enum-varnames:
+    - EventInterestInterested
+    - EventInterestGoing
+    - EventInterestNotInterested
+  models.EventInterestedUser:
+    properties:
+      created_at:
+        type: string
+      event_state:
+        $ref: '#/definitions/models.EventInterestState'
+      user:
+        $ref: '#/definitions/models.AuthorInfo'
+    type: object
+  models.EventState:
+    enum:
+    - upcoming
+    - ongoing
+    - ended
+    type: string
+    x-enum-varnames:
+    - EventStateUpcoming
+    - EventStateOngoing
+    - EventStateEnded
+  models.FollowerResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      first_name:
+        type: string
+      followed_at:
+        type: string
+      full_name:
+        type: string
+      is_followed_by:
+        type: boolean
+      is_following:
+        description: Relationship status (relative to authenticated user)
+        type: boolean
+      last_name:
+        type: string
+      province:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.FollowingResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      first_name:
+        type: string
+      following_since:
+        type: string
+      full_name:
+        type: string
+      is_followed_by:
+        type: boolean
+      is_following:
+        description: Relationship status (relative to authenticated user)
+        type: boolean
+      last_name:
+        type: string
+      province:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.ForgotPasswordRequest:
+    properties:
+      email:
+        type: string
+    required:
+    - email
+    type: object
+  models.FullProfileResponse:
+    properties:
+      about:
+        type: string
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      country:
+        type: string
+      cover:
+        $ref: '#/definitions/models.Photo'
+      created_at:
+        type: string
+      district:
+        type: string
+      dob:
+        type: string
+      email:
+        description: User info
+        type: string
+      email_verified:
+        type: boolean
+      first_name:
+        type: string
+      followers_count:
+        description: Stats (will be populated later)
+        type: integer
+      following_count:
+        type: integer
+      full_name:
+        type: string
+      gender:
+        type: string
+      has_blocked_me:
+        type: boolean
+      id:
+        type: string
+      is_blocked:
+        type: boolean
+      is_complete:
+        type: boolean
+      is_followed_by:
+        type: boolean
+      is_following:
+        description: Relationship status (relative to authenticated user)
+        type: boolean
+      last_name:
+        type: string
+      mfa_enabled:
+        type: boolean
+      neighborhood:
+        type: string
+      phone_verified:
+        type: boolean
+      posts_count:
+        type: integer
+      province:
+        type: string
+      updated_at:
+        type: string
+      website:
+        type: string
+    type: object
+  models.Icon:
+    properties:
+      library:
+        type: string
+      name:
+        type: string
+    type: object
+  models.Location:
+    properties:
+      country:
+        type: string
+      district:
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      province:
+        type: string
+    type: object
+  models.LocationInfo:
+    properties:
+      country:
+        type: string
+      district:
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      neighborhood:
+        type: string
+      province:
+        type: string
+    type: object
+  models.LoginRequest:
+    properties:
+      device_info:
+        type: string
+      email:
+        type: string
+      password:
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  models.MFABackupCodeRequest:
+    properties:
+      backup_code:
+        type: string
+      challenge_id:
+        type: string
+    required:
+    - backup_code
+    - challenge_id
+    type: object
+  models.MFADisableRequest:
+    properties:
+      password:
+        type: string
+    required:
+    - password
+    type: object
+  models.MFAEnrollRequest:
+    properties:
+      type:
+        enum:
+        - TOTP
+        - SMS
+        - EMAIL
+        type: string
+    required:
+    - type
+    type: object
+  models.MFAEnrollResponse:
+    properties:
+      backup_codes:
+        items:
+          type: string
+        type: array
+      factor_id:
+        type: string
+      qr_code_url:
+        description: For TOTP
+        type: string
+      secret_key:
+        description: For TOTP (backup)
+        type: string
+      type:
+        type: string
+    type: object
+  models.MFAVerifyChallengeRequest:
+    properties:
+      challenge_id:
+        type: string
+      code:
+        type: string
+    required:
+    - challenge_id
+    - code
+    type: object
+  models.MFAVerifyRequest:
+    properties:
+      code:
+        type: string
+      factor_id:
+        type: string
+    required:
+    - code
+    - factor_id
+    type: object
+  models.Photo:
+    properties:
+      height:
+        type: integer
+      mime_type:
+        type: string
+      name:
+        type: string
+      size:
+        type: integer
+      url:
+        type: string
+      width:
+        type: integer
+    type: object
+  models.PollOptionResponse:
+    properties:
+      id:
+        type: string
+      option:
+        type: string
+      percentage:
+        type: number
+      vote_count:
+        type: integer
+    type: object
+  models.PollResponse:
+    properties:
+      created_at:
+        type: string
+      has_voted:
+        type: boolean
+      id:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/models.PollOptionResponse'
+        type: array
+      post_id:
+        type: string
+      total_votes:
+        type: integer
+      updated_at:
+        type: string
+      user_vote:
+        description: Poll option ID that user voted for
+        type: string
+    type: object
+  models.PostResponse:
+    properties:
+      attachments:
+        description: Attachments
+        items:
+          $ref: '#/definitions/models.Photo'
+        type: array
+      author:
+        allOf:
+        - $ref: '#/definitions/models.AuthorInfo'
+        description: Author info
+      bookmarked_by_me:
+        type: boolean
+      business:
+        $ref: '#/definitions/models.BusinessInfo'
+      category:
+        $ref: '#/definitions/models.CategoryInfo'
+      contact_no:
+        type: string
+      created_at:
+        description: Timestamps
+        type: string
+      currency:
+        description: Sell-specific
+        type: string
+      description:
+        type: string
+      discount:
+        type: number
+      end_date:
+        type: string
+      end_time:
+        type: string
+      event_state:
+        $ref: '#/definitions/models.EventState'
+      free:
+        type: boolean
+      going_count:
+        type: integer
+      id:
+        type: string
+      interested_count:
+        type: integer
+      is_promoted:
+        type: boolean
+      liked_by_me:
+        type: boolean
+      location:
+        allOf:
+        - $ref: '#/definitions/models.LocationInfo'
+        description: Location
+      original_post:
+        allOf:
+        - $ref: '#/definitions/models.PostResponse'
+        description: Original post (for shares)
+      price:
+        type: number
+      sold:
+        type: boolean
+      start_date:
+        description: Event-specific
+        type: string
+      start_time:
+        type: string
+      status:
+        type: boolean
+      title:
+        type: string
+      total_comments:
+        description: Engagement
+        type: integer
+      total_likes:
+        type: integer
+      total_shares:
+        type: integer
+      type:
+        $ref: '#/definitions/models.PostType'
+      updated_at:
+        type: string
+      visibility:
+        $ref: '#/definitions/models.PostVisibility'
+    type: object
+  models.PostType:
+    enum:
+    - FEED
+    - EVENT
+    - SELL
+    - PULL
+    type: string
+    x-enum-varnames:
+    - PostTypeFeed
+    - PostTypeEvent
+    - PostTypeSell
+    - PostTypePull
+  models.PostVisibility:
+    enum:
+    - PUBLIC
+    - FRIENDS
+    - PRIVATE
+    type: string
+    x-enum-varnames:
+    - VisibilityPublic
+    - VisibilityFriends
+    - VisibilityPrivate
+  models.ProfileResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      first_name:
+        type: string
+      id:
+        type: string
+      is_complete:
+        type: boolean
+      last_name:
+        type: string
+    type: object
+  models.RefreshTokenRequest:
+    properties:
+      refresh_token:
+        type: string
+    required:
+    - refresh_token
+    type: object
+  models.RegisterRequest:
+    properties:
+      device_info:
+        type: string
+      email:
+        type: string
+      first_name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      last_name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - first_name
+    - last_name
+    - latitude
+    - longitude
+    - password
+    type: object
+  models.RelationshipStatus:
+    properties:
+      has_blocked_me:
+        type: boolean
+      is_blocked:
+        type: boolean
+      is_followed_by:
+        type: boolean
+      is_following:
+        type: boolean
+    type: object
+  models.ResetPasswordRequest:
+    properties:
+      new_password:
+        minLength: 8
+        type: string
+      token:
+        type: string
+    required:
+    - new_password
+    - token
+    type: object
+  models.SearchResponse:
+    properties:
+      businesses:
+        items:
+          $ref: '#/definitions/models.BusinessSearchResult'
+        type: array
+      posts:
+        items:
+          $ref: '#/definitions/models.PostResponse'
+        type: array
+      total:
+        type: integer
+      users:
+        items:
+          $ref: '#/definitions/models.UserSearchResult'
+        type: array
+    type: object
+  models.SetBusinessHoursRequest:
+    properties:
+      hours:
+        items:
+          $ref: '#/definitions/models.BusinessHoursRequest'
+        maxItems: 7
+        minItems: 1
+        type: array
+    required:
+    - hours
+    type: object
+  models.TokenPair:
+    properties:
+      access_token:
+        type: string
+      expires_at:
+        type: string
+      refresh_token:
+        type: string
+      token_type:
+        type: string
+    type: object
+  models.UnifiedAuthRequest:
+    properties:
+      device_info:
+        type: string
+      email:
+        type: string
+      first_name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      last_name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      password:
+        minLength: 8
+        type: string
+    required:
+    - email
+    - password
+    type: object
+  models.UpdateBusinessRequest:
+    properties:
+      additional_info:
+        type: string
+      address:
+        maxLength: 500
+        type: string
+      category_ids:
+        items:
+          type: string
+        type: array
+      country:
+        maxLength: 100
+        type: string
+      description:
+        maxLength: 5000
+        type: string
+      district:
+        maxLength: 100
+        type: string
+      email:
+        type: string
+      latitude:
+        type: number
+      license_no:
+        maxLength: 100
+        type: string
+      longitude:
+        type: number
+      name:
+        maxLength: 255
+        minLength: 2
+        type: string
+      neighborhood:
+        maxLength: 100
+        type: string
+      phone_number:
+        maxLength: 20
+        type: string
+      province:
+        maxLength: 100
+        type: string
+      show_location:
+        type: boolean
+      status:
+        type: boolean
+      website:
+        type: string
+    type: object
+  models.UpdateCommentRequest:
+    properties:
+      text:
+        maxLength: 1000
+        minLength: 1
+        type: string
+    required:
+    - text
+    type: object
+  models.UpdatePostRequest:
+    properties:
+      description:
+        maxLength: 5000
+        type: string
+      discount:
+        maximum: 100
+        minimum: 0
+        type: number
+      end_date:
+        type: string
+      end_time:
+        type: string
+      price:
+        description: Sell-specific
+        minimum: 0
+        type: number
+      sold:
+        type: boolean
+      start_date:
+        description: Event-specific
+        type: string
+      start_time:
+        type: string
+      title:
+        maxLength: 255
+        type: string
+      visibility:
+        allOf:
+        - $ref: '#/definitions/models.PostVisibility'
+        enum:
+        - PUBLIC
+        - FRIENDS
+        - PRIVATE
+    type: object
+  models.UpdateProfileRequest:
+    properties:
+      about:
+        maxLength: 500
+        type: string
+      country:
+        maxLength: 100
+        type: string
+      district:
+        maxLength: 100
+        type: string
+      dob:
+        type: string
+      first_name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      gender:
+        enum:
+        - male
+        - female
+        - other
+        type: string
+      last_name:
+        maxLength: 100
+        minLength: 2
+        type: string
+      latitude:
+        type: number
+      longitude:
+        type: number
+      neighborhood:
+        maxLength: 100
+        type: string
+      province:
+        maxLength: 100
+        type: string
+      website:
+        type: string
+    type: object
+  models.UploadImageResponse:
+    properties:
+      photo:
+        $ref: '#/definitions/models.Photo'
+    type: object
+  models.UserResponse:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      id:
+        type: string
+      mfa_enabled:
+        type: boolean
+      phone_verified:
+        type: boolean
+    type: object
+  models.UserSearchResult:
+    properties:
+      about:
+        type: string
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      first_name:
+        type: string
+      full_name:
+        type: string
+      id:
+        type: string
+      is_followed_by:
+        type: boolean
+      is_following:
+        description: Relationship status
+        type: boolean
+      last_name:
+        type: string
+      province:
+        type: string
+    type: object
+  models.UserSession:
+    properties:
+      created_at:
+        type: string
+      device_info:
+        type: string
+      expires_at:
+        type: string
+      id:
+        type: string
+      ip_address:
+        type: string
+      revoked:
+        type: boolean
+      revoked_at:
+        type: string
+      updated_at:
+        type: string
+      user_agent:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.VerifyEmailRequest:
+    properties:
+      token:
+        type: string
+    required:
+    - token
+    type: object
+  models.VotePollRequest:
+    properties:
+      poll_option_id:
+        type: string
+    required:
+    - poll_option_id
+    type: object
+  utils.Response:
+    properties:
+      data: {}
+      error:
+        type: string
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@hamsaya.app
+    name: API Support
+    url: https://hamsaya.app/support
+  description: A production-ready Go backend for a social media mobile application
+    with posts, business profiles, marketplace, real-time chat, and location services.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: https://hamsaya.app/terms/
+  title: Hamsaya Backend API
+  version: "1.0"
+paths:
+  /auth/change-password:
+    post:
+      consumes:
+      - application/json
+      description: Change password for authenticated user
+      parameters:
+      - description: Current and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Change password
+      tags:
+      - auth
+  /auth/forgot-password:
+    post:
+      consumes:
+      - application/json
+      description: Request password reset
+      parameters:
+      - description: Email address
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ForgotPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Forgot password
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 'Authenticate user with email and password. If user doesn''t exist,
+        automatically creates a new account with incomplete profile (is_complete:
+        false). If user exists, performs normal login with password verification and
+        MFA checks.'
+      parameters:
+      - description: Login credentials (email and password only)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Login successful or user auto-registered
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Invalid credentials or account locked
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Login or Auto-Register
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      consumes:
+      - application/json
+      description: Logout from current session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/logout-all:
+    post:
+      consumes:
+      - application/json
+      description: Logout from all active sessions
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Logout from all devices
+      tags:
+      - auth
+  /auth/mfa/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verify MFA code during login
+      parameters:
+      - description: MFA verification
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.MFAVerifyChallengeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Verify MFA code
+      tags:
+      - auth
+  /auth/oauth/apple:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate or register a user using Apple OAuth
+      parameters:
+      - description: Apple OAuth request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AppleOAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "501":
+          description: Not Implemented
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Apple OAuth authentication
+      tags:
+      - auth
+  /auth/oauth/facebook:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate or register a user using Facebook OAuth
+      parameters:
+      - description: Facebook OAuth request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.FacebookOAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Facebook OAuth authentication
+      tags:
+      - auth
+  /auth/oauth/google:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate or register a user using Google OAuth
+      parameters:
+      - description: Google OAuth request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.GoogleOAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Google OAuth authentication
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Get a new access token using refresh token
+      parameters:
+      - description: Refresh token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.TokenPair'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Refresh access token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Creates complete user profile with firstname, lastname, and location.
+        If user exists with incomplete profile, it will be updated and marked as complete.
+        Requires email, password, first_name, last_name, latitude, and longitude.
+      parameters:
+      - description: Complete registration details with location
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: User registered with complete profile
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "409":
+          description: User already has complete profile
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Complete user profile registration
+      tags:
+      - auth
+  /auth/reset-password:
+    post:
+      consumes:
+      - application/json
+      description: Reset password with reset token
+      parameters:
+      - description: Reset token and new password
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.ResetPasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Reset password
+      tags:
+      - auth
+  /auth/sessions:
+    get:
+      description: Get all active sessions for the authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.UserSession'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get active sessions
+      tags:
+      - auth
+  /auth/unified:
+    post:
+      consumes:
+      - application/json
+      description: Login if user exists, otherwise register new user with location
+      parameters:
+      - description: Authentication details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UnifiedAuthRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User logged in
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "201":
+          description: User registered
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Unified authentication (Login or Register)
+      tags:
+      - auth
+  /auth/verify-email:
+    post:
+      consumes:
+      - application/json
+      description: Verify user's email address
+      parameters:
+      - description: Verification token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.VerifyEmailRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Verify email
+      tags:
+      - auth
+  /businesses:
+    get:
+      description: Get all businesses owned by the authenticated user
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.BusinessResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated user's businesses
+      tags:
+      - businesses
+    post:
+      consumes:
+      - application/json
+      description: Create a new business profile
+      parameters:
+      - description: Business creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateBusinessRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BusinessResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a business profile
+      tags:
+      - businesses
+  /businesses/{business_id}:
+    delete:
+      description: Delete a business profile (soft delete)
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a business profile
+      tags:
+      - businesses
+    get:
+      description: Get a business profile by ID
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BusinessResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get a business profile
+      tags:
+      - businesses
+    put:
+      consumes:
+      - application/json
+      description: Update a business profile
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Business update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateBusinessRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BusinessResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a business profile
+      tags:
+      - businesses
+  /businesses/{business_id}/attachments:
+    post:
+      consumes:
+      - application/json
+      description: Add an image to business gallery
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Photo URL (already uploaded)
+        in: body
+        name: photo_url
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Add gallery image
+      tags:
+      - businesses
+  /businesses/{business_id}/attachments/{attachment_id}:
+    delete:
+      description: Remove an image from business gallery
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Attachment ID
+        in: path
+        name: attachment_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete gallery image
+      tags:
+      - businesses
+  /businesses/{business_id}/avatar:
+    post:
+      consumes:
+      - application/json
+      description: Upload an avatar for a business
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Photo URL (already uploaded)
+        in: body
+        name: photo_url
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Upload business avatar
+      tags:
+      - businesses
+  /businesses/{business_id}/cover:
+    post:
+      consumes:
+      - application/json
+      description: Upload a cover photo for a business
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Photo URL (already uploaded)
+        in: body
+        name: photo_url
+        required: true
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Upload business cover photo
+      tags:
+      - businesses
+  /businesses/{business_id}/follow:
+    delete:
+      description: Unfollow a business profile
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Unfollow a business
+      tags:
+      - businesses
+    post:
+      description: Follow a business profile
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Follow a business
+      tags:
+      - businesses
+  /businesses/{business_id}/hours:
+    post:
+      consumes:
+      - application/json
+      description: Set operating hours for a business
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Business hours request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.SetBusinessHoursRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Set business hours
+      tags:
+      - businesses
+  /businesses/categories:
+    get:
+      description: Get all active business categories
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.BusinessCategory'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get business categories
+      tags:
+      - businesses
+  /businesses/search:
+    get:
+      description: List business profiles with filters
+      parameters:
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: string
+      - description: Filter by category ID
+        in: query
+        name: category_id
+        type: string
+      - description: Filter by province
+        in: query
+        name: province
+        type: string
+      - description: Search by name or description
+        in: query
+        name: search
+        type: string
+      - description: Latitude for nearby search
+        in: query
+        name: latitude
+        type: number
+      - description: Longitude for nearby search
+        in: query
+        name: longitude
+        type: number
+      - description: Radius in kilometers for nearby search
+        in: query
+        name: radius_km
+        type: number
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.BusinessResponse'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: List businesses
+      tags:
+      - businesses
+  /comments/{comment_id}:
+    delete:
+      description: Delete a comment (soft delete)
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a comment
+      tags:
+      - comments
+    get:
+      description: Get a comment by ID
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get a comment
+      tags:
+      - comments
+    put:
+      consumes:
+      - application/json
+      description: Update a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      - description: Comment update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a comment
+      tags:
+      - comments
+  /comments/{comment_id}/like:
+    delete:
+      description: Remove like from a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Unlike a comment
+      tags:
+      - comments
+    post:
+      description: Like a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Like a comment
+      tags:
+      - comments
+  /comments/{comment_id}/replies:
+    get:
+      description: Get replies to a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.CommentResponse'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get comment replies
+      tags:
+      - comments
+  /discover:
+    get:
+      consumes:
+      - application/json
+      description: Get posts and businesses within a radius for map view
+      parameters:
+      - description: Latitude
+        in: query
+        name: latitude
+        required: true
+        type: number
+      - description: Longitude
+        in: query
+        name: longitude
+        required: true
+        type: number
+      - description: Radius in kilometers (max 100)
+        in: query
+        name: radius_km
+        required: true
+        type: number
+      - description: 'Post type filter: FEED, EVENT, SELL, PULL'
+        in: query
+        name: type
+        type: string
+      - description: Limit results (default 100, max 500)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.DiscoverResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Map-based discovery
+      tags:
+      - Discovery
+  /events/{post_id}/going:
+    get:
+      description: Get list of users who are going to an event
+      parameters:
+      - description: Post ID (must be an EVENT type post)
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.EventInterestedUser'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get going users
+      tags:
+      - events
+  /events/{post_id}/interest:
+    delete:
+      description: Remove user's interest from an event
+      parameters:
+      - description: Post ID (must be an EVENT type post)
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Remove event interest
+      tags:
+      - events
+    get:
+      description: Get the interest status for an event (counts and user's current
+        state)
+      parameters:
+      - description: Post ID (must be an EVENT type post)
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.EventInterestResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get event interest status
+      tags:
+      - events
+    post:
+      consumes:
+      - application/json
+      description: Set user's interest level for an event (interested, going, not_interested)
+      parameters:
+      - description: Post ID (must be an EVENT type post)
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - description: Event interest request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.EventInterestRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.EventInterestResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Set event interest
+      tags:
+      - events
+  /events/{post_id}/interested:
+    get:
+      description: Get list of users who are interested in an event
+      parameters:
+      - description: Post ID (must be an EVENT type post)
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.EventInterestedUser'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get interested users
+      tags:
+      - events
+  /health:
+    get:
+      description: Check if the API is running
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Health check
+      tags:
+      - health
+  /health/db-stats:
+    get:
+      description: Get database connection pool statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Database statistics
+      tags:
+      - health
+  /health/live:
+    get:
+      description: Check if the application is alive
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+      summary: Liveness probe
+      tags:
+      - health
+  /health/metrics:
+    get:
+      description: Get application runtime and system metrics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: System metrics
+      tags:
+      - health
+  /health/ready:
+    get:
+      description: Check if the application is ready to serve traffic
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Readiness probe
+      tags:
+      - health
+  /health/redis-stats:
+    get:
+      description: Get Redis server information and statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Redis statistics
+      tags:
+      - health
+  /health/startup:
+    get:
+      description: Check if the application has started successfully
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.HealthResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Startup probe
+      tags:
+      - health
+  /health/version:
+    get:
+      description: Get application version and build information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Version information
+      tags:
+      - health
+  /mfa/backup-codes/count:
+    get:
+      description: Get the count of unused backup codes
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  type: integer
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get backup codes count
+      tags:
+      - mfa
+  /mfa/backup-codes/regenerate:
+    post:
+      description: Regenerate backup codes for MFA
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Regenerate backup codes
+      tags:
+      - mfa
+  /mfa/disable:
+    post:
+      consumes:
+      - application/json
+      description: Disable multi-factor authentication for the user
+      parameters:
+      - description: MFA disable request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.MFADisableRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Disable MFA
+      tags:
+      - mfa
+  /mfa/enroll:
+    post:
+      consumes:
+      - application/json
+      description: Enroll TOTP (Time-based One-Time Password) for MFA
+      parameters:
+      - description: MFA enrollment request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.MFAEnrollRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.MFAEnrollResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Enroll TOTP
+      tags:
+      - mfa
+  /mfa/verify-backup-code:
+    post:
+      consumes:
+      - application/json
+      description: Verify MFA challenge with a backup code
+      parameters:
+      - description: Backup code request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.MFABackupCodeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Verify with backup code
+      tags:
+      - mfa
+  /mfa/verify-enrollment:
+    post:
+      consumes:
+      - application/json
+      description: Verify MFA enrollment with code from authenticator app
+      parameters:
+      - description: MFA verification request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.MFAVerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Verify MFA enrollment
+      tags:
+      - mfa
+  /polls/{poll_id}:
+    get:
+      description: Get a poll by ID
+      parameters:
+      - description: Poll ID
+        in: path
+        name: poll_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PollResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get a poll
+      tags:
+      - polls
+  /polls/{poll_id}/vote:
+    delete:
+      description: Remove user's vote from a poll
+      parameters:
+      - description: Poll ID
+        in: path
+        name: poll_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete vote
+      tags:
+      - polls
+    post:
+      consumes:
+      - application/json
+      description: Vote on a poll option
+      parameters:
+      - description: Poll ID
+        in: path
+        name: poll_id
+        required: true
+        type: string
+      - description: Vote request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.VotePollRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PollResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Vote on a poll
+      tags:
+      - polls
+  /posts:
+    get:
+      description: Get posts feed with filters
+      parameters:
+      - description: Post type (FEED, EVENT, SELL, PULL)
+        in: query
+        name: type
+        type: string
+      - description: Filter by user ID
+        in: query
+        name: user_id
+        type: string
+      - description: Filter by category ID (for SELL posts)
+        in: query
+        name: category_id
+        type: string
+      - description: Filter by province
+        in: query
+        name: province
+        type: string
+      - default: recent
+        description: Sort by (recent, trending, nearby)
+        in: query
+        name: sort_by
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.PostResponse'
+                  type: array
+              type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get feed
+      tags:
+      - posts
+    post:
+      consumes:
+      - application/json
+      description: Create a new post (FEED, EVENT, SELL, or PULL)
+      parameters:
+      - description: Post creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PostResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a post
+      tags:
+      - posts
+  /posts/{post_id}:
+    delete:
+      description: Delete a post (soft delete)
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete a post
+      tags:
+      - posts
+    get:
+      description: Get a post by ID
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PostResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get a post
+      tags:
+      - posts
+    put:
+      consumes:
+      - application/json
+      description: Update a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - description: Post update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PostResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update a post
+      tags:
+      - posts
+  /posts/{post_id}/bookmark:
+    delete:
+      description: Remove bookmark from a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Remove bookmark from a post
+      tags:
+      - posts
+    post:
+      description: Bookmark a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Bookmark a post
+      tags:
+      - posts
+  /posts/{post_id}/comments:
+    get:
+      description: Get comments for a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.CommentResponse'
+                  type: array
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get post comments
+      tags:
+      - comments
+    post:
+      consumes:
+      - application/json
+      description: Create a new comment on a post or reply to a comment
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - description: Comment creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateCommentRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a comment
+      tags:
+      - comments
+  /posts/{post_id}/like:
+    delete:
+      description: Remove like from a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Unlike a post
+      tags:
+      - posts
+    post:
+      description: Like a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Like a post
+      tags:
+      - posts
+  /posts/{post_id}/polls:
+    get:
+      description: Get poll by post ID
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PollResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get poll for a post
+      tags:
+      - polls
+    post:
+      consumes:
+      - application/json
+      description: Create a poll for a PULL type post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - description: Poll creation request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreatePollRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PollResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Create a poll
+      tags:
+      - polls
+  /posts/{post_id}/share:
+    post:
+      consumes:
+      - application/json
+      description: Share a post with optional text
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - description: Share text
+        in: body
+        name: share_text
+        schema:
+          type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PostResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Share a post
+      tags:
+      - posts
+  /search:
+    get:
+      consumes:
+      - application/json
+      description: Search across posts, users, and businesses
+      parameters:
+      - description: Search query (minimum 2 characters)
+        in: query
+        name: query
+        required: true
+        type: string
+      - description: 'Search type: all, posts, users, businesses'
+        enum:
+        - all
+        - posts
+        - users
+        - businesses
+        in: query
+        name: type
+        type: string
+      - description: Limit per page (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Latitude for location-based search
+        in: query
+        name: latitude
+        type: number
+      - description: Longitude for location-based search
+        in: query
+        name: longitude
+        type: number
+      - description: Radius in kilometers for location-based search
+        in: query
+        name: radius_km
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.SearchResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Global search
+      tags:
+      - Search
+  /search/businesses:
+    get:
+      consumes:
+      - application/json
+      description: Search for businesses by name, description, or location
+      parameters:
+      - description: Search query
+        in: query
+        name: query
+        required: true
+        type: string
+      - description: Limit per page
+        in: query
+        name: limit
+        type: integer
+      - description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Latitude for location-based search
+        in: query
+        name: latitude
+        type: number
+      - description: Longitude for location-based search
+        in: query
+        name: longitude
+        type: number
+      - description: Radius in kilometers
+        in: query
+        name: radius_km
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.BusinessSearchResult'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Search businesses
+      tags:
+      - Search
+  /search/posts:
+    get:
+      consumes:
+      - application/json
+      description: Search for posts with full-text search and location filtering
+      parameters:
+      - description: Search query
+        in: query
+        name: query
+        required: true
+        type: string
+      - description: Limit per page
+        in: query
+        name: limit
+        type: integer
+      - description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      - description: Latitude for location-based search
+        in: query
+        name: latitude
+        type: number
+      - description: Longitude for location-based search
+        in: query
+        name: longitude
+        type: number
+      - description: Radius in kilometers
+        in: query
+        name: radius_km
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.PostResponse'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Search posts
+      tags:
+      - Search
+  /search/users:
+    get:
+      consumes:
+      - application/json
+      description: Search for users by name
+      parameters:
+      - description: Search query
+        in: query
+        name: query
+        required: true
+        type: string
+      - description: Limit per page
+        in: query
+        name: limit
+        type: integer
+      - description: Offset for pagination
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.UserSearchResult'
+                  type: array
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Search users
+      tags:
+      - Search
+  /users/{user_id}:
+    get:
+      description: Get a user's profile by their user ID
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.FullProfileResponse'
+              type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get user profile by ID
+      tags:
+      - profile
+  /users/{user_id}/block:
+    delete:
+      description: Unblock a previously blocked user
+      parameters:
+      - description: User ID to unblock
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Unblock a user
+      tags:
+      - relationships
+    post:
+      description: Block another user
+      parameters:
+      - description: User ID to block
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Block a user
+      tags:
+      - relationships
+  /users/{user_id}/follow:
+    delete:
+      description: Unfollow a user that you're currently following
+      parameters:
+      - description: User ID to unfollow
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Unfollow a user
+      tags:
+      - relationships
+    post:
+      description: Follow another user
+      parameters:
+      - description: User ID to follow
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Follow a user
+      tags:
+      - relationships
+  /users/{user_id}/followers:
+    get:
+      description: Get a list of users following the specified user
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.FollowerResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get followers
+      tags:
+      - relationships
+  /users/{user_id}/following:
+    get:
+      description: Get a list of users that the specified user is following
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.FollowingResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get following
+      tags:
+      - relationships
+  /users/{user_id}/relationship:
+    get:
+      description: Get the relationship status between authenticated user and another
+        user
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.RelationshipStatus'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get relationship status
+      tags:
+      - relationships
+  /users/me:
+    get:
+      description: Get the profile of the currently authenticated user
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.FullProfileResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated user's profile
+      tags:
+      - profile
+    put:
+      consumes:
+      - application/json
+      description: Update the authenticated user's profile information
+      parameters:
+      - description: Profile update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateProfileRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.FullProfileResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user profile
+      tags:
+      - profile
+  /users/me/avatar:
+    delete:
+      description: Delete the authenticated user's avatar
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete avatar
+      tags:
+      - profile
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a new avatar image for the authenticated user
+      parameters:
+      - description: Avatar image file (JPEG/PNG, max 10MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.UploadImageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Upload avatar
+      tags:
+      - profile
+  /users/me/bookmarks:
+    get:
+      description: Get all bookmarked posts for the authenticated user
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.PostResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get bookmarked posts
+      tags:
+      - posts
+  /users/me/cover:
+    delete:
+      description: Delete the authenticated user's cover photo
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Delete cover photo
+      tags:
+      - profile
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload a new cover photo for the authenticated user
+      parameters:
+      - description: Cover image file (JPEG/PNG, max 10MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.UploadImageResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Upload cover photo
+      tags:
+      - profile
+  /users/me/posts:
+    get:
+      description: Get all posts created by the authenticated user
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.PostResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get authenticated user's posts
+      tags:
+      - posts
+produces:
+- application/json
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

@@ -1,0 +1,10 @@
+-- Drop tables in reverse order
+DROP TABLE IF EXISTS post_reports CASCADE;
+DROP TABLE IF EXISTS event_interests CASCADE;
+DROP TABLE IF EXISTS post_shares CASCADE;
+DROP TABLE IF EXISTS post_bookmarks CASCADE;
+DROP TABLE IF EXISTS post_likes CASCADE;
+DROP TABLE IF EXISTS attachments CASCADE;
+DROP TABLE IF EXISTS posts CASCADE;
+DROP TABLE IF EXISTS business_profiles CASCADE;
+DROP TABLE IF EXISTS sell_categories CASCADE;

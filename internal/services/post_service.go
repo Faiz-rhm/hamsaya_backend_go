@@ -1,0 +1,650 @@
+package services
+
+import (
+	"context"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/hamsaya/backend/internal/models"
+	"github.com/hamsaya/backend/internal/repositories"
+	"github.com/hamsaya/backend/internal/utils"
+	"github.com/jackc/pgx/v5/pgtype"
+	"go.uber.org/zap"
+)
+
+// PostService handles post operations
+type PostService struct {
+	postRepo     repositories.PostRepository
+	userRepo     repositories.UserRepository
+	businessRepo repositories.BusinessRepository
+	categoryRepo repositories.CategoryRepository
+	logger       *zap.Logger
+}
+
+// NewPostService creates a new post service
+func NewPostService(
+	postRepo repositories.PostRepository,
+	userRepo repositories.UserRepository,
+	businessRepo repositories.BusinessRepository,
+	categoryRepo repositories.CategoryRepository,
+	logger *zap.Logger,
+) *PostService {
+	return &PostService{
+		postRepo:     postRepo,
+		userRepo:     userRepo,
+		businessRepo: businessRepo,
+		categoryRepo: categoryRepo,
+		logger:       logger,
+	}
+}
+
+// CreatePost creates a new post
+func (s *PostService) CreatePost(ctx context.Context, userID string, req *models.CreatePostRequest) (*models.PostResponse, error) {
+	// Validate post type specific requirements
+	if err := s.validatePostRequest(req); err != nil {
+		return nil, err
+	}
+
+	// Create post
+	postID := uuid.New().String()
+	now := time.Now()
+
+	post := &models.Post{
+		ID:          postID,
+		UserID:      &userID,
+		Type:        req.Type,
+		Title:       req.Title,
+		Description: req.Description,
+		Status:      true,
+		Visibility:  models.VisibilityPublic,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	// Set visibility if provided
+	if req.Visibility != "" {
+		post.Visibility = req.Visibility
+	}
+
+	// Handle sell-specific fields
+	if req.Type == models.PostTypeSell {
+		post.Currency = req.Currency
+		post.Price = req.Price
+		post.Discount = req.Discount
+		if req.Free != nil {
+			post.Free = *req.Free
+		}
+		post.CategoryID = req.CategoryID
+		post.CountryCode = req.CountryCode
+		post.ContactNo = req.ContactNo
+	}
+
+	// Handle event-specific fields
+	if req.Type == models.PostTypeEvent {
+		post.StartDate = req.StartDate
+		post.StartTime = req.StartTime
+		post.EndDate = req.EndDate
+		post.EndTime = req.EndTime
+		eventState := models.EventStateUpcoming
+		post.EventState = &eventState
+	}
+
+	// Handle location
+	if req.Latitude != nil && req.Longitude != nil {
+		post.AddressLocation = &pgtype.Point{
+			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude},
+			Valid: true,
+		}
+		post.Country = req.Country
+		post.Province = req.Province
+		post.District = req.District
+		post.Neighborhood = req.Neighborhood
+		post.IsLocation = true
+	}
+
+	// Handle shared post
+	if req.OriginalPostID != nil {
+		post.OriginalPostID = req.OriginalPostID
+	}
+
+	// Create post in database
+	if err := s.postRepo.Create(ctx, post); err != nil {
+		s.logger.Error("Failed to create post", zap.String("user_id", userID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to create post", err)
+	}
+
+	// Create attachments if provided
+	if len(req.Attachments) > 0 {
+		for _, photoURL := range req.Attachments {
+			attachment := &models.Attachment{
+				ID:     uuid.New().String(),
+				PostID: postID,
+				Photo: models.Photo{
+					URL: photoURL,
+					// TODO: Get photo metadata (width, height, size) from storage service when available
+				},
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+
+			if err := s.postRepo.CreateAttachment(ctx, attachment); err != nil {
+				s.logger.Error("Failed to create attachment",
+					zap.String("post_id", postID),
+					zap.Error(err),
+				)
+				// Continue with other attachments
+			}
+		}
+	}
+
+	s.logger.Info("Post created",
+		zap.String("post_id", postID),
+		zap.String("user_id", userID),
+		zap.String("type", string(req.Type)),
+	)
+
+	// Return enriched post
+	return s.GetPost(ctx, postID, &userID)
+}
+
+// GetPost gets a post by ID with full details
+func (s *PostService) GetPost(ctx context.Context, postID string, viewerID *string) (*models.PostResponse, error) {
+	// Get post
+	post, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		s.logger.Warn("Post not found", zap.String("post_id", postID), zap.Error(err))
+		return nil, utils.NewNotFoundError("Post not found", err)
+	}
+
+	// Enrich post
+	return s.enrichPost(ctx, post, viewerID)
+}
+
+// UpdatePost updates a post
+func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req *models.UpdatePostRequest) (*models.PostResponse, error) {
+	// Get existing post
+	post, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Post not found", err)
+	}
+
+	// Check ownership
+	if post.UserID == nil || *post.UserID != userID {
+		return nil, utils.NewUnauthorizedError("You don't have permission to update this post", nil)
+	}
+
+	// Update fields
+	if req.Title != nil {
+		post.Title = req.Title
+	}
+	if req.Description != nil {
+		post.Description = req.Description
+	}
+	if req.Visibility != nil {
+		post.Visibility = *req.Visibility
+	}
+	if req.Price != nil {
+		post.Price = req.Price
+	}
+	if req.Discount != nil {
+		post.Discount = req.Discount
+	}
+	if req.Sold != nil {
+		post.Sold = *req.Sold
+	}
+	if req.StartDate != nil {
+		post.StartDate = req.StartDate
+	}
+	if req.StartTime != nil {
+		post.StartTime = req.StartTime
+	}
+	if req.EndDate != nil {
+		post.EndDate = req.EndDate
+	}
+	if req.EndTime != nil {
+		post.EndTime = req.EndTime
+	}
+
+	post.UpdatedAt = time.Now()
+
+	// Update in database
+	if err := s.postRepo.Update(ctx, post); err != nil {
+		s.logger.Error("Failed to update post", zap.String("post_id", postID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to update post", err)
+	}
+
+	s.logger.Info("Post updated", zap.String("post_id", postID), zap.String("user_id", userID))
+
+	// Return enriched post
+	return s.GetPost(ctx, postID, &userID)
+}
+
+// DeletePost soft deletes a post
+func (s *PostService) DeletePost(ctx context.Context, postID, userID string) error {
+	// Get existing post
+	post, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		return utils.NewNotFoundError("Post not found", err)
+	}
+
+	// Check ownership
+	if post.UserID == nil || *post.UserID != userID {
+		return utils.NewUnauthorizedError("You don't have permission to delete this post", nil)
+	}
+
+	// Delete post
+	if err := s.postRepo.Delete(ctx, postID); err != nil {
+		s.logger.Error("Failed to delete post", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to delete post", err)
+	}
+
+	s.logger.Info("Post deleted", zap.String("post_id", postID), zap.String("user_id", userID))
+	return nil
+}
+
+// LikePost likes a post
+func (s *PostService) LikePost(ctx context.Context, userID, postID string) error {
+	// Check if post exists
+	if _, err := s.postRepo.GetByID(ctx, postID); err != nil {
+		return utils.NewNotFoundError("Post not found", err)
+	}
+
+	// Like post (idempotent)
+	if err := s.postRepo.LikePost(ctx, userID, postID); err != nil {
+		s.logger.Error("Failed to like post", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to like post", err)
+	}
+
+	s.logger.Info("Post liked", zap.String("post_id", postID), zap.String("user_id", userID))
+	return nil
+}
+
+// UnlikePost unlikes a post
+func (s *PostService) UnlikePost(ctx context.Context, userID, postID string) error {
+	// Unlike post (idempotent)
+	if err := s.postRepo.UnlikePost(ctx, userID, postID); err != nil {
+		s.logger.Error("Failed to unlike post", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to unlike post", err)
+	}
+
+	s.logger.Info("Post unliked", zap.String("post_id", postID), zap.String("user_id", userID))
+	return nil
+}
+
+// BookmarkPost bookmarks a post
+func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) error {
+	// Check if post exists
+	if _, err := s.postRepo.GetByID(ctx, postID); err != nil {
+		return utils.NewNotFoundError("Post not found", err)
+	}
+
+	// Bookmark post (idempotent)
+	if err := s.postRepo.BookmarkPost(ctx, userID, postID); err != nil {
+		s.logger.Error("Failed to bookmark post", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to bookmark post", err)
+	}
+
+	s.logger.Info("Post bookmarked", zap.String("post_id", postID), zap.String("user_id", userID))
+	return nil
+}
+
+// UnbookmarkPost removes a bookmark
+func (s *PostService) UnbookmarkPost(ctx context.Context, userID, postID string) error {
+	// Unbookmark post (idempotent)
+	if err := s.postRepo.UnbookmarkPost(ctx, userID, postID); err != nil {
+		s.logger.Error("Failed to unbookmark post", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to unbookmark post", err)
+	}
+
+	s.logger.Info("Post unbookmarked", zap.String("post_id", postID), zap.String("user_id", userID))
+	return nil
+}
+
+// SharePost shares a post
+func (s *PostService) SharePost(ctx context.Context, userID, originalPostID string, shareText *string) (*models.PostResponse, error) {
+	// Check if original post exists
+	originalPost, err := s.postRepo.GetByID(ctx, originalPostID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Original post not found", err)
+	}
+
+	// Create share record
+	shareID := uuid.New().String()
+	share := &models.PostShare{
+		ID:             shareID,
+		UserID:         userID,
+		OriginalPostID: originalPostID,
+		ShareText:      shareText,
+		CreatedAt:      time.Now(),
+	}
+
+	// If user adds text, create a new post that references the original
+	if shareText != nil && *shareText != "" {
+		// Create a new post with the share
+		sharePostReq := &models.CreatePostRequest{
+			Type:           originalPost.Type,
+			Description:    shareText,
+			OriginalPostID: &originalPostID,
+		}
+
+		sharePost, err := s.CreatePost(ctx, userID, sharePostReq)
+		if err != nil {
+			return nil, err
+		}
+
+		share.SharedPostID = &sharePost.ID
+	}
+
+	// Save share record
+	if err := s.postRepo.SharePost(ctx, share); err != nil {
+		s.logger.Error("Failed to share post", zap.String("post_id", originalPostID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to share post", err)
+	}
+
+	s.logger.Info("Post shared",
+		zap.String("original_post_id", originalPostID),
+		zap.String("user_id", userID),
+	)
+
+	// Return the original post or the new shared post
+	if share.SharedPostID != nil {
+		return s.GetPost(ctx, *share.SharedPostID, &userID)
+	}
+
+	return s.GetPost(ctx, originalPostID, &userID)
+}
+
+// GetFeed gets posts for the feed
+func (s *PostService) GetFeed(ctx context.Context, filter *models.FeedFilter, viewerID *string) ([]*models.PostResponse, error) {
+	// Get posts from repository
+	posts, err := s.postRepo.GetFeed(ctx, filter)
+	if err != nil {
+		s.logger.Error("Failed to get feed", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get feed", err)
+	}
+
+	// Enrich posts
+	var enrichedPosts []*models.PostResponse
+	for _, post := range posts {
+		enrichedPost, err := s.enrichPost(ctx, post, viewerID)
+		if err != nil {
+			s.logger.Warn("Failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
+			continue
+		}
+		enrichedPosts = append(enrichedPosts, enrichedPost)
+	}
+
+	return enrichedPosts, nil
+}
+
+// GetUserBookmarks gets bookmarked posts for a user
+func (s *PostService) GetUserBookmarks(ctx context.Context, userID string, limit, offset int) ([]*models.PostResponse, error) {
+	// Get bookmarked posts
+	posts, err := s.postRepo.GetUserBookmarks(ctx, userID, limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to get bookmarks", zap.String("user_id", userID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get bookmarks", err)
+	}
+
+	// Enrich posts
+	var enrichedPosts []*models.PostResponse
+	for _, post := range posts {
+		enrichedPost, err := s.enrichPost(ctx, post, &userID)
+		if err != nil {
+			s.logger.Warn("Failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
+			continue
+		}
+		enrichedPosts = append(enrichedPosts, enrichedPost)
+	}
+
+	return enrichedPosts, nil
+}
+
+// enrichPost enriches a post with author, attachments, and engagement status
+func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerID *string) (*models.PostResponse, error) {
+	response := &models.PostResponse{
+		ID:            post.ID,
+		Type:          post.Type,
+		Title:         post.Title,
+		Description:   post.Description,
+		Visibility:    post.Visibility,
+		Status:        post.Status,
+		TotalComments: post.TotalComments,
+		TotalLikes:    post.TotalLikes,
+		TotalShares:   post.TotalShares,
+		CreatedAt:     post.CreatedAt,
+		UpdatedAt:     post.UpdatedAt,
+	}
+
+	// Get author info
+	if post.UserID != nil {
+		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
+		if err == nil {
+			response.Author = &models.AuthorInfo{
+				UserID:    *post.UserID,
+				FirstName: profile.FirstName,
+				LastName:  profile.LastName,
+				FullName:  profile.FullName(),
+				Avatar:    profile.Avatar,
+			}
+		}
+	}
+
+	// Get business info if post is from a business
+	if post.BusinessID != nil && *post.BusinessID != "" {
+		business, err := s.businessRepo.GetByID(ctx, *post.BusinessID)
+		if err == nil {
+			response.Business = &models.BusinessInfo{
+				BusinessID: business.ID,
+				Name:       business.Name,
+				Avatar:     business.Avatar,
+			}
+		}
+	}
+
+	// Get attachments
+	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
+	if err == nil && len(attachments) > 0 {
+		var photos []models.Photo
+		for _, att := range attachments {
+			photos = append(photos, att.Photo)
+		}
+		response.Attachments = photos
+	}
+
+	// Add type-specific fields
+	if post.Type == models.PostTypeSell {
+		response.Currency = post.Currency
+		response.Price = post.Price
+		response.Discount = post.Discount
+		response.Free = &post.Free
+		response.Sold = &post.Sold
+		response.IsPromoted = &post.IsPromoted
+		response.ContactNo = post.ContactNo
+
+		// Get category info if post has a category
+		if post.CategoryID != nil && *post.CategoryID != "" {
+			category, err := s.categoryRepo.GetByID(ctx, *post.CategoryID)
+			if err == nil {
+				response.Category = &models.CategoryInfo{
+					ID:    category.ID,
+					Name:  category.Name,
+					Icon:  models.Icon{Name: category.Icon.Name, Library: category.Icon.Library},
+					Color: category.Color,
+				}
+			}
+		}
+	}
+
+	if post.Type == models.PostTypeEvent {
+		response.StartDate = post.StartDate
+		response.StartTime = post.StartTime
+		response.EndDate = post.EndDate
+		response.EndTime = post.EndTime
+		response.EventState = post.EventState
+		response.InterestedCount = &post.InterestedCount
+		response.GoingCount = &post.GoingCount
+	}
+
+	// Add location info
+	if post.AddressLocation != nil && post.AddressLocation.Valid {
+		response.Location = &models.LocationInfo{
+			Latitude:     &post.AddressLocation.P.Y,
+			Longitude:    &post.AddressLocation.P.X,
+			Country:      post.Country,
+			Province:     post.Province,
+			District:     post.District,
+			Neighborhood: post.Neighborhood,
+		}
+	}
+
+	// Get engagement status if viewer is authenticated
+	if viewerID != nil && *viewerID != "" {
+		liked, bookmarked, err := s.postRepo.GetEngagementStatus(ctx, *viewerID, post.ID)
+		if err == nil {
+			response.LikedByMe = liked
+			response.BookmarkedByMe = bookmarked
+		}
+	}
+
+	// Get original post if this is a share (only 1 level deep to prevent infinite recursion)
+	if post.OriginalPostID != nil && *post.OriginalPostID != "" {
+		originalPost, err := s.postRepo.GetByID(ctx, *post.OriginalPostID)
+		if err == nil {
+			// Enrich the original post, but pass nil for depth to avoid nested original posts
+			enrichedOriginal, err := s.enrichPostSimple(ctx, originalPost, viewerID)
+			if err == nil {
+				response.OriginalPost = enrichedOriginal
+			}
+		}
+	}
+
+	return response, nil
+}
+
+// enrichPostSimple enriches a post with basic info without loading nested original posts
+// Used for preventing infinite recursion when enriching shared posts
+func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, viewerID *string) (*models.PostResponse, error) {
+	response := &models.PostResponse{
+		ID:            post.ID,
+		Type:          post.Type,
+		Title:         post.Title,
+		Description:   post.Description,
+		Visibility:    post.Visibility,
+		Status:        post.Status,
+		TotalComments: post.TotalComments,
+		TotalLikes:    post.TotalLikes,
+		TotalShares:   post.TotalShares,
+		CreatedAt:     post.CreatedAt,
+		UpdatedAt:     post.UpdatedAt,
+	}
+
+	// Get author info
+	if post.UserID != nil {
+		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
+		if err == nil {
+			response.Author = &models.AuthorInfo{
+				UserID:    *post.UserID,
+				FirstName: profile.FirstName,
+				LastName:  profile.LastName,
+				FullName:  profile.FullName(),
+				Avatar:    profile.Avatar,
+			}
+		}
+	}
+
+	// Get attachments
+	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
+	if err == nil && len(attachments) > 0 {
+		var photos []models.Photo
+		for _, att := range attachments {
+			photos = append(photos, att.Photo)
+		}
+		response.Attachments = photos
+	}
+
+	// Add type-specific fields
+	if post.Type == models.PostTypeSell {
+		response.Currency = post.Currency
+		response.Price = post.Price
+		response.Discount = post.Discount
+		response.Free = &post.Free
+		response.Sold = &post.Sold
+		response.IsPromoted = &post.IsPromoted
+		response.ContactNo = post.ContactNo
+
+		// Get category info if post has a category
+		if post.CategoryID != nil && *post.CategoryID != "" {
+			category, err := s.categoryRepo.GetByID(ctx, *post.CategoryID)
+			if err == nil {
+				response.Category = &models.CategoryInfo{
+					ID:    category.ID,
+					Name:  category.Name,
+					Icon:  models.Icon{Name: category.Icon.Name, Library: category.Icon.Library},
+					Color: category.Color,
+				}
+			}
+		}
+	}
+
+	if post.Type == models.PostTypeEvent {
+		response.StartDate = post.StartDate
+		response.StartTime = post.StartTime
+		response.EndDate = post.EndDate
+		response.EndTime = post.EndTime
+		response.EventState = post.EventState
+		response.InterestedCount = &post.InterestedCount
+		response.GoingCount = &post.GoingCount
+	}
+
+	// Add location info
+	if post.AddressLocation != nil && post.AddressLocation.Valid {
+		response.Location = &models.LocationInfo{
+			Latitude:     &post.AddressLocation.P.Y,
+			Longitude:    &post.AddressLocation.P.X,
+			Country:      post.Country,
+			Province:     post.Province,
+			District:     post.District,
+			Neighborhood: post.Neighborhood,
+		}
+	}
+
+	// Get engagement status if viewer is authenticated
+	if viewerID != nil && *viewerID != "" {
+		liked, bookmarked, err := s.postRepo.GetEngagementStatus(ctx, *viewerID, post.ID)
+		if err == nil {
+			response.LikedByMe = liked
+			response.BookmarkedByMe = bookmarked
+		}
+	}
+
+	// Note: OriginalPost is NOT enriched here to prevent infinite recursion
+
+	return response, nil
+}
+
+// validatePostRequest validates post creation request
+func (s *PostService) validatePostRequest(req *models.CreatePostRequest) error {
+	switch req.Type {
+	case models.PostTypeSell:
+		if req.Title == nil || *req.Title == "" {
+			return utils.NewBadRequestError("Title is required for sell posts", nil)
+		}
+		if req.Price == nil && (req.Free == nil || !*req.Free) {
+			return utils.NewBadRequestError("Price is required for sell posts (or mark as free)", nil)
+		}
+	case models.PostTypeEvent:
+		if req.Title == nil || *req.Title == "" {
+			return utils.NewBadRequestError("Title is required for event posts", nil)
+		}
+		if req.StartDate == nil {
+			return utils.NewBadRequestError("Start date is required for event posts", nil)
+		}
+	case models.PostTypeFeed, models.PostTypePull:
+		if req.Description == nil || *req.Description == "" {
+			return utils.NewBadRequestError("Description is required for this post type", nil)
+		}
+	}
+
+	return nil
+}
