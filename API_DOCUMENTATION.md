@@ -13,10 +13,11 @@
 3. [Posts](#posts)
 4. [Comments](#comments)
 5. [Business Profiles](#business-profiles)
-6. [Search & Discovery](#search--discovery)
-7. [Chat & Messaging](#chat--messaging)
-8. [Notifications](#notifications)
-9. [Error Handling](#error-handling)
+6. [Reports & Moderation](#reports--moderation)
+7. [Search & Discovery](#search--discovery)
+8. [Chat & Messaging](#chat--messaging)
+9. [Notifications](#notifications)
+10. [Error Handling](#error-handling)
 
 ---
 
@@ -443,6 +444,336 @@ Authorization: Bearer {access_token}
       "is_closed": true
     }
   ]
+}
+```
+
+---
+
+## Reports & Moderation
+
+The reporting system allows users to report inappropriate content (posts, comments, users, businesses) and provides admin endpoints for content moderation.
+
+### Report a Post
+
+```http
+POST /api/v1/posts/:post_id/report
+```
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "reason": "Spam or misleading",
+  "additional_comments": "This post contains fraudulent information"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "success": true,
+  "message": "Post reported successfully",
+  "data": null
+}
+```
+
+---
+
+### Report a Comment
+
+```http
+POST /api/v1/comments/:comment_id/report
+```
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "reason": "Harassment or hate speech",
+  "additional_comments": "Contains offensive language"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "success": true,
+  "message": "Comment reported successfully",
+  "data": null
+}
+```
+
+---
+
+### Report a User
+
+```http
+POST /api/v1/users/:user_id/report
+```
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "reason": "Impersonation",
+  "description": "This user is impersonating a public figure"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "success": true,
+  "message": "User reported successfully",
+  "data": null
+}
+```
+
+---
+
+### Report a Business
+
+```http
+POST /api/v1/businesses/:business_id/report
+```
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Request Body:**
+```json
+{
+  "reason": "Fraudulent business",
+  "additional_comments": "This business is not legitimate"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+  "success": true,
+  "message": "Business reported successfully",
+  "data": null
+}
+```
+
+---
+
+### Admin: List Post Reports
+
+```http
+GET /api/v1/admin/reports/posts?page=1&limit=20
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Query Parameters:**
+- `page` (optional): Page number (default: 1)
+- `limit` (optional): Items per page (default: 20, max: 100)
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "message": "Post reports fetched successfully",
+  "data": {
+    "reports": [
+      {
+        "id": "uuid",
+        "user_id": "uuid",
+        "post_id": "uuid",
+        "reason": "Spam or misleading",
+        "additional_comments": "This post contains fraudulent information",
+        "report_status": "PENDING",
+        "created_at": "2024-01-15T10:30:00Z",
+        "updated_at": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "total_count": 145,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+---
+
+### Admin: List Comment Reports
+
+```http
+GET /api/v1/admin/reports/comments?page=1&limit=20
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Response:** Same structure as post reports
+
+---
+
+### Admin: List User Reports
+
+```http
+GET /api/v1/admin/reports/users?page=1&limit=20
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Response:**
+```json
+{
+  "success": true,
+  "message": "User reports fetched successfully",
+  "data": {
+    "reports": [
+      {
+        "id": "uuid",
+        "reported_user": "uuid",
+        "reported_by_id": "uuid",
+        "reason": "Impersonation",
+        "description": "This user is impersonating a public figure",
+        "resolved": false,
+        "created_at": "2024-01-15T10:30:00Z",
+        "updated_at": "2024-01-15T10:30:00Z"
+      }
+    ],
+    "total_count": 67,
+    "page": 1,
+    "limit": 20
+  }
+}
+```
+
+---
+
+### Admin: List Business Reports
+
+```http
+GET /api/v1/admin/reports/businesses?page=1&limit=20
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Response:** Same structure as post reports
+
+---
+
+### Admin: Get Specific Report
+
+```http
+GET /api/v1/admin/reports/posts/:id
+GET /api/v1/admin/reports/comments/:id
+GET /api/v1/admin/reports/users/:id
+GET /api/v1/admin/reports/businesses/:id
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "message": "Post report fetched successfully",
+  "data": {
+    "id": "uuid",
+    "user_id": "uuid",
+    "post_id": "uuid",
+    "reason": "Spam or misleading",
+    "additional_comments": "This post contains fraudulent information",
+    "report_status": "PENDING",
+    "created_at": "2024-01-15T10:30:00Z",
+    "updated_at": "2024-01-15T10:30:00Z"
+  }
+}
+```
+
+---
+
+### Admin: Update Report Status
+
+```http
+PUT /api/v1/admin/reports/posts/:id/status
+PUT /api/v1/admin/reports/comments/:id/status
+PUT /api/v1/admin/reports/businesses/:id/status
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Request Body:**
+```json
+{
+  "status": "RESOLVED"
+}
+```
+
+**Valid statuses:** `PENDING`, `REVIEWING`, `RESOLVED`, `REJECTED`
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "message": "Report status updated successfully",
+  "data": null
+}
+```
+
+---
+
+### Admin: Update User Report Status
+
+```http
+PUT /api/v1/admin/reports/users/:id/status
+```
+
+**Headers:**
+```
+Authorization: Bearer <admin_access_token>
+```
+
+**Request Body:**
+```json
+{
+  "resolved": true
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "success": true,
+  "message": "Report status updated successfully",
+  "data": null
 }
 ```
 

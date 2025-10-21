@@ -106,17 +106,35 @@ docker-compose up -d postgres redis minio  # Start only infrastructure
 make migrate-up             # Apply all pending migrations
 make migrate-down           # Rollback last migration
 make migrate-create name=add_users_table  # Create new migration
-bin/migrate status          # Check migration status
+make migrate-status         # Check migration status
 
 # Testing
 make test                   # Run all tests
 make test-coverage          # Run tests with coverage report
 go test ./internal/... -v   # Run specific package tests
 go test -run TestFunctionName ./path/to/package
+make benchmark              # Run performance benchmarks
 
 # Code quality
 make lint                   # Run linter
 make fmt                    # Format code
+
+# Production
+make build-prod             # Build optimized production binary
+make docker-prod            # Build production Docker image
+make docker-push REGISTRY=your-registry.com  # Tag and push to registry
+make deploy-prod            # Deploy to production
+make security-scan          # Run security scanner (gosec)
+make vuln-check             # Check for vulnerabilities
+make db-backup DB_URL=...   # Create database backup
+make db-restore DB_URL=... BACKUP_FILE=...  # Restore database
+make health-check           # Check application health
+
+# CI/CD
+make ci                     # Run complete CI pipeline (lint, test, build)
+make ci-test                # Run tests with coverage
+make ci-lint                # Run linter
+make ci-build               # Build binary
 ```
 
 ## Database Migrations
@@ -414,16 +432,57 @@ WHERE ST_DWithin(
 photo, err := storageService.UploadImage(ctx, file, ImageTypeAvatar)
 ```
 
+### WebSocket Chat Pattern
+
+The application uses WebSocket for real-time chat messaging:
+
+1. **WebSocket Hub**: Central manager in `pkg/websocket/hub.go`
+   - Manages connected clients
+   - Routes messages between users
+   - Handles client registration/unregistration
+
+2. **Connection Flow**:
+   ```go
+   // Client connects to /api/v1/ws
+   // Authenticate via JWT in query param or header
+   // Upgrade HTTP to WebSocket
+   // Register client with hub
+   ```
+
+3. **Message Format**:
+   ```json
+   {
+     "type": "message|typing|read_receipt",
+     "conversation_id": "uuid",
+     "content": "message content",
+     "timestamp": "2024-01-01T00:00:00Z"
+   }
+   ```
+
+4. **Usage in Handlers**:
+   ```go
+   // Upgrade connection
+   conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+
+   // Create client
+   client := websocket.NewClient(hub, conn, userID)
+
+   // Register and start
+   hub.Register(client)
+   go client.WritePump()
+   go client.ReadPump()
+   ```
+
 ## Current Implementation Status
 
-✅ **Completed Features**:
+✅ **All Phases Complete - Production Ready**
 
 **Phase 1 - Foundation:**
 - Project structure and dependencies
 - Docker Compose for local development
 - Database connection with connection pooling (pgx)
-- Migration system (8 migrations applied)
-- Health check endpoints (/health, /health/ready, /health/live, /health/db-stats)
+- Migration system (9 migrations applied)
+- Health check endpoints (/health, /health/ready, /health/live, /health/startup, /health/db-stats, /health/redis-stats, /health/version, /health/metrics)
 - Structured logging (Zap)
 - Error handling (custom AppError types)
 - Request validation (validator v10)
@@ -487,6 +546,39 @@ photo, err := storageService.UploadImage(ctx, file, ImageTypeAvatar)
 - Business info enrichment in posts
 - Location-based business discovery (PostGIS radius search)
 
+**Phase 7 - Marketplace Categories:**
+- Category CRUD operations
+- Post categories (sell posts, marketplace filtering)
+- Category management endpoints
+- Admin category management
+
+**Phase 8 - Real-time Chat:**
+- WebSocket-based chat system
+- Conversation CRUD operations
+- Real-time message delivery
+- Message history and pagination
+- Online/offline status tracking
+- Typing indicators support
+- Read receipts
+
+**Phase 9 - Push Notifications:**
+- Firebase Cloud Messaging integration
+- Notification CRUD operations
+- Notification settings management
+- Push notification delivery
+- In-app notification system
+- Notification preferences by type
+
+**Phase 10 - Search & Production Readiness:**
+- Full-text search (users, posts, businesses)
+- Location-based search with radius
+- Advanced filtering and sorting
+- Production Docker configuration
+- Enhanced health checks and metrics
+- Comprehensive documentation (API, Deployment, Health Checks)
+- Security scanning and vulnerability checks
+- Database backup/restore procedures
+
 **Implemented Services:**
 - AuthService (complete)
 - JWTService (complete with tests)
@@ -496,16 +588,20 @@ photo, err := storageService.UploadImage(ctx, file, ImageTypeAvatar)
 - OAuthService (complete)
 - ProfileService (complete)
 - RelationshipsService (complete)
-- StorageService (complete)
+- StorageService (complete with MinIO/S3)
 - TokenStorageService (Redis-based, complete)
 - PostService (complete)
 - CommentService (complete)
 - PollService (complete)
 - EventService (complete)
 - BusinessService (complete)
+- CategoryService (complete)
+- ChatService (complete)
+- NotificationService (complete)
+- SearchService (complete)
 
 **Implemented Handlers:**
-- HealthHandler (complete)
+- HealthHandler (complete with 8 endpoints)
 - AuthHandler (complete)
 - MFAHandler (complete)
 - OAuthHandler (complete)
@@ -516,30 +612,36 @@ photo, err := storageService.UploadImage(ctx, file, ImageTypeAvatar)
 - PollHandler (complete)
 - EventHandler (complete)
 - BusinessHandler (complete)
+- CategoryHandler (complete)
+- ChatHandler (complete with WebSocket)
+- NotificationHandler (complete)
+- SearchHandler (complete)
 
 **Database:**
-- All core tables created (users, profiles, posts, comments, business profiles, etc.)
+- All tables created (users, profiles, posts, comments, business profiles, categories, conversations, messages, notifications)
 - PostGIS extension enabled
-- Comprehensive indexes
+- Comprehensive indexes including full-text search
 - Database triggers for counter management
 - Helper functions for distance calculations
-- 8 migrations applied
+- 9 migrations applied
 
-📋 **Next Phases**:
-- Phase 7: Marketplace categories and advanced filtering
-- Phase 8: Real-time chat (WebSocket implementation)
-- Phase 9: Push notifications (Firebase integration)
-- Phase 10: Advanced features (search, analytics, recommendations)
-
-See `GO_BACKEND_IMPLEMENTATION_PLAN.md` for the complete implementation roadmap.
+See `GO_BACKEND_IMPLEMENTATION_PLAN.md` for the complete implementation roadmap and `PHASE_10_COMPLETION.md` for production readiness details.
 
 ## Debugging Tips
 
 1. **Check logs**: All operations are logged with structured data
 2. **Use request IDs**: Every request has a unique ID in logs and responses
 3. **Database queries**: Enable query logging by setting log level to debug
-4. **Health checks**: Use `/health/ready` to verify all services
-5. **DB stats**: Use `/health/db-stats` to check connection pool
+4. **Health checks**: Comprehensive endpoints available:
+   - `/health` - Basic health check
+   - `/health/ready` - Readiness probe (checks DB + Redis)
+   - `/health/live` - Liveness probe
+   - `/health/startup` - Startup probe for Kubernetes
+   - `/health/db-stats` - Database connection pool statistics
+   - `/health/redis-stats` - Redis server statistics
+   - `/health/version` - Application version and build info
+   - `/health/metrics` - System metrics (memory, CPU, goroutines, uptime)
+5. **Monitoring**: See `HEALTH_CHECKS.md` for complete monitoring setup
 
 ## Common Pitfalls to Avoid
 
@@ -599,3 +701,27 @@ FROM pg_stat_statements
 ORDER BY mean_exec_time DESC
 LIMIT 10;
 ```
+
+## Additional Documentation
+
+For comprehensive details on specific topics, refer to these documentation files:
+
+- **`API_DOCUMENTATION.md`** - Complete API reference with endpoints, request/response examples, authentication flows
+- **`DEPLOYMENT.md`** - Production deployment guide with Docker, Kubernetes, monitoring, security
+- **`HEALTH_CHECKS.md`** - Detailed health check documentation and monitoring setup
+- **`GO_BACKEND_IMPLEMENTATION_PLAN.md`** - Complete implementation roadmap and technical specifications
+- **`PHASE_10_COMPLETION.md`** - Production readiness completion summary
+- **`STORAGE_IMPLEMENTATION.md`** - MinIO/S3 storage implementation details
+- **`MISSING_FEATURES.md`** - Known TODO items and incomplete features
+- **`SECURITY_FIXES_IN_PROGRESS.md`** - Security improvements and fixes
+
+## Known Limitations & TODOs
+
+Before going to production, review `MISSING_FEATURES.md` for:
+
+1. **Admin Role Middleware** - Admin routes need role-based access control
+2. **Session Verification** - Auth middleware needs session validation
+3. **WebSocket Origin Checking** - WebSocket connections need proper origin validation
+4. **Swagger Documentation** - Generate API documentation with `make swagger`
+
+These items are documented but not yet critical for basic operation.

@@ -36,6 +36,11 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      5 * time.Minute,
 		KeyPrefix:   "ratelimit:strict:",
 	},
+	"reports": {
+		MaxRequests: 10,
+		Window:      24 * time.Hour,
+		KeyPrefix:   "ratelimit:reports:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
@@ -112,6 +117,13 @@ func (rl *RateLimiter) LimitAuth() gin.HandlerFunc {
 // LimitStrict is a convenience method for sensitive endpoints
 func (rl *RateLimiter) LimitStrict() gin.HandlerFunc {
 	return rl.LimitByType("strict")
+}
+
+// LimitReports is a convenience method for report endpoints
+// Limits users to 10 reports per 24 hours to prevent spam
+func (rl *RateLimiter) LimitReports() gin.HandlerFunc {
+	config := DefaultRateLimits["reports"]
+	return rl.LimitByUser(config)
 }
 
 // checkRateLimit checks if a request is within rate limits using sliding window

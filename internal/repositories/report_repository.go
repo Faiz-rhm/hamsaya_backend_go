@@ -2,11 +2,14 @@ package repositories
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/hamsaya/backend/internal/models"
+	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/database"
+	"go.uber.org/zap"
 )
 
 // ReportRepository defines the interface for report operations
@@ -37,12 +40,16 @@ type ReportRepository interface {
 }
 
 type reportRepository struct {
-	db *database.Database
+	db     *database.DB
+	logger *zap.SugaredLogger
 }
 
 // NewReportRepository creates a new report repository
-func NewReportRepository(db *database.Database) ReportRepository {
-	return &reportRepository{db: db}
+func NewReportRepository(db *database.DB) ReportRepository {
+	return &reportRepository{
+		db:     db,
+		logger: utils.GetLogger(),
+	}
 }
 
 // Post Reports
@@ -51,6 +58,13 @@ func (r *reportRepository) CreatePostReport(ctx context.Context, report *models.
 	report.ID = uuid.New().String()
 	report.CreatedAt = time.Now()
 	report.UpdatedAt = time.Now()
+
+	r.logger.Infow("Creating post report",
+		"report_id", report.ID,
+		"reporter_id", report.UserID,
+		"post_id", report.PostID,
+		"reason", report.Reason,
+	)
 
 	query := `
 		INSERT INTO post_reports (id, user_id, post_id, reason, additional_comments, report_status, created_at, updated_at)
@@ -91,9 +105,14 @@ func (r *reportRepository) GetPostReport(ctx context.Context, id string) (*model
 	)
 
 	if err != nil {
+		r.logger.Errorw("Failed to get post report",
+			"report_id", id,
+			"error", err,
+		)
 		return nil, err
 	}
 
+	r.logger.Infow("Retrieved post report", "report_id", id)
 	return report, nil
 }
 
@@ -143,6 +162,11 @@ func (r *reportRepository) ListPostReports(ctx context.Context, limit, offset in
 }
 
 func (r *reportRepository) UpdatePostReportStatus(ctx context.Context, id string, status models.ReportStatus) error {
+	r.logger.Infow("Updating post report status",
+		"report_id", id,
+		"new_status", status,
+	)
+
 	query := `
 		UPDATE post_reports
 		SET report_status = $1, updated_at = $2
@@ -151,13 +175,23 @@ func (r *reportRepository) UpdatePostReportStatus(ctx context.Context, id string
 
 	result, err := r.db.Pool.Exec(ctx, query, status, time.Now(), id)
 	if err != nil {
+		r.logger.Errorw("Failed to update post report status",
+			"report_id", id,
+			"status", status,
+			"error", err,
+		)
 		return err
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		r.logger.Warnw("Post report not found for status update", "report_id", id)
+		return fmt.Errorf("report not found")
 	}
 
+	r.logger.Infow("Post report status updated successfully",
+		"report_id", id,
+		"status", status,
+	)
 	return nil
 }
 
@@ -167,6 +201,13 @@ func (r *reportRepository) CreateCommentReport(ctx context.Context, report *mode
 	report.ID = uuid.New().String()
 	report.CreatedAt = time.Now()
 	report.UpdatedAt = time.Now()
+
+	r.logger.Infow("Creating comment report",
+		"report_id", report.ID,
+		"reporter_id", report.UserID,
+		"comment_id", report.CommentID,
+		"reason", report.Reason,
+	)
 
 	query := `
 		INSERT INTO comment_reports (id, user_id, comment_id, reason, additional_comments, report_status, created_at, updated_at)
@@ -184,6 +225,9 @@ func (r *reportRepository) CreateCommentReport(ctx context.Context, report *mode
 		report.UpdatedAt,
 	)
 
+	if err != nil {
+		r.logger.Errorw("Failed to create comment report", "error", err)
+	}
 	return err
 }
 
@@ -259,6 +303,11 @@ func (r *reportRepository) ListCommentReports(ctx context.Context, limit, offset
 }
 
 func (r *reportRepository) UpdateCommentReportStatus(ctx context.Context, id string, status models.ReportStatus) error {
+	r.logger.Infow("Updating comment report status",
+		"report_id", id,
+		"new_status", status,
+	)
+
 	query := `
 		UPDATE comment_reports
 		SET report_status = $1, updated_at = $2
@@ -267,11 +316,13 @@ func (r *reportRepository) UpdateCommentReportStatus(ctx context.Context, id str
 
 	result, err := r.db.Pool.Exec(ctx, query, status, time.Now(), id)
 	if err != nil {
+		r.logger.Errorw("Failed to update comment report status", "report_id", id, "error", err)
 		return err
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		r.logger.Warnw("Comment report not found for status update", "report_id", id)
+		return fmt.Errorf("report not found")
 	}
 
 	return nil
@@ -283,6 +334,13 @@ func (r *reportRepository) CreateUserReport(ctx context.Context, report *models.
 	report.ID = uuid.New().String()
 	report.CreatedAt = time.Now()
 	report.UpdatedAt = time.Now()
+
+	r.logger.Infow("Creating user report",
+		"report_id", report.ID,
+		"reporter_id", report.ReportedByID,
+		"reported_user_id", report.ReportedUser,
+		"reason", report.Reason,
+	)
 
 	query := `
 		INSERT INTO user_reports (id, reported_user, reported_by_id, reason, description, resolved, created_at, updated_at)
@@ -300,6 +358,9 @@ func (r *reportRepository) CreateUserReport(ctx context.Context, report *models.
 		report.UpdatedAt,
 	)
 
+	if err != nil {
+		r.logger.Errorw("Failed to create user report", "error", err)
+	}
 	return err
 }
 
@@ -375,6 +436,11 @@ func (r *reportRepository) ListUserReports(ctx context.Context, limit, offset in
 }
 
 func (r *reportRepository) UpdateUserReportResolved(ctx context.Context, id string, resolved bool) error {
+	r.logger.Infow("Updating user report resolved status",
+		"report_id", id,
+		"resolved", resolved,
+	)
+
 	query := `
 		UPDATE user_reports
 		SET resolved = $1, updated_at = $2
@@ -383,11 +449,13 @@ func (r *reportRepository) UpdateUserReportResolved(ctx context.Context, id stri
 
 	result, err := r.db.Pool.Exec(ctx, query, resolved, time.Now(), id)
 	if err != nil {
+		r.logger.Errorw("Failed to update user report resolved status", "report_id", id, "error", err)
 		return err
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		r.logger.Warnw("User report not found for resolved status update", "report_id", id)
+		return fmt.Errorf("report not found")
 	}
 
 	return nil
@@ -399,6 +467,13 @@ func (r *reportRepository) CreateBusinessReport(ctx context.Context, report *mod
 	report.ID = uuid.New().String()
 	report.CreatedAt = time.Now()
 	report.UpdatedAt = time.Now()
+
+	r.logger.Infow("Creating business report",
+		"report_id", report.ID,
+		"reporter_id", report.UserID,
+		"business_id", report.BusinessID,
+		"reason", report.Reason,
+	)
 
 	query := `
 		INSERT INTO business_reports (id, business_id, user_id, reason, additional_comments, report_status, created_at, updated_at)
@@ -416,6 +491,9 @@ func (r *reportRepository) CreateBusinessReport(ctx context.Context, report *mod
 		report.UpdatedAt,
 	)
 
+	if err != nil {
+		r.logger.Errorw("Failed to create business report", "error", err)
+	}
 	return err
 }
 
@@ -491,6 +569,11 @@ func (r *reportRepository) ListBusinessReports(ctx context.Context, limit, offse
 }
 
 func (r *reportRepository) UpdateBusinessReportStatus(ctx context.Context, id string, status models.ReportStatus) error {
+	r.logger.Infow("Updating business report status",
+		"report_id", id,
+		"new_status", status,
+	)
+
 	query := `
 		UPDATE business_reports
 		SET report_status = $1, updated_at = $2
@@ -499,11 +582,13 @@ func (r *reportRepository) UpdateBusinessReportStatus(ctx context.Context, id st
 
 	result, err := r.db.Pool.Exec(ctx, query, status, time.Now(), id)
 	if err != nil {
+		r.logger.Errorw("Failed to update business report status", "report_id", id, "error", err)
 		return err
 	}
 
 	if result.RowsAffected() == 0 {
-		return ErrNotFound
+		r.logger.Warnw("Business report not found for status update", "report_id", id)
+		return fmt.Errorf("report not found")
 	}
 
 	return nil
