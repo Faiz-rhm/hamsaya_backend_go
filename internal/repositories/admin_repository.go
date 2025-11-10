@@ -424,7 +424,7 @@ func (r *adminRepository) ListUsers(ctx context.Context, search string, isActive
 			u.phone_verified,
 			u.mfa_enabled,
 			COALESCE(u.role::text, 'user') as role,
-			CASE WHEN u.deleted_at IS NULL THEN true ELSE false END as is_active,
+			u.is_active,
 			u.last_login_at,
 			u.created_at
 	` + whereClause + `
