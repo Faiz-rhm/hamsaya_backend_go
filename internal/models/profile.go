@@ -2,20 +2,28 @@ package models
 
 import "time"
 
+// LocationCoordinates represents latitude and longitude
+type LocationCoordinates struct {
+	Latitude  float64 `json:"latitude" validate:"required,latitude"`
+	Longitude float64 `json:"longitude" validate:"required,longitude"`
+}
+
 // UpdateProfileRequest represents a request to update user profile
 type UpdateProfileRequest struct {
-	FirstName    *string    `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
-	LastName     *string    `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
-	About        *string    `json:"about,omitempty" validate:"omitempty,max=500"`
-	Gender       *string    `json:"gender,omitempty" validate:"omitempty,oneof=male female other prefer_not_to_say"`
-	DOB          *time.Time `json:"dob,omitempty"`
-	Website      *string    `json:"website,omitempty" validate:"omitempty,url"`
-	Country      *string    `json:"country,omitempty" validate:"omitempty,max=100"`
-	Province     *string    `json:"province,omitempty" validate:"omitempty,max=100"`
-	District     *string    `json:"district,omitempty" validate:"omitempty,max=100"`
-	Neighborhood *string    `json:"neighborhood,omitempty" validate:"omitempty,max=100"`
-	Latitude     *float64   `json:"latitude,omitempty" validate:"omitempty,latitude"`
-	Longitude    *float64   `json:"longitude,omitempty" validate:"omitempty,longitude"`
+	FirstName    *string              `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
+	LastName     *string              `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
+	About        *string              `json:"about,omitempty" validate:"omitempty,max=500"`
+	Gender       *string              `json:"gender,omitempty" validate:"omitempty,oneof=male female other prefer_not_to_say"`
+	DOB          *time.Time           `json:"dob,omitempty"`
+	Website      *string              `json:"website,omitempty" validate:"omitempty,url"`
+	Country      *string              `json:"country,omitempty" validate:"omitempty,max=100"`
+	Province     *string              `json:"province,omitempty" validate:"omitempty,max=100"`
+	District     *string              `json:"district,omitempty" validate:"omitempty,max=100"`
+	Neighborhood *string              `json:"neighborhood,omitempty" validate:"omitempty,max=100"`
+	Location     *LocationCoordinates `json:"location,omitempty"`
+	// Deprecated: Use Location instead
+	Latitude  *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
+	Longitude *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
 }
 
 // FullProfileResponse represents complete profile information

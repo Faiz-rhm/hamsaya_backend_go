@@ -15,14 +15,21 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 		// Check if origin is allowed
 		allowed := false
 		for _, allowedOrigin := range cfg.AllowedOrigins {
+			// Trim spaces from configured origins
+			allowedOrigin = strings.TrimSpace(allowedOrigin)
 			if allowedOrigin == "*" || allowedOrigin == origin {
 				allowed = true
 				break
 			}
 		}
 
-		if allowed {
-			c.Header("Access-Control-Allow-Origin", origin)
+		// Always set CORS headers for allowed origins or wildcard
+		if allowed || len(cfg.AllowedOrigins) > 0 && cfg.AllowedOrigins[0] == "*" {
+			if origin != "" {
+				c.Header("Access-Control-Allow-Origin", origin)
+			} else {
+				c.Header("Access-Control-Allow-Origin", "*")
+			}
 		}
 
 		c.Header("Access-Control-Allow-Methods", strings.Join(cfg.AllowedMethods, ", "))

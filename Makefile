@@ -24,6 +24,8 @@ help:
 	@echo "  make migrate-down   - Rollback database migrations"
 	@echo "  make migrate-create - Create a new migration (name=migration_name)"
 	@echo "  make migrate-status - Check migration status"
+	@echo "  make seed           - Seed database with sample data"
+	@echo "  make seed-demo      - Seed database with comprehensive demo data"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint           - Run linter"
@@ -189,6 +191,18 @@ deploy-prod:
 migrate-status:
 	@echo "Checking migration status..."
 	go run cmd/migrate/main.go status
+
+# Seed database with sample data
+seed:
+	@echo "Seeding database with sample data..."
+	go run cmd/seed/main.go
+	@echo "Database seeding complete"
+
+# Seed database with comprehensive demo data
+seed-demo:
+	@echo "Seeding database with comprehensive demo data..."
+	go run cmd/seed-demo/main.go
+	@echo "Demo database seeding complete"
 
 # Run security scanner (gosec)
 security-scan:

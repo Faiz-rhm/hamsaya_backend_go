@@ -44,31 +44,44 @@ func (r *adminRepository) GetStatistics(ctx context.Context) (*models.AdminStati
 	now := time.Now()
 	startOfMonth := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
 
-	// Get total users count
+	// Get total active accounts (is_active = true)
 	err := r.db.Pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM users
 		WHERE deleted_at IS NULL
-	`).Scan(&stats.TotalUsers)
+		  AND is_active = true
+	`).Scan(&stats.TotalActiveAccounts)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get total users: %w", err)
+		return nil, fmt.Errorf("failed to get total active accounts: %w", err)
 	}
 
-	// Get active users count (users who logged in within the last 30 days)
+	// Get deactivated accounts (is_active = false)
+	err = r.db.Pool.QueryRow(ctx, `
+		SELECT COUNT(*)
+		FROM users
+		WHERE deleted_at IS NULL
+		  AND is_active = false
+	`).Scan(&stats.DeactivatedAccounts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deactivated accounts: %w", err)
+	}
+
+	// Get recently active users (logged in last 30 days AND is_active = true)
 	thirtyDaysAgo := time.Now().AddDate(0, 0, -30)
 	err = r.db.Pool.QueryRow(ctx, `
 		SELECT COUNT(*)
 		FROM users
 		WHERE deleted_at IS NULL
+		  AND is_active = true
 		  AND last_login_at IS NOT NULL
 		  AND last_login_at >= $1
-	`, thirtyDaysAgo).Scan(&stats.ActiveUsers)
+	`, thirtyDaysAgo).Scan(&stats.RecentlyActiveUsers)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get active users: %w", err)
+		return nil, fmt.Errorf("failed to get recently active users: %w", err)
 	}
 
-	// Calculate inactive users
-	stats.InactiveUsers = stats.TotalUsers - stats.ActiveUsers
+	// Calculate dormant users (active accounts but no recent login)
+	stats.DormantUsers = stats.TotalActiveAccounts - stats.RecentlyActiveUsers
 
 	// Get new users this month
 	err = r.db.Pool.QueryRow(ctx, `

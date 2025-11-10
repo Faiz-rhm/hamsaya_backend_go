@@ -100,7 +100,13 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 	}
 
 	// Handle location update (Latitude/Longitude -> pgtype.Point)
-	if req.Latitude != nil && req.Longitude != nil {
+	// Support both nested location object and flat latitude/longitude fields
+	if req.Location != nil {
+		profile.Location = &pgtype.Point{
+			P:     pgtype.Vec2{X: req.Location.Longitude, Y: req.Location.Latitude},
+			Valid: true,
+		}
+	} else if req.Latitude != nil && req.Longitude != nil {
 		profile.Location = &pgtype.Point{
 			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude},
 			Valid: true,
@@ -222,8 +228,7 @@ func (s *ProfileService) DeleteCover(ctx context.Context, userID string) error {
 func (s *ProfileService) isProfileComplete(profile *models.Profile) bool {
 	// A profile is complete if it has:
 	// - First name and last name
-	// - Avatar
-	// - About (optional but recommended)
+	// - Location (latitude and longitude)
 
 	if profile.FirstName == nil || *profile.FirstName == "" {
 		return false
@@ -231,7 +236,7 @@ func (s *ProfileService) isProfileComplete(profile *models.Profile) bool {
 	if profile.LastName == nil || *profile.LastName == "" {
 		return false
 	}
-	if profile.Avatar == nil {
+	if profile.Location == nil || !profile.Location.Valid {
 		return false
 	}
 

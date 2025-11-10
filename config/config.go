@@ -1,10 +1,26 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
 )
+
+// parseStringSlice splits a comma-separated string into a slice of strings
+func parseStringSlice(s string) []string {
+	if s == "" {
+		return []string{}
+	}
+	parts := strings.Split(s, ",")
+	result := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if trimmed := strings.TrimSpace(part); trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	return result
+}
 
 // Config holds all configuration for the application
 type Config struct {
@@ -227,9 +243,9 @@ func Load() (*Config, error) {
 			From:     viper.GetString("EMAIL_FROM"),
 		},
 		CORS: CORSConfig{
-			AllowedOrigins:   viper.GetStringSlice("CORS_ALLOWED_ORIGINS"),
-			AllowedMethods:   viper.GetStringSlice("CORS_ALLOWED_METHODS"),
-			AllowedHeaders:   viper.GetStringSlice("CORS_ALLOWED_HEADERS"),
+			AllowedOrigins:   parseStringSlice(viper.GetString("CORS_ALLOWED_ORIGINS")),
+			AllowedMethods:   parseStringSlice(viper.GetString("CORS_ALLOWED_METHODS")),
+			AllowedHeaders:   parseStringSlice(viper.GetString("CORS_ALLOWED_HEADERS")),
 			AllowCredentials: viper.GetBool("CORS_ALLOW_CREDENTIALS"),
 		},
 		Monitoring: MonitoringConfig{

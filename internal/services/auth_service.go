@@ -496,6 +496,105 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 	return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
 }
 
+// AdminLogin authenticates admin users only (no auto-registration)
+func (s *AuthService) AdminLogin(ctx context.Context, req *models.LoginRequest) (*models.AuthResponse, error) {
+	// Normalize email
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
+	// Get user by email
+	user, err := s.userRepo.GetByEmail(ctx, email)
+	if err != nil || user == nil {
+		s.logger.Warn("Admin login attempt with non-existent email",
+			zap.String("email", email),
+		)
+		return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
+	}
+
+	// Check if account is locked
+	if user.IsLocked() {
+		s.logger.Warn("Admin login attempt for locked account",
+			zap.String("user_id", user.ID),
+			zap.Time("locked_until", *user.LockedUntil),
+		)
+		return nil, utils.NewUnauthorizedError(
+			fmt.Sprintf("Account is locked until %s due to too many failed login attempts",
+				user.LockedUntil.Format(time.RFC3339)),
+			nil,
+		)
+	}
+
+	// Verify password
+	if user.PasswordHash == nil || !s.passwordService.Verify(req.Password, *user.PasswordHash) {
+		// Increment failed login attempts
+		attempts := user.FailedLoginAttempts + 1
+		var lockedUntil *time.Time
+		if attempts >= MaxLoginAttempts {
+			lockTime := time.Now().Add(LockDuration)
+			lockedUntil = &lockTime
+		}
+
+		if err := s.userRepo.UpdateLoginAttempts(ctx, user.ID, attempts, lockedUntil); err != nil {
+			s.logger.Error("Failed to update login attempts", zap.Error(err))
+		}
+
+		s.logger.Warn("Failed admin login attempt",
+			zap.String("user_id", user.ID),
+			zap.Int("attempts", attempts),
+		)
+
+		return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
+	}
+
+	// Check if user has admin role
+	if !user.IsAdmin() {
+		s.logger.Warn("Non-admin user attempted admin login",
+			zap.String("user_id", user.ID),
+			zap.String("email", email),
+			zap.String("role", string(user.Role)),
+		)
+		return nil, utils.NewForbiddenError("Admin access required", nil)
+	}
+
+	// Reset failed login attempts on successful login
+	if user.FailedLoginAttempts > 0 {
+		if err := s.userRepo.UpdateLoginAttempts(ctx, user.ID, 0, nil); err != nil {
+			s.logger.Error("Failed to reset login attempts", zap.Error(err))
+			// Continue anyway
+		}
+	}
+
+	// Check if MFA is enabled
+	if user.MFAEnabled {
+		// Generate MFA challenge
+		challengeID := s.jwtService.GenerateMFAChallengeID()
+
+		// Store MFA challenge in Redis (valid for 5 minutes)
+		if err := s.tokenStorage.StoreMFAChallenge(ctx, challengeID, user.ID, 5*time.Minute); err != nil {
+			s.logger.Error("Failed to store MFA challenge", zap.Error(err))
+			return nil, utils.NewInternalError("Failed to initiate MFA", err)
+		}
+
+		s.logger.Info("Admin MFA challenge generated",
+			zap.String("user_id", user.ID),
+			zap.String("challenge_id", challengeID),
+		)
+
+		return &models.AuthResponse{
+			RequiresMFA:    true,
+			MFAChallengeID: &challengeID,
+		}, nil
+	}
+
+	s.logger.Info("Admin login successful",
+		zap.String("user_id", user.ID),
+		zap.String("email", email),
+		zap.String("role", string(user.Role)),
+	)
+
+	// Generate AAL1 token pair (basic authentication, no MFA)
+	return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
+}
+
 // VerifyMFA verifies an MFA code and returns tokens
 func (s *AuthService) VerifyMFA(ctx context.Context, req *models.MFAVerifyChallengeRequest) (*models.AuthResponse, error) {
 	// Get user ID from MFA challenge

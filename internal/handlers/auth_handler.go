@@ -111,6 +111,52 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Login successful", response)
 }
 
+// AdminLogin godoc
+// @Summary Admin login
+// @Description Authenticate admin user with email and password. Only allows users with admin role to login.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.LoginRequest true "Admin login credentials (email and password only)"
+// @Success 200 {object} utils.Response{data=models.AuthResponse} "Admin login successful"
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response "Invalid credentials or account locked"
+// @Failure 403 {object} utils.Response "Admin access required"
+// @Router /admin/auth/login [post]
+func (h *AuthHandler) AdminLogin(c *gin.Context) {
+	var req models.LoginRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	// Set request metadata
+	ipAddress := c.ClientIP()
+	userAgent := c.GetHeader("User-Agent")
+	req.IPAddress = &ipAddress
+	req.UserAgent = &userAgent
+
+	response, err := h.authService.AdminLogin(c.Request.Context(), &req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	// Check if MFA is required
+	if response.RequiresMFA {
+		utils.SendSuccess(c, http.StatusOK, "MFA verification required", response)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Admin login successful", response)
+}
+
 // UnifiedAuth godoc
 // @Summary Unified authentication (Login or Register)
 // @Description Login if user exists, otherwise register new user with location
