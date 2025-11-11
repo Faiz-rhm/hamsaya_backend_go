@@ -53,6 +53,17 @@ type FollowingResponse struct {
 	IsFollowedBy bool `json:"is_followed_by"`
 }
 
+// BlockedUserResponse represents a blocked user in the response
+type BlockedUserResponse struct {
+	UserID    string     `json:"user_id"`
+	FirstName *string    `json:"first_name,omitempty"`
+	LastName  *string    `json:"last_name,omitempty"`
+	FullName  string     `json:"full_name"`
+	Avatar    *Photo     `json:"avatar,omitempty"`
+	Province  *string    `json:"province,omitempty"`
+	CreatedAt time.Time  `json:"blocked_at"`
+}
+
 // RelationshipStatus represents the relationship status between two users
 type RelationshipStatus struct {
 	IsFollowing  bool `json:"is_following"`

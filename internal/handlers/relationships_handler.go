@@ -249,6 +249,50 @@ func (h *RelationshipsHandler) UnblockUser(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "User unblocked successfully", nil)
 }
 
+// GetBlockedUsers godoc
+// @Summary Get blocked users
+// @Description Get a list of users that the authenticated user has blocked
+// @Tags relationships
+// @Produce json
+// @Security BearerAuth
+// @Param limit query int false "Limit" default(20)
+// @Param offset query int false "Offset" default(0)
+// @Success 200 {object} utils.Response{data=[]models.BlockedUserResponse}
+// @Failure 401 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /users/blocked [get]
+func (h *RelationshipsHandler) GetBlockedUsers(c *gin.Context) {
+	// Get authenticated user ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	// Parse pagination params
+	limit := 20
+	offset := 0
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+	if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+		}
+	}
+
+	// Get blocked users
+	blockedUsers, err := h.relationshipsService.GetBlockedUsers(c.Request.Context(), userID.(string), limit, offset)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Blocked users retrieved successfully", blockedUsers)
+}
+
 // GetRelationshipStatus godoc
 // @Summary Get relationship status
 // @Description Get the relationship status between authenticated user and another user

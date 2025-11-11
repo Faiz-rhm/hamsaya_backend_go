@@ -251,6 +251,43 @@ func (s *RelationshipsService) UnblockUser(ctx context.Context, blockerID, block
 	return nil
 }
 
+// GetBlockedUsers gets users that a user has blocked with profile information
+func (s *RelationshipsService) GetBlockedUsers(ctx context.Context, blockerID string, limit, offset int) ([]*models.BlockedUserResponse, error) {
+	// Get blocked users
+	blocks, err := s.relationshipsRepo.GetBlockedUsers(ctx, blockerID, limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to get blocked users", zap.String("blocker_id", blockerID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get blocked users", err)
+	}
+
+	// Get profile information for each blocked user
+	var blockedUsers []*models.BlockedUserResponse
+	for _, block := range blocks {
+		profile, err := s.userRepo.GetProfileByUserID(ctx, block.BlockedID)
+		if err != nil {
+			s.logger.Warn("Failed to get blocked user profile",
+				zap.String("blocked_id", block.BlockedID),
+				zap.Error(err),
+			)
+			continue
+		}
+
+		blockedUser := &models.BlockedUserResponse{
+			UserID:    block.BlockedID,
+			FirstName: profile.FirstName,
+			LastName:  profile.LastName,
+			FullName:  profile.FullName(),
+			Avatar:    profile.Avatar,
+			Province:  profile.Province,
+			CreatedAt: block.CreatedAt,
+		}
+
+		blockedUsers = append(blockedUsers, blockedUser)
+	}
+
+	return blockedUsers, nil
+}
+
 // GetRelationshipStatus gets the relationship status between viewer and target user
 func (s *RelationshipsService) GetRelationshipStatus(ctx context.Context, viewerID, targetUserID string) (*models.RelationshipStatus, error) {
 	status, err := s.relationshipsRepo.GetRelationshipStatus(ctx, viewerID, targetUserID)
