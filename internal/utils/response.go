@@ -23,11 +23,14 @@ type PaginatedResponse struct {
 }
 
 // Pagination holds pagination metadata
+// Matches frontend PaginationMeta structure
 type Pagination struct {
-	Page       int   `json:"page"`
-	Limit      int   `json:"limit"`
-	TotalPages int   `json:"total_pages"`
-	TotalCount int64 `json:"total_count"`
+	CurrentPage  int                    `json:"currentPage"`
+	ItemsPerPage int                    `json:"itemsPerPage"`
+	TotalItems   int64                  `json:"totalItems"`
+	TotalPages   int                    `json:"totalPages"`
+	Filters      map[string]interface{} `json:"filters,omitempty"`
+	Sorts        map[string]interface{} `json:"sorts,omitempty"`
 }
 
 // SendSuccess sends a successful response
@@ -67,7 +70,13 @@ func SendAppError(c *gin.Context, appErr *AppError) {
 }
 
 // SendPaginated sends a paginated response
+// Optional: pass filters and sorts maps if you want to include them in response
 func SendPaginated(c *gin.Context, data interface{}, page, limit int, totalCount int64) {
+	SendPaginatedWithFilters(c, data, page, limit, totalCount, nil, nil)
+}
+
+// SendPaginatedWithFilters sends a paginated response with filters and sorts
+func SendPaginatedWithFilters(c *gin.Context, data interface{}, page, limit int, totalCount int64, filters map[string]interface{}, sorts map[string]interface{}) {
 	totalPages := int(totalCount) / limit
 	if int(totalCount)%limit != 0 {
 		totalPages++
@@ -77,10 +86,12 @@ func SendPaginated(c *gin.Context, data interface{}, page, limit int, totalCount
 		Success: true,
 		Data:    data,
 		Meta: Pagination{
-			Page:       page,
-			Limit:      limit,
-			TotalPages: totalPages,
-			TotalCount: totalCount,
+			CurrentPage:  page,
+			ItemsPerPage: limit,
+			TotalItems:   totalCount,
+			TotalPages:   totalPages,
+			Filters:      filters,
+			Sorts:        sorts,
 		},
 	})
 }

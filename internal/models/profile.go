@@ -24,6 +24,7 @@ type UpdateProfileRequest struct {
 	// Deprecated: Use Location instead
 	Latitude  *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
 	Longitude *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
+	IsComplete *bool   `json:"is_complete,omitempty"`
 }
 
 // FullProfileResponse represents complete profile information

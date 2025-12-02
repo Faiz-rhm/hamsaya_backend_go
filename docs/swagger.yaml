@@ -40,6 +40,259 @@ definitions:
       timestamp:
         type: string
     type: object
+  models.AdminBusinessListItem:
+    properties:
+      created_at:
+        type: string
+      district:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      license_no:
+        type: string
+      name:
+        type: string
+      owner_email:
+        type: string
+      owner_name:
+        type: string
+      phone_number:
+        type: string
+      province:
+        type: string
+      status:
+        type: boolean
+      total_follow:
+        type: integer
+      total_posts:
+        type: integer
+      total_views:
+        type: integer
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.AdminPostListItem:
+    properties:
+      attachments:
+        items:
+          $ref: '#/definitions/models.Photo'
+        type: array
+      business_id:
+        type: string
+      business_name:
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      end_date:
+        type: string
+      id:
+        type: string
+      start_date:
+        type: string
+      status:
+        type: boolean
+      title:
+        type: string
+      total_comments:
+        type: integer
+      total_likes:
+        type: integer
+      total_shares:
+        type: integer
+      type:
+        type: string
+      updated_at:
+        type: string
+      user_email:
+        type: string
+      user_id:
+        type: string
+      user_name:
+        type: string
+      visibility:
+        type: string
+    type: object
+  models.AdminReportListItem:
+    properties:
+      additional_comments:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      report_type:
+        description: POST, COMMENT, USER, BUSINESS
+        type: string
+      reported_item_id:
+        type: string
+      reported_item_info:
+        description: Title/Name of reported item
+        type: string
+      reporter_email:
+        type: string
+      reporter_id:
+        type: string
+      reporter_name:
+        type: string
+      status:
+        description: PENDING, REVIEWING, RESOLVED, REJECTED
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.AdminStatistics:
+    properties:
+      active_businesses:
+        type: integer
+      deactivated_accounts:
+        description: Accounts with is_active = false
+        type: integer
+      dormant_users:
+        description: No login in 30+ days AND is_active = true
+        type: integer
+      new_businesses_this_month:
+        type: integer
+      new_posts_this_month:
+        type: integer
+      new_users_this_month:
+        type: integer
+      pending_reports:
+        allOf:
+        - $ref: '#/definitions/models.PendingReports'
+        description: Content Moderation
+      posts_by_type:
+        $ref: '#/definitions/models.PostTypeStats'
+      recently_active_users:
+        description: User Statistics - Login Activity (for active accounts only)
+        type: integer
+      resolved_reports:
+        type: integer
+      total_active_accounts:
+        description: User Statistics - Account Status
+        type: integer
+      total_bookmarks:
+        type: integer
+      total_businesses:
+        description: Business Statistics
+        type: integer
+      total_categories:
+        description: Activity Statistics
+        type: integer
+      total_comments:
+        description: Engagement Statistics
+        type: integer
+      total_event_interests:
+        type: integer
+      total_follows:
+        type: integer
+      total_likes:
+        type: integer
+      total_poll_votes:
+        type: integer
+      total_posts:
+        description: Post Statistics
+        type: integer
+      total_reports:
+        type: integer
+      total_shares:
+        type: integer
+    type: object
+  models.AdminUpdateBusinessRequest:
+    properties:
+      district:
+        type: string
+      email:
+        type: string
+      license_no:
+        type: string
+      name:
+        type: string
+      phone_number:
+        type: string
+      province:
+        type: string
+    type: object
+  models.AdminUpdatePostRequest:
+    properties:
+      description:
+        type: string
+      end_date:
+        type: string
+      start_date:
+        type: string
+      status:
+        type: boolean
+      title:
+        type: string
+      type:
+        enum:
+        - FEED
+        - EVENT
+        - SELL
+        - PULL
+        type: string
+      visibility:
+        enum:
+        - PUBLIC
+        - FRIENDS
+        - PRIVATE
+        type: string
+    type: object
+  models.AdminUpdateUserRequest:
+    properties:
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      first_name:
+        type: string
+      is_active:
+        type: boolean
+      last_name:
+        type: string
+      mfa_enabled:
+        type: boolean
+      phone_verified:
+        type: boolean
+      role:
+        enum:
+        - user
+        - admin
+        type: string
+    type: object
+  models.AdminUserListItem:
+    properties:
+      created_at:
+        type: string
+      email:
+        type: string
+      email_verified:
+        type: boolean
+      first_name:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        type: string
+      last_name:
+        type: string
+      mfa_enabled:
+        type: boolean
+      phone_verified:
+        type: boolean
+      role:
+        type: string
+    type: object
   models.AuthResponse:
     properties:
       mfa_challenge_id:
@@ -62,6 +315,23 @@ definitions:
       full_name:
         type: string
       last_name:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.BlockedUserResponse:
+    properties:
+      avatar:
+        $ref: '#/definitions/models.Photo'
+      blocked_at:
+        type: string
+      first_name:
+        type: string
+      full_name:
+        type: string
+      last_name:
+        type: string
+      province:
         type: string
       user_id:
         type: string
@@ -116,6 +386,25 @@ definitions:
       business_id:
         type: string
       name:
+        type: string
+    type: object
+  models.BusinessReport:
+    properties:
+      additional_comments:
+        type: string
+      business_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      report_status:
+        $ref: '#/definitions/models.ReportStatus'
+      updated_at:
+        type: string
+      user_id:
         type: string
     type: object
   models.BusinessResponse:
@@ -229,6 +518,25 @@ definitions:
     - current_password
     - new_password
     type: object
+  models.CommentReport:
+    properties:
+      additional_comments:
+        type: string
+      comment_id:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      report_status:
+        $ref: '#/definitions/models.ReportStatus'
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
   models.CommentResponse:
     properties:
       attachments:
@@ -261,6 +569,17 @@ definitions:
         type: integer
       updated_at:
         type: string
+    type: object
+  models.CreateBusinessReportRequest:
+    properties:
+      additional_comments:
+        maxLength: 500
+        type: string
+      reason:
+        maxLength: 100
+        type: string
+    required:
+    - reason
     type: object
   models.CreateBusinessRequest:
     properties:
@@ -311,6 +630,17 @@ definitions:
     required:
     - name
     type: object
+  models.CreateCommentReportRequest:
+    properties:
+      additional_comments:
+        maxLength: 500
+        type: string
+      reason:
+        maxLength: 100
+        type: string
+    required:
+    - reason
+    type: object
   models.CreateCommentRequest:
     properties:
       attachments:
@@ -341,6 +671,17 @@ definitions:
         type: array
     required:
     - options
+    type: object
+  models.CreatePostReportRequest:
+    properties:
+      additional_comments:
+        maxLength: 500
+        type: string
+      reason:
+        maxLength: 100
+        type: string
+    required:
+    - reason
     type: object
   models.CreatePostRequest:
     properties:
@@ -420,6 +761,17 @@ definitions:
         - PRIVATE
     required:
     - type
+    type: object
+  models.CreateUserReportRequest:
+    properties:
+      description:
+        maxLength: 500
+        type: string
+      reason:
+        maxLength: 100
+        type: string
+    required:
+    - reason
     type: object
   models.DiscoverBusiness:
     properties:
@@ -670,6 +1022,16 @@ definitions:
       province:
         type: string
     type: object
+  models.LocationCoordinates:
+    properties:
+      latitude:
+        type: number
+      longitude:
+        type: number
+    required:
+    - latitude
+    - longitude
+    type: object
   models.LocationInfo:
     properties:
       country:
@@ -762,6 +1124,19 @@ definitions:
     - code
     - factor_id
     type: object
+  models.PendingReports:
+    properties:
+      businesses:
+        type: integer
+      comments:
+        type: integer
+      posts:
+        type: integer
+      total:
+        type: integer
+      users:
+        type: integer
+    type: object
   models.Photo:
     properties:
       height:
@@ -808,6 +1183,25 @@ definitions:
         type: string
       user_vote:
         description: Poll option ID that user voted for
+        type: string
+    type: object
+  models.PostReport:
+    properties:
+      additional_comments:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      post_id:
+        type: string
+      reason:
+        type: string
+      report_status:
+        $ref: '#/definitions/models.ReportStatus'
+      updated_at:
+        type: string
+      user_id:
         type: string
     type: object
   models.PostResponse:
@@ -904,6 +1298,17 @@ definitions:
     - PostTypeEvent
     - PostTypeSell
     - PostTypePull
+  models.PostTypeStats:
+    properties:
+      event:
+        type: integer
+      feed:
+        type: integer
+      pull:
+        type: integer
+      sell:
+        type: integer
+    type: object
   models.PostVisibility:
     enum:
     - PUBLIC
@@ -974,6 +1379,28 @@ definitions:
       is_following:
         type: boolean
     type: object
+  models.ReportListResponse:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      reports: {}
+      total_count:
+        type: integer
+    type: object
+  models.ReportStatus:
+    enum:
+    - PENDING
+    - REVIEWING
+    - RESOLVED
+    - REJECTED
+    type: string
+    x-enum-varnames:
+    - ReportStatusPending
+    - ReportStatusReviewing
+    - ReportStatusResolved
+    - ReportStatusRejected
   models.ResetPasswordRequest:
     properties:
       new_password:
@@ -1001,6 +1428,27 @@ definitions:
         items:
           $ref: '#/definitions/models.UserSearchResult'
         type: array
+    type: object
+  models.SellStatistics:
+    properties:
+      average_price:
+        description: Average price of all SELL posts
+        type: number
+      total_active:
+        description: Number of active (not sold, not expired) items
+        type: integer
+      total_expired:
+        description: Number of expired items
+        type: integer
+      total_revenue:
+        description: Sum of prices for sold items
+        type: number
+      total_sell_posts:
+        description: Total number of SELL posts
+        type: integer
+      total_sold:
+        description: Number of sold items
+        type: integer
     type: object
   models.SetBusinessHoursRequest:
     properties:
@@ -1098,6 +1546,11 @@ definitions:
       website:
         type: string
     type: object
+  models.UpdateBusinessStatusRequest:
+    properties:
+      status:
+        type: boolean
+    type: object
   models.UpdateCommentRequest:
     properties:
       text:
@@ -1142,6 +1595,11 @@ definitions:
         - FRIENDS
         - PRIVATE
     type: object
+  models.UpdatePostStatusRequest:
+    properties:
+      status:
+        type: boolean
+    type: object
   models.UpdateProfileRequest:
     properties:
       about:
@@ -1164,13 +1622,17 @@ definitions:
         - male
         - female
         - other
+        - prefer_not_to_say
         type: string
       last_name:
         maxLength: 100
         minLength: 2
         type: string
       latitude:
+        description: 'Deprecated: Use Location instead'
         type: number
+      location:
+        $ref: '#/definitions/models.LocationCoordinates'
       longitude:
         type: number
       neighborhood:
@@ -1182,10 +1644,47 @@ definitions:
       website:
         type: string
     type: object
+  models.UpdateReportStatusRequest:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/models.ReportStatus'
+        enum:
+        - PENDING
+        - REVIEWING
+        - RESOLVED
+        - REJECTED
+    required:
+    - status
+    type: object
+  models.UpdateUserStatusRequest:
+    properties:
+      is_active:
+        type: boolean
+    type: object
   models.UploadImageResponse:
     properties:
       photo:
         $ref: '#/definitions/models.Photo'
+    type: object
+  models.UserReport:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: string
+      reason:
+        type: string
+      reported_by_id:
+        type: string
+      reported_user:
+        type: string
+      resolved:
+        type: boolean
+      updated_at:
+        type: string
     type: object
   models.UserResponse:
     properties:
@@ -1286,6 +1785,1223 @@ info:
   title: Hamsaya Backend API
   version: "1.0"
 paths:
+  /admin/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate admin user with email and password. Only allows users
+        with admin role to login.
+      parameters:
+      - description: Device information (preferred over body)
+        in: header
+        name: X-Device-Info
+        type: string
+      - description: Admin login credentials (email and password only)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Admin login successful
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AuthResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Invalid credentials or account locked
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Admin login
+      tags:
+      - auth
+  /admin/businesses:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of businesses with optional filtering
+        by status and search term
+      parameters:
+      - description: Search term (name, license_no, email, phone_number, province,
+          district)
+        in: query
+        name: search
+        type: string
+      - description: Filter by status (true=active, false=inactive)
+        in: query
+        name: status
+        type: boolean
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Businesses retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.AdminBusinessListItem'
+                  type: array
+              type: object
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List businesses
+      tags:
+      - admin
+  /admin/businesses/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update business information including name, license, contact info,
+        and location (admin operation)
+      parameters:
+      - description: Business ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Business update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AdminUpdateBusinessRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Business updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Business not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update business information
+      tags:
+      - admin
+  /admin/businesses/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Activate or deactivate a business
+      parameters:
+      - description: Business ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateBusinessStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Business status updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Business not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update business status
+      tags:
+      - admin
+  /admin/posts:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of posts with optional filtering by type
+        and search term
+      parameters:
+      - description: Filter by post type (FEED, EVENT, SELL, PULL, or 'all')
+        in: query
+        name: type
+        type: string
+      - description: Search term (title, description, user email, business name)
+        in: query
+        name: search
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Posts retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.AdminPostListItem'
+                  type: array
+              type: object
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List posts
+      tags:
+      - admin
+  /admin/posts/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update post information including title, description, visibility,
+        and type (admin operation)
+      parameters:
+      - description: Post ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Post update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AdminUpdatePostRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Post updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Post not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update post information
+      tags:
+      - admin
+  /admin/posts/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Activate or deactivate a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdatePostStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Post status updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Post not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update post status
+      tags:
+      - admin
+  /admin/posts/sell/statistics:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve comprehensive statistics for SELL type posts including
+        total, sold, active, expired, revenue, and average price
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Sell statistics retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.SellStatistics'
+              type: object
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get sell post statistics
+      tags:
+      - admin
+  /admin/reports:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of reports with optional filtering by
+        type, status, and search term
+      parameters:
+      - description: Filter by report type (POST, COMMENT, USER, BUSINESS, or 'all')
+        in: query
+        name: type
+        type: string
+      - description: Filter by status (PENDING, REVIEWING, RESOLVED, REJECTED, or
+          'all')
+        in: query
+        name: status
+        type: string
+      - description: Search term (reporter email/name, reported item, reason)
+        in: query
+        name: search
+        type: string
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Reports retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.AdminReportListItem'
+                  type: array
+              type: object
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List reports
+      tags:
+      - admin
+  /admin/reports/{type}/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a report (PENDING, REVIEWING, RESOLVED, REJECTED)
+      parameters:
+      - description: Report type (POST, COMMENT, USER, BUSINESS)
+        in: path
+        name: type
+        required: true
+        type: string
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateReportStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Report status updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body or parameters
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Report not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update report status
+      tags:
+      - admin
+  /admin/reports/businesses:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of all business reports
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.ReportListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List all business reports (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/businesses/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a specific business report by ID
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.BusinessReport'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a specific business report (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/businesses/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a business report
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateReportStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update business report status (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/comments:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of all comment reports
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.ReportListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List all comment reports (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/comments/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a specific comment report by ID
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.CommentReport'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a specific comment report (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/comments/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a comment report
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateReportStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update comment report status (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/posts:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of all post reports
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.ReportListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List all post reports (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/posts/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a specific post report by ID
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.PostReport'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a specific post report (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/posts/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the status of a post report
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateReportStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update post report status (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/users:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of all user reports
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.ReportListResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List all user reports (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/users/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get details of a specific user report by ID
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.UserReport'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get a specific user report (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/reports/users/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Update the resolved status of a user report
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Resolved status
+        in: body
+        name: request
+        required: true
+        schema:
+          additionalProperties:
+            type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user report status (Admin only)
+      tags:
+      - admin
+      - reports
+  /admin/statistics:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve comprehensive statistics for the admin dashboard including
+        user counts, post counts by type, business counts, and pending reports
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Admin statistics retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/models.AdminStatistics'
+              type: object
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get admin dashboard statistics
+      tags:
+      - admin
+  /admin/users:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a paginated list of users with optional filtering by active
+        status and search term
+      parameters:
+      - description: Search term (email, first name, last name)
+        in: query
+        name: search
+        type: string
+      - description: Filter by active status (true/false)
+        in: query
+        name: is_active
+        type: boolean
+      - description: 'Page number (default: 1)'
+        in: query
+        name: page
+        type: integer
+      - description: 'Items per page (default: 20, max: 100)'
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Users retrieved successfully
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.AdminUserListItem'
+                  type: array
+              type: object
+        "400":
+          description: Invalid query parameters
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: List users
+      tags:
+      - admin
+  /admin/users/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Update user information including email, role, names, and verification
+        status (admin operation)
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.AdminUpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user information
+      tags:
+      - admin
+  /admin/users/{id}/status:
+    put:
+      consumes:
+      - application/json
+      description: Activate or deactivate a user account
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Status update request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.UpdateUserStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: User status updated successfully
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Invalid request body
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized - admin access required
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: User not found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Update user status
+      tags:
+      - admin
   /auth/change-password:
     post:
       consumes:
@@ -1349,6 +3065,10 @@ paths:
         false). If user exists, performs normal login with password verification and
         MFA checks.'
       parameters:
+      - description: Device information (preferred over body)
+        in: header
+        name: X-Device-Info
+        type: string
       - description: Login credentials (email and password only)
         in: body
         name: request
@@ -1615,6 +3335,10 @@ paths:
         If user exists with incomplete profile, it will be updated and marked as complete.
         Requires email, password, first_name, last_name, latitude, and longitude.
       parameters:
+      - description: Device information (preferred over body)
+        in: header
+        name: X-Device-Info
+        type: string
       - description: Complete registration details with location
         in: body
         name: request
@@ -1702,6 +3426,10 @@ paths:
       - application/json
       description: Login if user exists, otherwise register new user with location
       parameters:
+      - description: Device information (preferred over body)
+        in: header
+        name: X-Device-Info
+        type: string
       - description: Authentication details
         in: body
         name: request
@@ -2191,6 +3919,51 @@ paths:
       summary: Set business hours
       tags:
       - businesses
+  /businesses/{business_id}/report:
+    post:
+      consumes:
+      - application/json
+      description: Create a report for a business
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      - description: Report details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateBusinessReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Report a business
+      tags:
+      - reports
   /businesses/categories:
     get:
       description: Get all active business categories
@@ -2472,6 +4245,51 @@ paths:
       summary: Get comment replies
       tags:
       - comments
+  /comments/{comment_id}/report:
+    post:
+      consumes:
+      - application/json
+      description: Create a report for a comment
+      parameters:
+      - description: Comment ID
+        in: path
+        name: comment_id
+        required: true
+        type: string
+      - description: Report details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateCommentReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Report a comment
+      tags:
+      - reports
   /discover:
     get:
       consumes:
@@ -3589,6 +5407,51 @@ paths:
       summary: Create a poll
       tags:
       - polls
+  /posts/{post_id}/report:
+    post:
+      consumes:
+      - application/json
+      description: Create a report for a post
+      parameters:
+      - description: Post ID
+        in: path
+        name: post_id
+        required: true
+        type: string
+      - description: Report details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreatePostReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Report a post
+      tags:
+      - reports
   /posts/{post_id}/share:
     post:
       consumes:
@@ -4138,6 +6001,92 @@ paths:
       security:
       - BearerAuth: []
       summary: Get relationship status
+      tags:
+      - relationships
+  /users/{user_id}/report:
+    post:
+      consumes:
+      - application/json
+      description: Create a report for a user
+      parameters:
+      - description: User ID
+        in: path
+        name: user_id
+        required: true
+        type: string
+      - description: Report details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/models.CreateUserReportRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Report a user
+      tags:
+      - reports
+  /users/blocked:
+    get:
+      description: Get a list of users that the authenticated user has blocked
+      parameters:
+      - default: 20
+        description: Limit
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Offset
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/utils.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/models.BlockedUserResponse'
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/utils.Response'
+      security:
+      - BearerAuth: []
+      summary: Get blocked users
       tags:
       - relationships
   /users/me:

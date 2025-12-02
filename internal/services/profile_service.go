@@ -113,8 +113,14 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 		}
 	}
 
-	// Check if profile is complete
-	profile.IsComplete = s.isProfileComplete(profile)
+	// Update IsComplete field
+	// If explicitly provided in request, use that value
+	// Otherwise, automatically calculate based on profile fields
+	if req.IsComplete != nil {
+		profile.IsComplete = *req.IsComplete
+	} else {
+		profile.IsComplete = s.isProfileComplete(profile)
+	}
 	profile.UpdatedAt = time.Now()
 
 	// Update profile

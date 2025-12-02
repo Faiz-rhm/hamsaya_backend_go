@@ -33,6 +33,7 @@ func NewAuthHandler(authService *services.AuthService, validator *utils.Validato
 // @Tags auth
 // @Accept json
 // @Produce json
+// @Param X-Device-Info header string false "Device information (preferred over body)"
 // @Param request body models.RegisterRequest true "Complete registration details with location"
 // @Success 201 {object} utils.Response{data=models.AuthResponse} "User registered with complete profile"
 // @Failure 400 {object} utils.Response
@@ -51,11 +52,18 @@ func (h *AuthHandler) Register(c *gin.Context) {
 		return
 	}
 
-	// Set request metadata
+	// Set request metadata from headers
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader("User-Agent")
+	deviceInfo := c.GetHeader("X-Device-Info")
+
 	req.IPAddress = &ipAddress
 	req.UserAgent = &userAgent
+
+	// Use device info from header if provided, otherwise fall back to body
+	if deviceInfo != "" {
+		req.DeviceInfo = &deviceInfo
+	}
 
 	response, err := h.authService.Register(c.Request.Context(), &req)
 	if err != nil {
@@ -72,6 +80,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 // @Tags auth
 // @Accept json
 // @Produce json
+// @Param X-Device-Info header string false "Device information (preferred over body)"
 // @Param request body models.LoginRequest true "Login credentials (email and password only)"
 // @Success 200 {object} utils.Response{data=models.AuthResponse} "Login successful or user auto-registered"
 // @Failure 400 {object} utils.Response
@@ -90,11 +99,18 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Set request metadata
+	// Set request metadata from headers
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader("User-Agent")
+	deviceInfo := c.GetHeader("X-Device-Info")
+
 	req.IPAddress = &ipAddress
 	req.UserAgent = &userAgent
+
+	// Use device info from header if provided, otherwise fall back to body
+	if deviceInfo != "" {
+		req.DeviceInfo = &deviceInfo
+	}
 
 	response, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
@@ -117,6 +133,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 // @Tags auth
 // @Accept json
 // @Produce json
+// @Param X-Device-Info header string false "Device information (preferred over body)"
 // @Param request body models.LoginRequest true "Admin login credentials (email and password only)"
 // @Success 200 {object} utils.Response{data=models.AuthResponse} "Admin login successful"
 // @Failure 400 {object} utils.Response
@@ -136,11 +153,18 @@ func (h *AuthHandler) AdminLogin(c *gin.Context) {
 		return
 	}
 
-	// Set request metadata
+	// Set request metadata from headers
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader("User-Agent")
+	deviceInfo := c.GetHeader("X-Device-Info")
+
 	req.IPAddress = &ipAddress
 	req.UserAgent = &userAgent
+
+	// Use device info from header if provided, otherwise fall back to body
+	if deviceInfo != "" {
+		req.DeviceInfo = &deviceInfo
+	}
 
 	response, err := h.authService.AdminLogin(c.Request.Context(), &req)
 	if err != nil {
@@ -163,6 +187,7 @@ func (h *AuthHandler) AdminLogin(c *gin.Context) {
 // @Tags auth
 // @Accept json
 // @Produce json
+// @Param X-Device-Info header string false "Device information (preferred over body)"
 // @Param request body models.UnifiedAuthRequest true "Authentication details"
 // @Success 200 {object} utils.Response{data=models.AuthResponse} "User logged in"
 // @Success 201 {object} utils.Response{data=models.AuthResponse} "User registered"
@@ -182,11 +207,18 @@ func (h *AuthHandler) UnifiedAuth(c *gin.Context) {
 		return
 	}
 
-	// Set request metadata
+	// Set request metadata from headers
 	ipAddress := c.ClientIP()
 	userAgent := c.GetHeader("User-Agent")
+	deviceInfo := c.GetHeader("X-Device-Info")
+
 	req.IPAddress = &ipAddress
 	req.UserAgent = &userAgent
+
+	// Use device info from header if provided, otherwise fall back to body
+	if deviceInfo != "" {
+		req.DeviceInfo = &deviceInfo
+	}
 
 	response, err := h.authService.UnifiedAuth(c.Request.Context(), &req)
 	if err != nil {
