@@ -16,6 +16,7 @@ import (
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/storage"
 	"go.uber.org/zap"
+	_ "golang.org/x/image/webp"
 )
 
 // ImageType represents the type of image being uploaded
@@ -81,7 +82,7 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 	// Validate file type
 	contentType := header.Header.Get("Content-Type")
 	if !s.isValidImageType(contentType) {
-		return nil, utils.NewBadRequestError(fmt.Sprintf("Invalid image type: %s. Only JPEG and PNG are allowed", contentType), nil)
+		return nil, utils.NewBadRequestError(fmt.Sprintf("Invalid image type: %s. Only JPEG, PNG, and WebP are allowed", contentType), nil)
 	}
 
 	// Read and validate image
@@ -191,6 +192,7 @@ func (s *StorageService) isValidImageType(contentType string) bool {
 		"image/jpeg",
 		"image/jpg",
 		"image/png",
+		"image/webp",
 	}
 
 	for _, validType := range validTypes {

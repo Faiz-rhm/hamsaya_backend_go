@@ -355,12 +355,19 @@ func (s *PostService) SharePost(ctx context.Context, userID, originalPostID stri
 }
 
 // GetFeed gets posts for the feed
-func (s *PostService) GetFeed(ctx context.Context, filter *models.FeedFilter, viewerID *string) ([]*models.PostResponse, error) {
+func (s *PostService) GetFeed(ctx context.Context, filter *models.FeedFilter, viewerID *string) ([]*models.PostResponse, int64, error) {
+	// Get total count for pagination
+	totalCount, err := s.postRepo.CountFeed(ctx, filter)
+	if err != nil {
+		s.logger.Error("Failed to count feed", zap.Error(err))
+		return nil, 0, utils.NewInternalError("Failed to count feed", err)
+	}
+
 	// Get posts from repository
 	posts, err := s.postRepo.GetFeed(ctx, filter)
 	if err != nil {
 		s.logger.Error("Failed to get feed", zap.Error(err))
-		return nil, utils.NewInternalError("Failed to get feed", err)
+		return nil, 0, utils.NewInternalError("Failed to get feed", err)
 	}
 
 	// Enrich posts
@@ -374,7 +381,7 @@ func (s *PostService) GetFeed(ctx context.Context, filter *models.FeedFilter, vi
 		enrichedPosts = append(enrichedPosts, enrichedPost)
 	}
 
-	return enrichedPosts, nil
+	return enrichedPosts, totalCount, nil
 }
 
 // GetUserBookmarks gets bookmarked posts for a user

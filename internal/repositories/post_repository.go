@@ -43,6 +43,7 @@ type PostRepository interface {
 
 	// Feed
 	GetFeed(ctx context.Context, filter *models.FeedFilter) ([]*models.Post, error)
+	CountFeed(ctx context.Context, filter *models.FeedFilter) (int64, error)
 	GetUserPosts(ctx context.Context, userID string, limit, offset int) ([]*models.Post, error)
 	GetBusinessPosts(ctx context.Context, businessID string, limit, offset int) ([]*models.Post, error)
 
@@ -528,6 +529,71 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	args = append(args, filter.Limit, filter.Offset)
 
 	return r.queryPosts(ctx, queryBuilder.String(), args...)
+}
+
+// CountFeed counts total posts matching the filter (without pagination)
+func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilter) (int64, error) {
+	queryBuilder := strings.Builder{}
+	queryBuilder.WriteString(`
+		SELECT COUNT(*)
+		FROM posts
+		WHERE deleted_at IS NULL AND status = true
+	`)
+
+	args := []interface{}{}
+	argCount := 1
+
+	// Apply same filters as GetFeed
+	if filter.Type != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND type = $%d", argCount))
+		args = append(args, *filter.Type)
+		argCount++
+	}
+
+	if filter.UserID != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND user_id = $%d", argCount))
+		args = append(args, *filter.UserID)
+		argCount++
+	}
+
+	if filter.BusinessID != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND business_id = $%d", argCount))
+		args = append(args, *filter.BusinessID)
+		argCount++
+	}
+
+	if filter.CategoryID != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND category_id = $%d", argCount))
+		args = append(args, *filter.CategoryID)
+		argCount++
+	}
+
+	if filter.Province != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND province = $%d", argCount))
+		args = append(args, *filter.Province)
+		argCount++
+	}
+
+	// Location-based filtering (radius search)
+	if filter.Latitude != nil && filter.Longitude != nil && filter.RadiusKm != nil {
+		queryBuilder.WriteString(fmt.Sprintf(`
+			AND ST_DWithin(
+				address_location::geography,
+				ST_SetSRID(ST_MakePoint($%d, $%d), 4326)::geography,
+				$%d
+			)
+		`, argCount, argCount+1, argCount+2))
+		args = append(args, *filter.Longitude, *filter.Latitude, *filter.RadiusKm*1000)
+		argCount += 3
+	}
+
+	var count int64
+	err := r.db.Pool.QueryRow(ctx, queryBuilder.String(), args...).Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 // GetUserPosts gets all posts by a user

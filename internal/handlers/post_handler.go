@@ -13,21 +13,24 @@ import (
 
 // PostHandler handles post-related endpoints
 type PostHandler struct {
-	postService *services.PostService
-	validator   *utils.Validator
-	logger      *zap.Logger
+	postService    *services.PostService
+	storageService *services.StorageService
+	validator      *utils.Validator
+	logger         *zap.Logger
 }
 
 // NewPostHandler creates a new post handler
 func NewPostHandler(
 	postService *services.PostService,
+	storageService *services.StorageService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *PostHandler {
 	return &PostHandler{
-		postService: postService,
-		validator:   validator,
-		logger:      logger,
+		postService:    postService,
+		storageService: storageService,
+		validator:      validator,
+		logger:         logger,
 	}
 }
 
@@ -396,20 +399,50 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		}
 	}
 
-	if offsetStr := c.Query("offset"); offsetStr != "" {
+	// Support both 'page' and 'offset' parameters
+	// 'page' takes precedence if both are provided
+	page := 1
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+			filter.Offset = (p - 1) * filter.Limit
+		}
+	} else if offsetStr := c.Query("offset"); offsetStr != "" {
 		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
 			filter.Offset = offset
+			// Calculate page from offset
+			page = (offset / filter.Limit) + 1
 		}
 	}
 
 	// Get feed
-	posts, err := h.postService.GetFeed(c.Request.Context(), filter, viewerID)
+	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, viewerID)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Feed retrieved successfully", posts)
+	// Build filters map for response
+	filters := make(map[string]interface{})
+	if filter.Type != nil {
+		filters["type"] = string(*filter.Type)
+	}
+	if filter.UserID != nil {
+		filters["user_id"] = *filter.UserID
+	}
+	if filter.CategoryID != nil {
+		filters["category_id"] = *filter.CategoryID
+	}
+	if filter.Province != nil {
+		filters["province"] = *filter.Province
+	}
+
+	// Build sorts map for response
+	sorts := map[string]interface{}{
+		"sort_by": filter.SortBy,
+	}
+
+	utils.SendPaginatedWithFilters(c, posts, page, filter.Limit, totalCount, filters, sorts)
 }
 
 // GetMyPosts godoc
@@ -438,14 +471,24 @@ func (h *PostHandler) GetMyPosts(c *gin.Context) {
 	// Parse pagination
 	limit := 20
 	offset := 0
+	page := 1
+
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
 			limit = l
 		}
 	}
-	if offsetStr := c.Query("offset"); offsetStr != "" {
+
+	// Support both 'page' and 'offset' parameters
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+			page = p
+			offset = (p - 1) * limit
+		}
+	} else if offsetStr := c.Query("offset"); offsetStr != "" {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
+			page = (offset / limit) + 1
 		}
 	}
 
@@ -457,13 +500,13 @@ func (h *PostHandler) GetMyPosts(c *gin.Context) {
 		Offset: offset,
 	}
 
-	posts, err := h.postService.GetFeed(c.Request.Context(), filter, &userIDStr)
+	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, &userIDStr)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Posts retrieved successfully", posts)
+	utils.SendPaginated(c, posts, page, limit, totalCount)
 }
 
 // GetMyBookmarks godoc
@@ -508,6 +551,52 @@ func (h *PostHandler) GetMyBookmarks(c *gin.Context) {
 	}
 
 	utils.SendSuccess(c, http.StatusOK, "Bookmarks retrieved successfully", posts)
+}
+
+// UploadPostImage godoc
+// @Summary Upload a post image
+// @Description Upload an image for a post before creating the post
+// @Tags posts
+// @Accept multipart/form-data
+// @Produce json
+// @Security BearerAuth
+// @Param file formData file true "Image file to upload"
+// @Success 200 {object} utils.Response{data=models.UploadImageResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /posts/upload-image [post]
+func (h *PostHandler) UploadPostImage(c *gin.Context) {
+	// Get authenticated user ID
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	// Get file from request
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
+		return
+	}
+	defer file.Close()
+
+	// Upload image to storage
+	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	h.logger.Info("Post image uploaded successfully",
+		zap.String("user_id", userID.(string)),
+		zap.String("url", photo.URL),
+	)
+
+	utils.SendSuccess(c, http.StatusOK, "Image uploaded successfully", &models.UploadImageResponse{
+		Photo: photo,
+	})
 }
 
 // handleError handles service errors and sends appropriate HTTP responses

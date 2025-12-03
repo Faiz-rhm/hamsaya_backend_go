@@ -7,15 +7,19 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
+	_ "image/gif"
 	"io"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/kolesa-team/go-webp/encoder"
+	"github.com/kolesa-team/go-webp/webp"
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 	"go.uber.org/zap"
+	_ "golang.org/x/image/webp"
 )
 
 // Client represents a storage client for S3/MinIO
@@ -313,6 +317,17 @@ func EncodeImage(img image.Image, format string) (io.Reader, error) {
 	case "png":
 		if err := png.Encode(&buf, img); err != nil {
 			return nil, fmt.Errorf("failed to encode PNG: %w", err)
+		}
+	case "webp":
+		// Configure WebP encoder options for high quality
+		options, err := encoder.NewLossyEncoderOptions(encoder.PresetDefault, 90)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create WebP encoder options: %w", err)
+		}
+
+		// Encode image to WebP format
+		if err := webp.Encode(&buf, img, options); err != nil {
+			return nil, fmt.Errorf("failed to encode WebP: %w", err)
 		}
 	default:
 		return nil, fmt.Errorf("unsupported format: %s", format)
