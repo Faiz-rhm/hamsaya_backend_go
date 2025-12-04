@@ -256,10 +256,26 @@ func (s *PollService) enrichPoll(ctx context.Context, poll *models.Poll, viewerI
 
 	// Get user's vote if viewer is authenticated
 	if viewerID != nil && *viewerID != "" {
+		s.logger.Info("Checking user vote",
+			zap.String("viewer_id", *viewerID),
+			zap.String("poll_id", poll.ID),
+		)
 		userVote, err := s.pollRepo.GetUserVote(ctx, *viewerID, poll.ID)
+		if err != nil {
+			s.logger.Warn("Error getting user vote",
+				zap.String("viewer_id", *viewerID),
+				zap.String("poll_id", poll.ID),
+				zap.Error(err),
+			)
+		}
 		if err == nil && userVote != nil {
 			response.HasVoted = true
 			response.UserVote = &userVote.PollOptionID
+			s.logger.Info("User has voted",
+				zap.String("viewer_id", *viewerID),
+				zap.String("poll_id", poll.ID),
+				zap.String("voted_option_id", userVote.PollOptionID),
+			)
 		}
 	}
 

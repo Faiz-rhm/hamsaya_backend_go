@@ -99,6 +99,12 @@ type Attachment struct {
 	DeletedAt *time.Time `json:"-"`
 }
 
+// PollRequestData represents poll data from mobile app
+type PollRequestData struct {
+	Question string   `json:"question"`
+	Options  []string `json:"options" validate:"required,min=2,max=10,dive,required,min=1,max=100"`
+}
+
 // CreatePostRequest represents a request to create a post
 type CreatePostRequest struct {
 	// Content
@@ -121,6 +127,10 @@ type CreatePostRequest struct {
 	StartTime *time.Time `json:"start_time,omitempty"`
 	EndDate   *time.Time `json:"end_date,omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty"`
+
+	// Poll-specific (for PULL posts)
+	PollOptions []string          `json:"poll_options,omitempty" validate:"omitempty,min=2,max=10,dive,required,min=1,max=100"`
+	Poll        *PollRequestData  `json:"poll,omitempty"`
 
 	// Location
 	Latitude     *float64 `json:"latitude,omitempty"`

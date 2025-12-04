@@ -15,6 +15,7 @@ import (
 // PostService handles post operations
 type PostService struct {
 	postRepo     repositories.PostRepository
+	pollRepo     repositories.PollRepository
 	userRepo     repositories.UserRepository
 	businessRepo repositories.BusinessRepository
 	categoryRepo repositories.CategoryRepository
@@ -24,6 +25,7 @@ type PostService struct {
 // NewPostService creates a new post service
 func NewPostService(
 	postRepo repositories.PostRepository,
+	pollRepo repositories.PollRepository,
 	userRepo repositories.UserRepository,
 	businessRepo repositories.BusinessRepository,
 	categoryRepo repositories.CategoryRepository,
@@ -31,6 +33,7 @@ func NewPostService(
 ) *PostService {
 	return &PostService{
 		postRepo:     postRepo,
+		pollRepo:     pollRepo,
 		userRepo:     userRepo,
 		businessRepo: businessRepo,
 		categoryRepo: categoryRepo,
@@ -89,6 +92,70 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		post.EventState = &eventState
 	}
 
+	// Create post in database first (needed before creating poll)
+	if err := s.postRepo.Create(ctx, post); err != nil {
+		s.logger.Error("Failed to create post", zap.String("user_id", userID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to create post", err)
+	}
+
+	// Handle poll creation for PULL posts
+	if req.Type == models.PostTypePull {
+		// Get poll options from either poll_options or poll.options
+		var pollOptions []string
+		if len(req.PollOptions) > 0 {
+			pollOptions = req.PollOptions
+		} else if req.Poll != nil && len(req.Poll.Options) > 0 {
+			pollOptions = req.Poll.Options
+		}
+
+		if len(pollOptions) > 0 {
+			// Create poll
+			poll := &models.Poll{
+				ID:        uuid.New().String(),
+				PostID:    postID,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+
+			if err := s.pollRepo.Create(ctx, poll); err != nil {
+				s.logger.Error("Failed to create poll",
+					zap.String("post_id", postID),
+					zap.Error(err),
+				)
+				// Delete the post since poll creation failed
+				_ = s.postRepo.Delete(ctx, postID)
+				return nil, utils.NewInternalError("Failed to create poll for post", err)
+			}
+
+			// Create poll options
+			for _, optionText := range pollOptions {
+				option := &models.PollOption{
+					ID:        uuid.New().String(),
+					PollID:    poll.ID,
+					Option:    optionText,
+					VoteCount: 0,
+					CreatedAt: now,
+					UpdatedAt: now,
+				}
+
+				if err := s.pollRepo.CreateOption(ctx, option); err != nil {
+					s.logger.Error("Failed to create poll option",
+						zap.String("poll_id", poll.ID),
+						zap.String("option", optionText),
+						zap.Error(err),
+					)
+					// Continue with other options instead of failing completely
+				}
+			}
+
+			s.logger.Info("Poll created for PULL post",
+				zap.String("post_id", postID),
+				zap.String("poll_id", poll.ID),
+				zap.Int("options_count", len(pollOptions)),
+			)
+		}
+	}
+
 	// Handle location
 	if req.Latitude != nil && req.Longitude != nil {
 		post.AddressLocation = &pgtype.Point{
@@ -105,12 +172,6 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 	// Handle shared post
 	if req.OriginalPostID != nil {
 		post.OriginalPostID = req.OriginalPostID
-	}
-
-	// Create post in database
-	if err := s.postRepo.Create(ctx, post); err != nil {
-		s.logger.Error("Failed to create post", zap.String("user_id", userID), zap.Error(err))
-		return nil, utils.NewInternalError("Failed to create post", err)
 	}
 
 	// Create attachments if provided
@@ -647,9 +708,24 @@ func (s *PostService) validatePostRequest(req *models.CreatePostRequest) error {
 		if req.StartDate == nil {
 			return utils.NewBadRequestError("Start date is required for event posts", nil)
 		}
-	case models.PostTypeFeed, models.PostTypePull:
+	case models.PostTypePull:
 		if req.Description == nil || *req.Description == "" {
-			return utils.NewBadRequestError("Description is required for this post type", nil)
+			return utils.NewBadRequestError("Description is required for pull posts", nil)
+		}
+		// Check both poll formats (poll_options or poll.options)
+		pollOptionsCount := len(req.PollOptions)
+		if req.Poll != nil {
+			pollOptionsCount = len(req.Poll.Options)
+		}
+		if pollOptionsCount < 2 {
+			return utils.NewBadRequestError("Poll options are required for pull posts (minimum 2 options)", nil)
+		}
+		if pollOptionsCount > 10 {
+			return utils.NewBadRequestError("Maximum 10 poll options allowed", nil)
+		}
+	case models.PostTypeFeed:
+		if req.Description == nil || *req.Description == "" {
+			return utils.NewBadRequestError("Description is required for feed posts", nil)
 		}
 	}
 
