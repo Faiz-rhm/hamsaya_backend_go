@@ -167,20 +167,30 @@ func (s *SearchService) enrichPosts(ctx context.Context, posts []*models.Post, u
 		if post.UserID != nil && *post.UserID != "" {
 			if profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID); err == nil {
 				author = &models.AuthorInfo{
-					UserID:    *post.UserID,
-					FirstName: profile.FirstName,
-					LastName:  profile.LastName,
-					FullName:  profile.FullName(),
-					Avatar:    profile.Avatar,
+					UserID:       *post.UserID,
+					FirstName:    profile.FirstName,
+					LastName:     profile.LastName,
+					FullName:     profile.FullName(),
+					Avatar:       profile.Avatar,
+					Province:     profile.Province,
+					District:     profile.District,
+					Neighborhood: profile.Neighborhood,
 				}
 			}
 		}
 
 		// Check if liked/bookmarked by current user
-		var likedByMe, bookmarkedByMe bool
+		var likedByMe, bookmarkedByMe, isMine bool
 		if userID != nil {
 			likedByMe, _ = s.postRepo.IsLikedByUser(ctx, post.ID, *userID)
 			bookmarkedByMe, _ = s.postRepo.IsBookmarkedByUser(ctx, post.ID, *userID)
+
+			// Check if post belongs to viewer
+			if post.UserID != nil && *post.UserID == *userID {
+				isMine = true
+			} else if post.BusinessID != nil && *post.BusinessID == *userID {
+				isMine = true
+			}
 		}
 
 		// Convert Free and Sold to pointers
@@ -201,6 +211,7 @@ func (s *SearchService) enrichPosts(ctx context.Context, posts []*models.Post, u
 			TotalShares:    post.TotalShares,
 			LikedByMe:      likedByMe,
 			BookmarkedByMe: bookmarkedByMe,
+			IsMine:         isMine,
 			CreatedAt:      post.CreatedAt,
 			UpdatedAt:      post.UpdatedAt,
 		}

@@ -216,11 +216,14 @@ func (s *EventService) enrichEventInterests(ctx context.Context, interests []*mo
 
 		enrichedUser := &models.EventInterestedUser{
 			User: &models.AuthorInfo{
-				UserID:    interest.UserID,
-				FirstName: profile.FirstName,
-				LastName:  profile.LastName,
-				FullName:  profile.FullName(),
-				Avatar:    profile.Avatar,
+				UserID:       interest.UserID,
+				FirstName:    profile.FirstName,
+				LastName:     profile.LastName,
+				FullName:     profile.FullName(),
+				Avatar:       profile.Avatar,
+				Province:     profile.Province,
+				District:     profile.District,
+				Neighborhood: profile.Neighborhood,
 			},
 			EventState: interest.EventState,
 			CreatedAt:  interest.CreatedAt,

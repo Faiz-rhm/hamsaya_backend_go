@@ -204,11 +204,12 @@ type PostResponse struct {
 	Location     *LocationInfo `json:"location,omitempty"`
 
 	// Engagement
-	TotalComments int  `json:"total_comments"`
-	TotalLikes    int  `json:"total_likes"`
-	TotalShares   int  `json:"total_shares"`
-	LikedByMe     bool `json:"liked_by_me"`
+	TotalComments  int  `json:"total_comments"`
+	TotalLikes     int  `json:"total_likes"`
+	TotalShares    int  `json:"total_shares"`
+	LikedByMe      bool `json:"liked_by_me"`
 	BookmarkedByMe bool `json:"bookmarked_by_me"`
+	IsMine         bool `json:"is_mine"`
 
 	// Original post (for shares)
 	OriginalPost *PostResponse `json:"original_post,omitempty"`
@@ -220,11 +221,14 @@ type PostResponse struct {
 
 // AuthorInfo represents post author information
 type AuthorInfo struct {
-	UserID    string  `json:"user_id"`
-	FirstName *string `json:"first_name,omitempty"`
-	LastName  *string `json:"last_name,omitempty"`
-	FullName  string  `json:"full_name"`
-	Avatar    *Photo  `json:"avatar,omitempty"`
+	UserID       string  `json:"user_id"`
+	FirstName    *string `json:"first_name,omitempty"`
+	LastName     *string `json:"last_name,omitempty"`
+	FullName     string  `json:"full_name"`
+	Avatar       *Photo  `json:"avatar"`
+	Province     *string `json:"province"`
+	District     *string `json:"district"`
+	Neighborhood *string `json:"neighborhood"`
 }
 
 // BusinessInfo represents business information for business posts

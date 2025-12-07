@@ -43,6 +43,8 @@ type FullProfileResponse struct {
 	Province     *string    `json:"province,omitempty"`
 	District     *string    `json:"district,omitempty"`
 	Neighborhood *string    `json:"neighborhood,omitempty"`
+	Latitude     *float64   `json:"latitude,omitempty"`
+	Longitude    *float64   `json:"longitude,omitempty"`
 	IsComplete   bool       `json:"is_complete"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
@@ -119,6 +121,15 @@ func ToFullProfileResponse(user *User, profile *Profile) *FullProfileResponse {
 		FollowingCount: 0,
 		PostsCount:     0,
 	}
+
+	// Extract latitude and longitude from pgtype.Point
+	if profile.Location != nil && profile.Location.Valid {
+		latitude := profile.Location.P.Y  // PostGIS uses Y for latitude
+		longitude := profile.Location.P.X // PostGIS uses X for longitude
+		resp.Latitude = &latitude
+		resp.Longitude = &longitude
+	}
+
 	return resp
 }
 

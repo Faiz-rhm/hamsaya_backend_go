@@ -489,11 +489,14 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
 		if err == nil {
 			response.Author = &models.AuthorInfo{
-				UserID:    *post.UserID,
-				FirstName: profile.FirstName,
-				LastName:  profile.LastName,
-				FullName:  profile.FullName(),
-				Avatar:    profile.Avatar,
+				UserID:       *post.UserID,
+				FirstName:    profile.FirstName,
+				LastName:     profile.LastName,
+				FullName:     profile.FullName(),
+				Avatar:       profile.Avatar,
+				Province:     profile.Province,
+				District:     profile.District,
+				Neighborhood: profile.Neighborhood,
 			}
 		}
 	}
@@ -573,6 +576,13 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 			response.LikedByMe = liked
 			response.BookmarkedByMe = bookmarked
 		}
+
+		// Check if post belongs to viewer
+		if post.UserID != nil && *post.UserID == *viewerID {
+			response.IsMine = true
+		} else if post.BusinessID != nil && *post.BusinessID == *viewerID {
+			response.IsMine = true
+		}
 	}
 
 	// Get original post if this is a share (only 1 level deep to prevent infinite recursion)
@@ -612,11 +622,14 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
 		if err == nil {
 			response.Author = &models.AuthorInfo{
-				UserID:    *post.UserID,
-				FirstName: profile.FirstName,
-				LastName:  profile.LastName,
-				FullName:  profile.FullName(),
-				Avatar:    profile.Avatar,
+				UserID:       *post.UserID,
+				FirstName:    profile.FirstName,
+				LastName:     profile.LastName,
+				FullName:     profile.FullName(),
+				Avatar:       profile.Avatar,
+				Province:     profile.Province,
+				District:     profile.District,
+				Neighborhood: profile.Neighborhood,
 			}
 		}
 	}
@@ -683,6 +696,13 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		if err == nil {
 			response.LikedByMe = liked
 			response.BookmarkedByMe = bookmarked
+		}
+
+		// Check if post belongs to viewer
+		if post.UserID != nil && *post.UserID == *viewerID {
+			response.IsMine = true
+		} else if post.BusinessID != nil && *post.BusinessID == *viewerID {
+			response.IsMine = true
 		}
 	}
 

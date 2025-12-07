@@ -287,11 +287,14 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 	profile, err := s.userRepo.GetProfileByUserID(ctx, comment.UserID)
 	if err == nil {
 		response.Author = &models.AuthorInfo{
-			UserID:    comment.UserID,
-			FirstName: profile.FirstName,
-			LastName:  profile.LastName,
-			FullName:  profile.FullName(),
-			Avatar:    profile.Avatar,
+			UserID:       comment.UserID,
+			FirstName:    profile.FirstName,
+			LastName:     profile.LastName,
+			FullName:     profile.FullName(),
+			Avatar:       profile.Avatar,
+			Province:     profile.Province,
+			District:     profile.District,
+			Neighborhood: profile.Neighborhood,
 		}
 	}
 

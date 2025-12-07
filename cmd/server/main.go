@@ -264,13 +264,13 @@ func main() {
 			users.DELETE("/me/cover", authMiddleware.RequireAuth(), profileHandler.DeleteCover)
 
 			// Public routes (optional auth for relationship status)
-			users.GET("/:user_id", profileHandler.GetUserProfile)
+			users.GET("/:user_id", authMiddleware.OptionalAuth(), profileHandler.GetUserProfile)
 
 			// Relationship routes (require authentication)
 			users.POST("/:user_id/follow", authMiddleware.RequireAuth(), relationshipsHandler.FollowUser)
 			users.DELETE("/:user_id/follow", authMiddleware.RequireAuth(), relationshipsHandler.UnfollowUser)
-			users.GET("/:user_id/followers", relationshipsHandler.GetFollowers)
-			users.GET("/:user_id/following", relationshipsHandler.GetFollowing)
+			users.GET("/:user_id/followers", authMiddleware.OptionalAuth(), relationshipsHandler.GetFollowers)
+			users.GET("/:user_id/following", authMiddleware.OptionalAuth(), relationshipsHandler.GetFollowing)
 			users.POST("/:user_id/block", authMiddleware.RequireAuth(), relationshipsHandler.BlockUser)
 			users.DELETE("/:user_id/block", authMiddleware.RequireAuth(), relationshipsHandler.UnblockUser)
 			users.GET("/blocked", authMiddleware.RequireAuth(), relationshipsHandler.GetBlockedUsers)
@@ -284,8 +284,8 @@ func main() {
 		posts := v1.Group("/posts")
 		{
 			// Public routes (optional auth for engagement status)
-			posts.GET("", postHandler.GetFeed)
-			posts.GET("/:post_id", postHandler.GetPost)
+			posts.GET("", authMiddleware.OptionalAuth(), postHandler.GetFeed)
+			posts.GET("/:post_id", authMiddleware.OptionalAuth(), postHandler.GetPost)
 
 			// Protected routes (require authentication)
 			posts.POST("", authMiddleware.RequireAuth(), postHandler.CreatePost)
@@ -302,7 +302,7 @@ func main() {
 			posts.POST("/:post_id/report", authMiddleware.RequireAuth(), rateLimiter.LimitReports(), reportHandler.ReportPost)
 
 			// Comment routes
-			posts.GET("/:post_id/comments", commentHandler.GetPostComments)
+			posts.GET("/:post_id/comments", authMiddleware.OptionalAuth(), commentHandler.GetPostComments)
 			posts.POST("/:post_id/comments", authMiddleware.RequireAuth(), commentHandler.CreateComment)
 
 			// Poll routes
@@ -313,10 +313,10 @@ func main() {
 		// Comment routes
 		comments := v1.Group("/comments")
 		{
-			comments.GET("/:comment_id", commentHandler.GetComment)
+			comments.GET("/:comment_id", authMiddleware.OptionalAuth(), commentHandler.GetComment)
 			comments.PUT("/:comment_id", authMiddleware.RequireAuth(), commentHandler.UpdateComment)
 			comments.DELETE("/:comment_id", authMiddleware.RequireAuth(), commentHandler.DeleteComment)
-			comments.GET("/:comment_id/replies", commentHandler.GetCommentReplies)
+			comments.GET("/:comment_id/replies", authMiddleware.OptionalAuth(), commentHandler.GetCommentReplies)
 			comments.POST("/:comment_id/like", authMiddleware.RequireAuth(), commentHandler.LikeComment)
 			comments.DELETE("/:comment_id/like", authMiddleware.RequireAuth(), commentHandler.UnlikeComment)
 			comments.POST("/:comment_id/report", authMiddleware.RequireAuth(), rateLimiter.LimitReports(), reportHandler.ReportComment)
@@ -325,7 +325,7 @@ func main() {
 		// Poll routes
 		polls := v1.Group("/polls")
 		{
-			polls.GET("/:poll_id", pollHandler.GetPoll)
+			polls.GET("/:poll_id", authMiddleware.OptionalAuth(), pollHandler.GetPoll)
 			polls.POST("/:poll_id/vote", authMiddleware.RequireAuth(), pollHandler.VotePoll)
 			polls.DELETE("/:poll_id/vote", authMiddleware.RequireAuth(), pollHandler.DeleteVote)
 		}
@@ -333,11 +333,11 @@ func main() {
 		// Event routes
 		events := v1.Group("/events")
 		{
-			events.GET("/:post_id/interest", eventHandler.GetEventInterestStatus)
+			events.GET("/:post_id/interest", authMiddleware.OptionalAuth(), eventHandler.GetEventInterestStatus)
 			events.POST("/:post_id/interest", authMiddleware.RequireAuth(), eventHandler.SetEventInterest)
 			events.DELETE("/:post_id/interest", authMiddleware.RequireAuth(), eventHandler.RemoveEventInterest)
-			events.GET("/:post_id/interested", eventHandler.GetInterestedUsers)
-			events.GET("/:post_id/going", eventHandler.GetGoingUsers)
+			events.GET("/:post_id/interested", authMiddleware.OptionalAuth(), eventHandler.GetInterestedUsers)
+			events.GET("/:post_id/going", authMiddleware.OptionalAuth(), eventHandler.GetGoingUsers)
 		}
 
 		// User posts and bookmarks (already defined in users group above)
@@ -347,10 +347,10 @@ func main() {
 		// Business routes
 		businesses := v1.Group("/businesses")
 		{
-			// Public routes
-			businesses.GET("/search", businessHandler.ListBusinesses)
-			businesses.GET("/categories", businessHandler.GetCategories)
-			businesses.GET("/:business_id", businessHandler.GetBusiness)
+			// Public routes (optional auth for personalization)
+			businesses.GET("/search", authMiddleware.OptionalAuth(), businessHandler.ListBusinesses)
+			businesses.GET("/categories", authMiddleware.OptionalAuth(), businessHandler.GetCategories)
+			businesses.GET("/:business_id", authMiddleware.OptionalAuth(), businessHandler.GetBusiness)
 
 			// Protected routes (require authentication)
 			businesses.GET("", authMiddleware.RequireAuth(), businessHandler.GetMyBusinesses)
@@ -378,9 +378,9 @@ func main() {
 		// Category routes (marketplace categories)
 		categories := v1.Group("/categories")
 		{
-			// Public routes
-			categories.GET("", categoryHandler.ListCategories)
-			categories.GET("/:category_id", categoryHandler.GetCategory)
+			// Public routes (optional auth for future personalization)
+			categories.GET("", authMiddleware.OptionalAuth(), categoryHandler.ListCategories)
+			categories.GET("/:category_id", authMiddleware.OptionalAuth(), categoryHandler.GetCategory)
 		}
 
 		// Admin category routes (require admin role)
@@ -479,13 +479,13 @@ func main() {
 		}
 
 		// Search routes (public, but optional auth for personalized results)
-		v1.GET("/search", searchHandler.Search)
-		v1.GET("/search/posts", searchHandler.SearchPosts)
-		v1.GET("/search/users", searchHandler.SearchUsers)
-		v1.GET("/search/businesses", searchHandler.SearchBusinesses)
+		v1.GET("/search", authMiddleware.OptionalAuth(), searchHandler.Search)
+		v1.GET("/search/posts", authMiddleware.OptionalAuth(), searchHandler.SearchPosts)
+		v1.GET("/search/users", authMiddleware.OptionalAuth(), searchHandler.SearchUsers)
+		v1.GET("/search/businesses", authMiddleware.OptionalAuth(), searchHandler.SearchBusinesses)
 
-		// Discovery routes (map-based, public)
-		v1.GET("/discover", searchHandler.Discover)
+		// Discovery routes (map-based, public, optional auth for personalization)
+		v1.GET("/discover", authMiddleware.OptionalAuth(), searchHandler.Discover)
 
 		// Placeholder for future routes
 		v1.GET("/ping", func(c *gin.Context) {
