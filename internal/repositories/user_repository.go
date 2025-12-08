@@ -11,6 +11,7 @@ import (
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // UserRepository defines the interface for user data operations
@@ -263,7 +264,9 @@ func (r *userRepository) CreateProfile(ctx context.Context, profile *models.Prof
 // GetProfileByUserID retrieves a profile by user ID
 func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
 	query := `
-		SELECT id, first_name, last_name, about, gender, dob, website,
+		SELECT id, first_name, last_name, avatar, cover, about, gender, dob, website,
+			ST_X(location::geometry) as longitude,
+			ST_Y(location::geometry) as latitude,
 			country, province, district, neighborhood, is_complete,
 			created_at, updated_at, deleted_at
 		FROM profiles
@@ -271,14 +274,19 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	`
 
 	profile := &models.Profile{}
+	var latitude, longitude *float64
 	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(
 		&profile.ID,
 		&profile.FirstName,
 		&profile.LastName,
+		&profile.Avatar,
+		&profile.Cover,
 		&profile.About,
 		&profile.Gender,
 		&profile.DOB,
 		&profile.Website,
+		&longitude,
+		&latitude,
 		&profile.Country,
 		&profile.Province,
 		&profile.District,
@@ -294,6 +302,14 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 			return nil, fmt.Errorf("profile not found")
 		}
 		return nil, fmt.Errorf("failed to get profile: %w", err)
+	}
+
+	// Construct pgtype.Point from latitude and longitude if both exist
+	if latitude != nil && longitude != nil {
+		profile.Location = &pgtype.Point{
+			P:     pgtype.Vec2{X: *longitude, Y: *latitude},
+			Valid: true,
+		}
 	}
 
 	return profile, nil

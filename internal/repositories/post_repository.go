@@ -49,6 +49,9 @@ type PostRepository interface {
 
 	// Engagement status
 	GetEngagementStatus(ctx context.Context, userID, postID string) (liked, bookmarked bool, err error)
+
+	// Stats
+	CountPostsByUser(ctx context.Context, userID string) (int, error)
 }
 
 type postRepository struct {
@@ -646,6 +649,18 @@ func (r *postRepository) GetEngagementStatus(ctx context.Context, userID, postID
 
 	err = r.db.Pool.QueryRow(ctx, query, userID, postID).Scan(&liked, &bookmarked)
 	return
+}
+
+// CountPostsByUser counts the number of posts by a user
+func (r *postRepository) CountPostsByUser(ctx context.Context, userID string) (int, error) {
+	query := `
+		SELECT COUNT(*) FROM posts
+		WHERE user_id = $1 AND deleted_at IS NULL
+	`
+
+	var count int
+	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(&count)
+	return count, err
 }
 
 // queryPosts is a helper function to query posts

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/models"
@@ -58,7 +59,7 @@ func (h *ProfileHandler) GetMyProfile(c *gin.Context) {
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Profile retrieved successfully", profile)
+	c.JSON(http.StatusOK, profile)
 }
 
 // GetUserProfile godoc
@@ -118,6 +119,12 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
 		return
+	}
+
+	// Normalize gender to lowercase for validation
+	if req.Gender != nil {
+		normalized := strings.ToLower(*req.Gender)
+		req.Gender = &normalized
 	}
 
 	// Validate request

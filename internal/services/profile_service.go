@@ -13,18 +13,24 @@ import (
 
 // ProfileService handles user profile operations
 type ProfileService struct {
-	userRepo repositories.UserRepository
-	logger   *zap.Logger
+	userRepo          repositories.UserRepository
+	postRepo          repositories.PostRepository
+	relationshipsRepo repositories.RelationshipsRepository
+	logger            *zap.Logger
 }
 
 // NewProfileService creates a new profile service
 func NewProfileService(
 	userRepo repositories.UserRepository,
+	postRepo repositories.PostRepository,
+	relationshipsRepo repositories.RelationshipsRepository,
 	logger *zap.Logger,
 ) *ProfileService {
 	return &ProfileService{
-		userRepo: userRepo,
-		logger:   logger,
+		userRepo:          userRepo,
+		postRepo:          postRepo,
+		relationshipsRepo: relationshipsRepo,
+		logger:            logger,
 	}
 }
 
@@ -47,12 +53,36 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID string, viewerID
 	// Convert to response
 	response := models.ToFullProfileResponse(user, profile)
 
-	// TODO: Populate stats (followers, following, posts count)
+	// Populate stats (followers, following, posts count)
+	followersCount, err := s.relationshipsRepo.GetFollowersCount(ctx, userID)
+	if err != nil {
+		s.logger.Warn("Failed to get followers count", zap.String("user_id", userID), zap.Error(err))
+		followersCount = 0
+	}
+	response.FollowersCount = followersCount
+
+	followingCount, err := s.relationshipsRepo.GetFollowingCount(ctx, userID)
+	if err != nil {
+		s.logger.Warn("Failed to get following count", zap.String("user_id", userID), zap.Error(err))
+		followingCount = 0
+	}
+	response.FollowingCount = followingCount
+
+	postsCount, err := s.postRepo.CountPostsByUser(ctx, userID)
+	if err != nil {
+		s.logger.Warn("Failed to get posts count", zap.String("user_id", userID), zap.Error(err))
+		postsCount = 0
+	}
+	response.PostsCount = postsCount
+
 	// TODO: Populate relationship status if viewerID is provided
 
 	s.logger.Info("Profile retrieved",
 		zap.String("user_id", userID),
 		zap.String("viewer_id", stringOrEmpty(viewerID)),
+		zap.Int("followers", followersCount),
+		zap.Int("following", followingCount),
+		zap.Int("posts", postsCount),
 	)
 
 	return response, nil

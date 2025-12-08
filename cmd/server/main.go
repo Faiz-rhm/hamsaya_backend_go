@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/config"
+	_ "github.com/hamsaya/backend/docs" // Import swagger docs
 	"github.com/hamsaya/backend/internal/handlers"
 	"github.com/hamsaya/backend/internal/middleware"
 	"github.com/hamsaya/backend/internal/repositories"
@@ -20,7 +21,6 @@ import (
 	"github.com/hamsaya/backend/pkg/notification"
 	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/redis/go-redis/v9"
-	_ "github.com/hamsaya/backend/docs" // Import swagger docs
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 )
@@ -149,7 +149,7 @@ func main() {
 	mfaService := services.NewMFAService(mfaRepo, userRepo, passwordService, logger)
 	oauthService := services.NewOAuthService(cfg, userRepo, logger)
 	storageService := services.NewStorageService(cfg, logger)
-	profileService := services.NewProfileService(userRepo, logger)
+	profileService := services.NewProfileService(userRepo, postRepo, relationshipsRepo, logger)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
