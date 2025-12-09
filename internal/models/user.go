@@ -1,6 +1,9 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -65,6 +68,33 @@ type Photo struct {
 	Width    int    `json:"width"`
 	Height   int    `json:"height"`
 	MimeType string `json:"mime_type"`
+}
+
+// Scan implements the sql.Scanner interface for Photo to handle JSONB from PostgreSQL
+func (p *Photo) Scan(src interface{}) error {
+	if src == nil {
+		return nil
+	}
+
+	var source []byte
+	switch v := src.(type) {
+	case []byte:
+		source = v
+	case string:
+		source = []byte(v)
+	default:
+		return fmt.Errorf("unsupported type for Photo: %T", src)
+	}
+
+	return json.Unmarshal(source, p)
+}
+
+// Value implements the driver.Valuer interface for Photo to handle JSONB to PostgreSQL
+func (p Photo) Value() (driver.Value, error) {
+	if p.URL == "" {
+		return nil, nil
+	}
+	return json.Marshal(p)
 }
 
 // UserSession represents an active user session

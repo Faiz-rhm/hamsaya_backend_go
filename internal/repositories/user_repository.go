@@ -328,7 +328,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			SET first_name = $2, last_name = $3,
 				location = ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
 				about = $6, gender = $7, dob = $8, website = $9, country = $10,
-				province = $11, district = $12, neighborhood = $13, is_complete = $14, updated_at = $15
+				province = $11, district = $12, neighborhood = $13, avatar = $14, cover = $15,
+				is_complete = $16, updated_at = $17
 			WHERE id = $1 AND deleted_at IS NULL
 		`
 		args = []interface{}{
@@ -345,6 +346,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			profile.Province,
 			profile.District,
 			profile.Neighborhood,
+			profile.Avatar,
+			profile.Cover,
 			profile.IsComplete,
 			time.Now(),
 		}
@@ -353,7 +356,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			UPDATE profiles
 			SET first_name = $2, last_name = $3, about = $4, gender = $5,
 				dob = $6, website = $7, country = $8, province = $9,
-				district = $10, neighborhood = $11, is_complete = $12, updated_at = $13
+				district = $10, neighborhood = $11, avatar = $12, cover = $13,
+				is_complete = $14, updated_at = $15
 			WHERE id = $1 AND deleted_at IS NULL
 		`
 		args = []interface{}{
@@ -368,6 +372,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			profile.Province,
 			profile.District,
 			profile.Neighborhood,
+			profile.Avatar,
+			profile.Cover,
 			profile.IsComplete,
 			time.Now(),
 		}
