@@ -65,6 +65,7 @@ type CommentResponse struct {
 	TotalLikes      int               `json:"total_likes"`
 	TotalReplies    int               `json:"total_replies"`
 	LikedByMe       bool              `json:"liked_by_me"`
+	IsMine          bool              `json:"is_mine"`
 	Replies         []*CommentResponse `json:"replies,omitempty"`
 	CreatedAt       time.Time         `json:"created_at"`
 	UpdatedAt       time.Time         `json:"updated_at"`

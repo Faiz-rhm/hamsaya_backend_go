@@ -322,6 +322,8 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 		if err == nil {
 			response.LikedByMe = liked
 		}
+		// Check if comment belongs to the viewer
+		response.IsMine = comment.UserID == *viewerID
 	}
 
 	// Get first few replies if requested
