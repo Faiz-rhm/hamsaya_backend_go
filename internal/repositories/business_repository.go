@@ -58,6 +58,47 @@ func NewBusinessRepository(db *database.DB) BusinessRepository {
 
 // Create creates a new business profile
 func (r *businessRepository) Create(ctx context.Context, business *models.BusinessProfile) error {
+	// Use ST_SetSRID(ST_MakePoint()) for PostGIS geography column
+	// pgtype.Point is not directly compatible with PostGIS geography type
+	if business.AddressLocation != nil && business.AddressLocation.Valid {
+		query := `
+			INSERT INTO business_profiles (
+				id, user_id, name, license_no, description, address, phone_number,
+				email, website, avatar, cover, status, additional_info,
+				address_location, country, province, district, neighborhood,
+				show_location, created_at, updated_at
+			)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
+				ST_SetSRID(ST_MakePoint($14, $15), 4326)::geography,
+				$16, $17, $18, $19, $20, $21, $22)
+		`
+		_, err := r.db.Pool.Exec(ctx, query,
+			business.ID,
+			business.UserID,
+			business.Name,
+			business.LicenseNo,
+			business.Description,
+			business.Address,
+			business.PhoneNumber,
+			business.Email,
+			business.Website,
+			business.Avatar,
+			business.Cover,
+			business.Status,
+			business.AdditionalInfo,
+			business.AddressLocation.P.X, // longitude
+			business.AddressLocation.P.Y, // latitude
+			business.Country,
+			business.Province,
+			business.District,
+			business.Neighborhood,
+			business.ShowLocation,
+			business.CreatedAt,
+			business.UpdatedAt,
+		)
+		return err
+	}
+
 	query := `
 		INSERT INTO business_profiles (
 			id, user_id, name, license_no, description, address, phone_number,
@@ -65,9 +106,8 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 			address_location, country, province, district, neighborhood,
 			show_location, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL, $14, $15, $16, $17, $18, $19, $20)
 	`
-
 	_, err := r.db.Pool.Exec(ctx, query,
 		business.ID,
 		business.UserID,
@@ -82,7 +122,6 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 		business.Cover,
 		business.Status,
 		business.AdditionalInfo,
-		business.AddressLocation,
 		business.Country,
 		business.Province,
 		business.District,
@@ -96,18 +135,30 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 }
 
 // GetByID gets a business profile by ID
+// scanBusinessLocation scans PostGIS geography into pgtype.Point using ST_X/ST_Y
+func scanBusinessLocation(lng, lat *float64, business *models.BusinessProfile) {
+	if lng != nil && lat != nil {
+		business.AddressLocation = &pgtype.Point{
+			P:     pgtype.Vec2{X: *lng, Y: *lat},
+			Valid: true,
+		}
+	}
+}
+
 func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*models.BusinessProfile, error) {
 	query := `
 		SELECT
 			id, user_id, name, license_no, description, address, phone_number,
 			email, website, avatar, cover, status, additional_info,
-			address_location, country, province, district, neighborhood,
+			ST_X(address_location::geometry), ST_Y(address_location::geometry),
+			country, province, district, neighborhood,
 			show_location, total_views, total_follow, created_at, updated_at
 		FROM business_profiles
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	business := &models.BusinessProfile{}
+	var lng, lat *float64
 	err := r.db.Pool.QueryRow(ctx, query, businessID).Scan(
 		&business.ID,
 		&business.UserID,
@@ -122,7 +173,8 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 		&business.Cover,
 		&business.Status,
 		&business.AdditionalInfo,
-		&business.AddressLocation,
+		&lng,
+		&lat,
 		&business.Country,
 		&business.Province,
 		&business.District,
@@ -137,6 +189,9 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 	if err == pgx.ErrNoRows {
 		return nil, fmt.Errorf("business profile not found")
 	}
+	if err == nil {
+		scanBusinessLocation(lng, lat, business)
+	}
 
 	return business, err
 }
@@ -147,7 +202,8 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 		SELECT
 			id, user_id, name, license_no, description, address, phone_number,
 			email, website, avatar, cover, status, additional_info,
-			address_location, country, province, district, neighborhood,
+			ST_X(address_location::geometry), ST_Y(address_location::geometry),
+			country, province, district, neighborhood,
 			show_location, total_views, total_follow, created_at, updated_at
 		FROM business_profiles
 		WHERE user_id = $1 AND deleted_at IS NULL
@@ -164,6 +220,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 	var businesses []*models.BusinessProfile
 	for rows.Next() {
 		business := &models.BusinessProfile{}
+		var lng, lat *float64
 		err := rows.Scan(
 			&business.ID,
 			&business.UserID,
@@ -178,7 +235,8 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 			&business.Cover,
 			&business.Status,
 			&business.AdditionalInfo,
-			&business.AddressLocation,
+			&lng,
+			&lat,
 			&business.Country,
 			&business.Province,
 			&business.District,
@@ -192,6 +250,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 		if err != nil {
 			return nil, err
 		}
+		scanBusinessLocation(lng, lat, business)
 		businesses = append(businesses, business)
 	}
 
@@ -200,6 +259,56 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 
 // Update updates a business profile
 func (r *businessRepository) Update(ctx context.Context, business *models.BusinessProfile) error {
+	// Use ST_SetSRID(ST_MakePoint()) for PostGIS geography column
+	if business.AddressLocation != nil && business.AddressLocation.Valid {
+		query := `
+			UPDATE business_profiles
+			SET
+				name = $2,
+				license_no = $3,
+				description = $4,
+				address = $5,
+				phone_number = $6,
+				email = $7,
+				website = $8,
+				avatar = $9,
+				cover = $10,
+				status = $11,
+				additional_info = $12,
+				address_location = ST_SetSRID(ST_MakePoint($13, $14), 4326)::geography,
+				country = $15,
+				province = $16,
+				district = $17,
+				neighborhood = $18,
+				show_location = $19,
+				updated_at = $20
+			WHERE id = $1 AND deleted_at IS NULL
+		`
+		_, err := r.db.Pool.Exec(ctx, query,
+			business.ID,
+			business.Name,
+			business.LicenseNo,
+			business.Description,
+			business.Address,
+			business.PhoneNumber,
+			business.Email,
+			business.Website,
+			business.Avatar,
+			business.Cover,
+			business.Status,
+			business.AdditionalInfo,
+			business.AddressLocation.P.X, // longitude
+			business.AddressLocation.P.Y, // latitude
+			business.Country,
+			business.Province,
+			business.District,
+			business.Neighborhood,
+			business.ShowLocation,
+			business.UpdatedAt,
+		)
+		return err
+	}
+
 	query := `
 		UPDATE business_profiles
 		SET
@@ -214,16 +323,15 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 			cover = $10,
 			status = $11,
 			additional_info = $12,
-			address_location = $13,
-			country = $14,
-			province = $15,
-			district = $16,
-			neighborhood = $17,
-			show_location = $18,
-			updated_at = $19
+			address_location = NULL,
+			country = $13,
+			province = $14,
+			district = $15,
+			neighborhood = $16,
+			show_location = $17,
+			updated_at = $18
 		WHERE id = $1 AND deleted_at IS NULL
 	`
-
 	_, err := r.db.Pool.Exec(ctx, query,
 		business.ID,
 		business.Name,
@@ -237,7 +345,6 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 		business.Cover,
 		business.Status,
 		business.AdditionalInfo,
-		business.AddressLocation,
 		business.Country,
 		business.Province,
 		business.District,
@@ -267,7 +374,8 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 		SELECT DISTINCT
 			bp.id, bp.user_id, bp.name, bp.license_no, bp.description, bp.address,
 			bp.phone_number, bp.email, bp.website, bp.avatar, bp.cover, bp.status,
-			bp.additional_info, bp.address_location, bp.country, bp.province,
+			bp.additional_info, ST_X(bp.address_location::geometry), ST_Y(bp.address_location::geometry),
+			bp.country, bp.province,
 			bp.district, bp.neighborhood, bp.show_location, bp.total_views,
 			bp.total_follow, bp.created_at, bp.updated_at
 		FROM business_profiles bp
@@ -332,6 +440,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 	var businesses []*models.BusinessProfile
 	for rows.Next() {
 		business := &models.BusinessProfile{}
+		var lng, lat *float64
 		err := rows.Scan(
 			&business.ID,
 			&business.UserID,
@@ -346,7 +455,8 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 			&business.Cover,
 			&business.Status,
 			&business.AdditionalInfo,
-			&business.AddressLocation,
+			&lng,
+			&lat,
 			&business.Country,
 			&business.Province,
 			&business.District,
@@ -360,6 +470,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 		if err != nil {
 			return nil, err
 		}
+		scanBusinessLocation(lng, lat, business)
 		businesses = append(businesses, business)
 	}
 

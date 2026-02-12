@@ -10,6 +10,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // PostRepository defines the interface for post operations
@@ -63,6 +64,15 @@ func NewPostRepository(db *database.DB) PostRepository {
 	return &postRepository{db: db}
 }
 
+// pointToWKT converts a pgtype.Point to a WKT string for PostGIS geography columns.
+// Returns nil if point is nil or invalid.
+func pointToWKT(p *pgtype.Point) interface{} {
+	if p == nil || !p.Valid {
+		return nil
+	}
+	return fmt.Sprintf("SRID=4326;POINT(%f %f)", p.P.X, p.P.Y)
+}
+
 // Create creates a new post
 func (r *postRepository) Create(ctx context.Context, post *models.Post) error {
 	query := `
@@ -79,7 +89,7 @@ func (r *postRepository) Create(ctx context.Context, post *models.Post) error {
 			$6, $7, $8, $9, $10,
 			$11, $12, $13, $14, $15, $16, $17, $18, $19,
 			$20, $21, $22, $23, $24, $25, $26, $27,
-			$28, $29, $30, $31, $32, $33,
+			ST_GeogFromText($28), ST_GeogFromText($29), $30, $31, $32, $33,
 			$34, $35, $36,
 			$37, $38
 		)
@@ -90,7 +100,7 @@ func (r *postRepository) Create(ctx context.Context, post *models.Post) error {
 		post.Title, post.Description, post.Type, post.Status, post.Visibility,
 		post.Currency, post.Price, post.Discount, post.Free, post.Sold, post.IsPromoted, post.CountryCode, post.ContactNo, post.IsLocation,
 		post.StartDate, post.StartTime, post.EndDate, post.EndTime, post.EventState, post.InterestedCount, post.GoingCount, post.ExpiredAt,
-		post.AddressLocation, post.UserLocation, post.Country, post.Province, post.District, post.Neighborhood,
+		pointToWKT(post.AddressLocation), pointToWKT(post.UserLocation), post.Country, post.Province, post.District, post.Neighborhood,
 		post.TotalComments, post.TotalLikes, post.TotalShares,
 		post.CreatedAt, post.UpdatedAt,
 	)
@@ -500,6 +510,14 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		locationSearchActive = true
 	}
 
+	// Cursor-based pagination: when a cursor is provided, filter out older posts
+	// instead of using OFFSET (which degrades linearly with page depth).
+	if filter.Cursor != nil && filter.SortBy != "trending" && filter.SortBy != "nearby" {
+		queryBuilder.WriteString(fmt.Sprintf(" AND created_at < $%d", argCount))
+		args = append(args, *filter.Cursor)
+		argCount++
+	}
+
 	// Sorting
 	switch filter.SortBy {
 	case "trending":
@@ -528,8 +546,14 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		queryBuilder.WriteString(" ORDER BY created_at DESC")
 	}
 
-	queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1))
-	args = append(args, filter.Limit, filter.Offset)
+	// Use LIMIT only (cursor replaces OFFSET for default/recent sorting)
+	if filter.Cursor != nil && filter.SortBy != "trending" && filter.SortBy != "nearby" {
+		queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d", argCount))
+		args = append(args, filter.Limit)
+	} else {
+		queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1))
+		args = append(args, filter.Limit, filter.Offset)
+	}
 
 	return r.queryPosts(ctx, queryBuilder.String(), args...)
 }

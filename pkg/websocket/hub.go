@@ -32,6 +32,9 @@ type Hub struct {
 	// Broadcast message to specific user
 	broadcast chan *BroadcastMessage
 
+	// Shutdown signal
+	done chan struct{}
+
 	// Mutex for thread-safe access to clients map
 	mu sync.RWMutex
 
@@ -52,14 +55,26 @@ func NewHub(logger *zap.Logger) *Hub {
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
 		broadcast:  make(chan *BroadcastMessage),
+		done:       make(chan struct{}),
 		logger:     logger,
 	}
 }
 
-// Run starts the hub's main loop
+// Run starts the hub's main loop. It exits when Shutdown() is called.
 func (h *Hub) Run() {
 	for {
 		select {
+		case <-h.done:
+			// Graceful shutdown: close all client connections
+			h.mu.Lock()
+			for _, client := range h.clients {
+				client.close()
+			}
+			h.clients = make(map[string]*Client)
+			h.mu.Unlock()
+			h.logger.Info("WebSocket hub shut down gracefully")
+			return
+
 		case client := <-h.register:
 			h.mu.Lock()
 			// Close existing connection if user is already connected
@@ -113,6 +128,11 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// Shutdown gracefully stops the hub, closing all client connections.
+func (h *Hub) Shutdown() {
+	close(h.done)
 }
 
 // Register adds a client to the hub

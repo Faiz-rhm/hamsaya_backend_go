@@ -214,3 +214,63 @@ func (s *TokenStorageService) IsTokenBlacklisted(ctx context.Context, tokenHash 
 
 	return exists > 0, nil
 }
+
+// Session cache constants
+const (
+	sessionCachePrefix = "session:cache:"
+	sessionCacheTTL    = 60 * time.Second // Cache sessions for 60 seconds
+)
+
+// CacheSession stores session data in Redis cache to avoid repeated DB lookups.
+// The cache has a short TTL so revocations take effect within a minute.
+func (s *TokenStorageService) CacheSession(ctx context.Context, sessionID string, data *SessionCacheData) error {
+	key := sessionCachePrefix + sessionID
+	value := fmt.Sprintf("%s|%s|%t|%d",
+		data.UserID, data.AccessTokenHash, data.Revoked, data.ExpiresAt.Unix())
+
+	if err := s.redis.Set(ctx, key, value, sessionCacheTTL).Err(); err != nil {
+		// Cache failure is not critical, just log it
+		s.logger.Debug("Failed to cache session", zap.String("session_id", sessionID), zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// GetCachedSession retrieves cached session data from Redis.
+// Returns nil if the session is not in cache (cache miss).
+func (s *TokenStorageService) GetCachedSession(ctx context.Context, sessionID string) (*SessionCacheData, error) {
+	key := sessionCachePrefix + sessionID
+	value, err := s.redis.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return nil, nil // Cache miss
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	data := &SessionCacheData{}
+	var expiresUnix int64
+	_, err = fmt.Sscanf(value, "%s|%s|%t|%d",
+		&data.UserID, &data.AccessTokenHash, &data.Revoked, &expiresUnix)
+	if err != nil {
+		// Parse error — treat as cache miss, delete bad entry
+		s.redis.Del(ctx, key)
+		return nil, nil
+	}
+	data.ExpiresAt = time.Unix(expiresUnix, 0)
+	return data, nil
+}
+
+// InvalidateSessionCache removes a session from cache (used on logout/revoke).
+func (s *TokenStorageService) InvalidateSessionCache(ctx context.Context, sessionID string) error {
+	key := sessionCachePrefix + sessionID
+	return s.redis.Del(ctx, key).Err()
+}
+
+// SessionCacheData holds the minimal session data needed for auth verification.
+type SessionCacheData struct {
+	UserID          string
+	AccessTokenHash string
+	Revoked         bool
+	ExpiresAt       time.Time
+}

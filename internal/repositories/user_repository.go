@@ -29,12 +29,17 @@ type UserRepository interface {
 	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
 
+	// Transactional operations
+	CreateUserWithProfile(ctx context.Context, user *models.User, profile *models.Profile) error
+
 	// Session operations
 	CreateSession(ctx context.Context, session *models.UserSession) error
 	GetSessionByID(ctx context.Context, sessionID string) (*models.UserSession, error)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*models.UserSession, error)
+	GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (*models.UserSession, error)
 	RevokeSession(ctx context.Context, sessionID string) error
 	RevokeAllUserSessions(ctx context.Context, userID string) error
+	RevokeAllUserSessionsExcept(ctx context.Context, userID string, exceptSessionID string) error
 	GetActiveSessions(ctx context.Context, userID string) ([]*models.UserSession, error)
 }
 
@@ -394,9 +399,9 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 // CreateSession creates a new user session
 func (r *userRepository) CreateSession(ctx context.Context, session *models.UserSession) error {
 	query := `
-		INSERT INTO user_sessions (id, user_id, refresh_token, access_token_hash,
+		INSERT INTO user_sessions (id, user_id, refresh_token, refresh_token_hash, access_token_hash,
 			device_info, ip_address, user_agent, expires_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 	`
 
 	// Convert device_info string to JSONB format
@@ -415,6 +420,7 @@ func (r *userRepository) CreateSession(ctx context.Context, session *models.User
 		session.ID,
 		session.UserID,
 		session.RefreshToken,
+		session.RefreshTokenHash,
 		session.AccessTokenHash,
 		deviceInfoJSON,
 		session.IPAddress,
@@ -473,6 +479,42 @@ func (r *userRepository) GetSessionByRefreshToken(ctx context.Context, refreshTo
 
 	session := &models.UserSession{}
 	err := r.db.Pool.QueryRow(ctx, query, refreshToken).Scan(
+		&session.ID,
+		&session.UserID,
+		&session.RefreshToken,
+		&session.AccessTokenHash,
+		&session.DeviceInfo,
+		&session.IPAddress,
+		&session.UserAgent,
+		&session.ExpiresAt,
+		&session.Revoked,
+		&session.RevokedAt,
+		&session.CreatedAt,
+		&session.UpdatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("session not found")
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+
+	return session, nil
+}
+
+// GetSessionByRefreshTokenHash retrieves a session by the hashed refresh token.
+// This is the secure lookup method used after the hashing migration.
+func (r *userRepository) GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (*models.UserSession, error) {
+	query := `
+		SELECT id, user_id, refresh_token, access_token_hash, device_info,
+			ip_address::text, user_agent, expires_at, revoked, revoked_at, created_at, updated_at
+		FROM user_sessions
+		WHERE refresh_token_hash = $1 AND revoked = false
+	`
+
+	session := &models.UserSession{}
+	err := r.db.Pool.QueryRow(ctx, query, refreshTokenHash).Scan(
 		&session.ID,
 		&session.UserID,
 		&session.RefreshToken,
@@ -561,4 +603,69 @@ func (r *userRepository) GetActiveSessions(ctx context.Context, userID string) (
 	}
 
 	return sessions, rows.Err()
+}
+
+// CreateUserWithProfile creates a user and their profile atomically within a transaction.
+// If either operation fails, both are rolled back.
+func (r *userRepository) CreateUserWithProfile(ctx context.Context, user *models.User, profile *models.Profile) error {
+	return r.db.WithTransaction(ctx, func(tx pgx.Tx) error {
+		// Create user
+		userQuery := `
+			INSERT INTO users (id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+				oauth_provider, oauth_provider_id, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		`
+		_, err := tx.Exec(ctx, userQuery,
+			user.ID, user.Email, user.Phone, user.PasswordHash,
+			user.EmailVerified, user.PhoneVerified, user.MFAEnabled, user.Role,
+			user.OAuthProvider, user.OAuthProviderID, user.CreatedAt, user.UpdatedAt,
+		)
+		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return fmt.Errorf("user with email already exists")
+			}
+			return fmt.Errorf("failed to create user: %w", err)
+		}
+
+		// Create profile
+		if profile.Location != nil && profile.Location.Valid {
+			profileQuery := `
+				INSERT INTO profiles (id, first_name, last_name, location, is_complete, created_at, updated_at)
+				VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8)
+			`
+			_, err = tx.Exec(ctx, profileQuery,
+				profile.ID, profile.FirstName, profile.LastName,
+				profile.Location.P.X, profile.Location.P.Y,
+				profile.IsComplete, profile.CreatedAt, profile.UpdatedAt,
+			)
+		} else {
+			profileQuery := `
+				INSERT INTO profiles (id, first_name, last_name, is_complete, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6)
+			`
+			_, err = tx.Exec(ctx, profileQuery,
+				profile.ID, profile.FirstName, profile.LastName,
+				profile.IsComplete, profile.CreatedAt, profile.UpdatedAt,
+			)
+		}
+		if err != nil {
+			return fmt.Errorf("failed to create profile: %w", err)
+		}
+
+		return nil
+	})
+}
+
+// RevokeAllUserSessionsExcept revokes all sessions for a user except the specified session.
+func (r *userRepository) RevokeAllUserSessionsExcept(ctx context.Context, userID string, exceptSessionID string) error {
+	query := `
+		UPDATE user_sessions
+		SET revoked = true, revoked_at = $3, updated_at = $4
+		WHERE user_id = $1 AND id != $2 AND revoked = false
+	`
+
+	now := time.Now()
+	_, err := r.db.Pool.Exec(ctx, query, userID, exceptSessionID, now, now)
+	return err
 }

@@ -99,18 +99,19 @@ func (p Photo) Value() (driver.Value, error) {
 
 // UserSession represents an active user session
 type UserSession struct {
-	ID              string     `json:"id"`
-	UserID          string     `json:"user_id"`
-	RefreshToken    string     `json:"-"` // Never expose
-	AccessTokenHash string     `json:"-"` // Never expose
-	DeviceInfo      *string    `json:"device_info,omitempty"`
-	IPAddress       *string    `json:"ip_address,omitempty"`
-	UserAgent       *string    `json:"user_agent,omitempty"`
-	ExpiresAt       time.Time  `json:"expires_at"`
-	Revoked         bool       `json:"revoked"`
-	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID               string     `json:"id"`
+	UserID           string     `json:"user_id"`
+	RefreshToken     string     `json:"-"` // Never expose
+	RefreshTokenHash string     `json:"-"` // SHA-256 hash of refresh token for secure lookup
+	AccessTokenHash  string     `json:"-"` // Never expose
+	DeviceInfo       *string    `json:"device_info,omitempty"`
+	IPAddress        *string    `json:"ip_address,omitempty"`
+	UserAgent        *string    `json:"user_agent,omitempty"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	Revoked          bool       `json:"revoked"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // IsLocked checks if the user account is currently locked

@@ -2,6 +2,73 @@
 
 Production-ready Go backend for the Hamsaya mobile application - a social media platform with posts, events, marketplace, business profiles, and real-time messaging.
 
+---
+
+## How to run the backend
+
+Follow these steps to run the API locally.
+
+### 1. Prerequisites
+
+- **Go 1.21+** – [Install Go](https://go.dev/dl/)
+- **Docker & Docker Compose** – [Install Docker](https://docs.docker.com/get-docker/)
+- **Make** (optional; you can use the equivalent commands below)
+
+### 2. One-time setup
+
+From the project root (`hamsaya_backend_go/`):
+
+```bash
+# Copy environment file and keep defaults (or edit .env if needed)
+cp .env.example .env
+
+# Download Go dependencies
+go mod download
+# or: make deps
+```
+
+### 3. Start infrastructure (PostgreSQL, Redis, MinIO)
+
+```bash
+docker-compose up -d postgres redis minio
+# or: make docker-up
+```
+
+Wait a few seconds for the containers to start.
+
+### 4. Run database migrations
+
+```bash
+make migrate-up
+# or: go run cmd/migrate/main.go up
+```
+
+### 5. Start the API server
+
+```bash
+make run
+# or: go run cmd/server/main.go
+```
+
+The API will be available at **http://localhost:8080**.
+
+### 6. Verify
+
+```bash
+curl http://localhost:8080/health
+```
+
+Optional: run with **hot reload** during development:
+
+```bash
+make install-air   # once
+make dev           # run with auto-reload
+```
+
+For more details, troubleshooting, and production deployment, see the sections below and [QUICKSTART.md](./QUICKSTART.md).
+
+---
+
 ## Features
 
 - 🔐 **Authentication**: JWT, OAuth2 (Google/Apple/Facebook), MFA/TOTP
@@ -53,6 +120,8 @@ Production-ready Go backend for the Hamsaya mobile application - a social media 
 ```
 
 ## Getting Started
+
+For a short run guide, see **[How to run the backend](#how-to-run-the-backend)** at the top of this file.
 
 ### Prerequisites
 

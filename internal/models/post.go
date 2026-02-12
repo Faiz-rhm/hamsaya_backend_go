@@ -301,4 +301,9 @@ type FeedFilter struct {
 	Latitude     *float64   `json:"latitude,omitempty"`
 	Longitude    *float64   `json:"longitude,omitempty"`
 	RadiusKm     *float64   `json:"radius_km,omitempty"`
+
+	// Cursor-based pagination (preferred over offset for performance at scale).
+	// When Cursor is set, Offset is ignored. Cursor is the created_at timestamp
+	// of the last item from the previous page.
+	Cursor       *time.Time `json:"cursor,omitempty"`
 }

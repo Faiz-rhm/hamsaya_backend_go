@@ -14,6 +14,7 @@ import (
 // BusinessHandler handles business-related endpoints
 type BusinessHandler struct {
 	businessService *services.BusinessService
+	storageService  *services.StorageService
 	validator       *utils.Validator
 	logger          *zap.Logger
 }
@@ -21,11 +22,13 @@ type BusinessHandler struct {
 // NewBusinessHandler creates a new business handler
 func NewBusinessHandler(
 	businessService *services.BusinessService,
+	storageService *services.StorageService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *BusinessHandler {
 	return &BusinessHandler{
 		businessService: businessService,
+		storageService:  storageService,
 		validator:       validator,
 		logger:          logger,
 	}
@@ -271,13 +274,13 @@ func (h *BusinessHandler) SetBusinessHours(c *gin.Context) {
 
 // UploadAvatar godoc
 // @Summary Upload business avatar
-// @Description Upload an avatar for a business
+// @Description Upload an avatar image for a business (multipart file upload)
 // @Tags businesses
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
 // @Param business_id path string true "Business ID"
-// @Param photo_url body string true "Photo URL (already uploaded)"
+// @Param file formData file true "Avatar image file (JPEG/PNG/WebP, max 10MB)"
 // @Success 200 {object} utils.Response
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
@@ -293,39 +296,41 @@ func (h *BusinessHandler) UploadAvatar(c *gin.Context) {
 
 	businessID := c.Param("business_id")
 
-	// Parse request
-	var req struct {
-		PhotoURL string `json:"photo_url" validate:"required,url"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+	// Get file from form
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
+	defer file.Close()
 
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
-		return
-	}
-
-	// Upload avatar
-	if err := h.businessService.UploadAvatar(c.Request.Context(), businessID, userID.(string), req.PhotoURL); err != nil {
+	// Upload and process the image via storage service
+	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeAvatar)
+	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Avatar uploaded successfully", nil)
+	// Save the photo URL to the business profile
+	if err := h.businessService.UploadAvatar(c.Request.Context(), businessID, userID.(string), photo.URL); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Avatar uploaded successfully", &models.UploadImageResponse{
+		Photo: photo,
+	})
 }
 
 // UploadCover godoc
 // @Summary Upload business cover photo
-// @Description Upload a cover photo for a business
+// @Description Upload a cover photo for a business (multipart file upload)
 // @Tags businesses
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
 // @Param business_id path string true "Business ID"
-// @Param photo_url body string true "Photo URL (already uploaded)"
+// @Param file formData file true "Cover image file (JPEG/PNG/WebP, max 10MB)"
 // @Success 200 {object} utils.Response
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
@@ -341,39 +346,41 @@ func (h *BusinessHandler) UploadCover(c *gin.Context) {
 
 	businessID := c.Param("business_id")
 
-	// Parse request
-	var req struct {
-		PhotoURL string `json:"photo_url" validate:"required,url"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+	// Get file from form
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
+	defer file.Close()
 
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
-		return
-	}
-
-	// Upload cover
-	if err := h.businessService.UploadCover(c.Request.Context(), businessID, userID.(string), req.PhotoURL); err != nil {
+	// Upload and process the image via storage service
+	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeCover)
+	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Cover uploaded successfully", nil)
+	// Save the photo URL to the business profile
+	if err := h.businessService.UploadCover(c.Request.Context(), businessID, userID.(string), photo.URL); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Cover uploaded successfully", &models.UploadImageResponse{
+		Photo: photo,
+	})
 }
 
 // AddGalleryImage godoc
 // @Summary Add gallery image
-// @Description Add an image to business gallery
+// @Description Add an image to business gallery (multipart file upload)
 // @Tags businesses
-// @Accept json
+// @Accept multipart/form-data
 // @Produce json
 // @Security BearerAuth
 // @Param business_id path string true "Business ID"
-// @Param photo_url body string true "Photo URL (already uploaded)"
+// @Param file formData file true "Gallery image file (JPEG/PNG/WebP, max 10MB)"
 // @Success 200 {object} utils.Response
 // @Failure 400 {object} utils.Response
 // @Failure 401 {object} utils.Response
@@ -389,28 +396,30 @@ func (h *BusinessHandler) AddGalleryImage(c *gin.Context) {
 
 	businessID := c.Param("business_id")
 
-	// Parse request
-	var req struct {
-		PhotoURL string `json:"photo_url" validate:"required,url"`
-	}
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+	// Get file from form
+	file, header, err := c.Request.FormFile("file")
+	if err != nil {
+		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
+	defer file.Close()
 
-	// Validate request
-	if err := h.validator.Validate(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
-		return
-	}
-
-	// Add gallery image
-	if err := h.businessService.AddGalleryImage(c.Request.Context(), businessID, userID.(string), req.PhotoURL); err != nil {
+	// Upload and process the image via storage service
+	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)
+	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Gallery image added successfully", nil)
+	// Save the photo URL to the business gallery
+	if err := h.businessService.AddGalleryImage(c.Request.Context(), businessID, userID.(string), photo.URL); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Gallery image added successfully", &models.UploadImageResponse{
+		Photo: photo,
+	})
 }
 
 // DeleteGalleryImage godoc

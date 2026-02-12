@@ -95,11 +95,6 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			UpdatedAt:           now,
 		}
 
-		if err := s.userRepo.Create(ctx, user); err != nil {
-			s.logger.Error("Failed to create user", zap.Error(err))
-			return nil, utils.NewInternalError("Failed to create user", err)
-		}
-
 		// Create complete profile with location
 		profile := &models.Profile{
 			ID:         userID,
@@ -116,9 +111,10 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			Valid: true,
 		}
 
-		if err := s.userRepo.CreateProfile(ctx, profile); err != nil {
-			s.logger.Error("Failed to create profile", zap.Error(err))
-			return nil, utils.NewInternalError("Failed to create profile", err)
+		// Create user and profile atomically in a transaction
+		if err := s.userRepo.CreateUserWithProfile(ctx, user, profile); err != nil {
+			s.logger.Error("Failed to create user with profile", zap.Error(err))
+			return nil, utils.NewInternalError("Failed to create user", err)
 		}
 
 		s.logger.Info("User registered with complete profile",
@@ -286,11 +282,6 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 		UpdatedAt:           now,
 	}
 
-	if err := s.userRepo.Create(ctx, user); err != nil {
-		s.logger.Error("Failed to create user", zap.Error(err))
-		return nil, utils.NewInternalError("Failed to create user", err)
-	}
-
 	// Create profile with location
 	profile := &models.Profile{
 		ID:         userID,
@@ -309,9 +300,10 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 		}
 	}
 
-	if err := s.userRepo.CreateProfile(ctx, profile); err != nil {
-		s.logger.Error("Failed to create profile", zap.Error(err))
-		return nil, utils.NewInternalError("Failed to create profile", err)
+	// Create user and profile atomically in a transaction
+	if err := s.userRepo.CreateUserWithProfile(ctx, user, profile); err != nil {
+		s.logger.Error("Failed to create user with profile", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to create user", err)
 	}
 
 	s.logger.Info("User registered via unified auth",
@@ -327,13 +319,14 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 		return nil, utils.NewInternalError("Failed to generate tokens", err)
 	}
 
-	// Create session
+	// Create session with hashed refresh token for security
 	session := &models.UserSession{
-		ID:              sessionID,
-		UserID:          userID,
-		RefreshToken:    tokenPair.RefreshToken,
-		AccessTokenHash: s.jwtService.HashToken(tokenPair.AccessToken),
-		DeviceInfo:      req.DeviceInfo,
+		ID:               sessionID,
+		UserID:           userID,
+		RefreshToken:     tokenPair.RefreshToken,
+		RefreshTokenHash: s.jwtService.HashToken(tokenPair.RefreshToken),
+		AccessTokenHash:  s.jwtService.HashToken(tokenPair.AccessToken),
+		DeviceInfo:       req.DeviceInfo,
 		IPAddress:       req.IPAddress,
 		UserAgent:       req.UserAgent,
 		ExpiresAt:       now.Add(s.cfg.JWT.RefreshTokenDuration),
@@ -407,11 +400,6 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 			UpdatedAt:           now,
 		}
 
-		if err := s.userRepo.Create(ctx, user); err != nil {
-			s.logger.Error("Failed to create user", zap.Error(err))
-			return nil, utils.NewInternalError("Failed to create user", err)
-		}
-
 		// Create empty profile
 		profile := &models.Profile{
 			ID:         userID,
@@ -420,9 +408,10 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 			UpdatedAt:  now,
 		}
 
-		if err := s.userRepo.CreateProfile(ctx, profile); err != nil {
-			s.logger.Error("Failed to create profile", zap.Error(err))
-			return nil, utils.NewInternalError("Failed to create profile", err)
+		// Create user and profile atomically in a transaction
+		if err := s.userRepo.CreateUserWithProfile(ctx, user, profile); err != nil {
+			s.logger.Error("Failed to create user with profile", zap.Error(err))
+			return nil, utils.NewInternalError("Failed to create user", err)
 		}
 
 		s.logger.Info("User auto-registered successfully",
@@ -647,8 +636,14 @@ func (s *AuthService) VerifyMFA(ctx context.Context, req *models.MFAVerifyChalle
 
 // RefreshToken refreshes an access token using a refresh token
 func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshTokenRequest) (*models.TokenPair, error) {
-	// Get session by refresh token
-	session, err := s.userRepo.GetSessionByRefreshToken(ctx, req.RefreshToken)
+	// Look up session by refresh token hash for security.
+	// Fall back to plaintext lookup for sessions created before hashing was added.
+	refreshTokenHash := s.jwtService.HashToken(req.RefreshToken)
+	session, err := s.userRepo.GetSessionByRefreshTokenHash(ctx, refreshTokenHash)
+	if err != nil {
+		// Fallback: try legacy plaintext refresh token lookup
+		session, err = s.userRepo.GetSessionByRefreshToken(ctx, req.RefreshToken)
+	}
 	if err != nil {
 		s.logger.Warn("Invalid refresh token", zap.Error(err))
 		return nil, utils.NewUnauthorizedError("Invalid refresh token", err)
@@ -696,14 +691,15 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshToken
 		// Continue anyway - old token will expire naturally
 	}
 
-	// Create new session
+	// Create new session with hashed refresh token for security
 	now := time.Now()
 	newSession := &models.UserSession{
-		ID:              newSessionID,
-		UserID:          user.ID,
-		RefreshToken:    tokenPair.RefreshToken,
-		AccessTokenHash: s.jwtService.HashToken(tokenPair.AccessToken),
-		DeviceInfo:      session.DeviceInfo,
+		ID:               newSessionID,
+		UserID:           user.ID,
+		RefreshToken:     tokenPair.RefreshToken,
+		RefreshTokenHash: s.jwtService.HashToken(tokenPair.RefreshToken),
+		AccessTokenHash:  s.jwtService.HashToken(tokenPair.AccessToken),
+		DeviceInfo:       session.DeviceInfo,
 		IPAddress:       session.IPAddress,
 		UserAgent:       session.UserAgent,
 		ExpiresAt:       now.Add(s.cfg.JWT.RefreshTokenDuration),
@@ -915,8 +911,9 @@ func (s *AuthService) ResetPassword(ctx context.Context, req *models.ResetPasswo
 	return nil
 }
 
-// ChangePassword changes a user's password (authenticated)
-func (s *AuthService) ChangePassword(ctx context.Context, userID string, req *models.ChangePasswordRequest) error {
+// ChangePassword changes a user's password (authenticated).
+// Revokes all other sessions but preserves the current one.
+func (s *AuthService) ChangePassword(ctx context.Context, userID string, sessionID string, req *models.ChangePasswordRequest) error {
 	// Get user
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -954,10 +951,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, req *mo
 		return utils.NewInternalError("Failed to change password", err)
 	}
 
-	// Revoke all sessions except current one
-	// TODO: Pass current session ID to exclude it
-	if err := s.userRepo.RevokeAllUserSessions(ctx, userID); err != nil {
-		s.logger.Error("Failed to revoke sessions", zap.Error(err))
+	// Revoke all sessions except the current one so the user stays logged in
+	if err := s.userRepo.RevokeAllUserSessionsExcept(ctx, userID, sessionID); err != nil {
+		s.logger.Error("Failed to revoke other sessions", zap.Error(err))
 		// Continue anyway
 	}
 
@@ -1010,20 +1006,21 @@ func (s *AuthService) GenerateTokensForUser(
 		return nil, utils.NewInternalError("Failed to generate tokens", err)
 	}
 
-	// Create session
+	// Create session with hashed refresh token for security
 	now := time.Now()
 	session := &models.UserSession{
-		ID:              sessionID,
-		UserID:          user.ID,
-		RefreshToken:    tokenPair.RefreshToken,
-		AccessTokenHash: s.jwtService.HashToken(tokenPair.AccessToken),
-		DeviceInfo:      deviceInfo,
-		IPAddress:       ipAddress,
-		UserAgent:       userAgent,
-		ExpiresAt:       now.Add(s.cfg.JWT.RefreshTokenDuration),
-		Revoked:         false,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:               sessionID,
+		UserID:           user.ID,
+		RefreshToken:     tokenPair.RefreshToken,
+		RefreshTokenHash: s.jwtService.HashToken(tokenPair.RefreshToken),
+		AccessTokenHash:  s.jwtService.HashToken(tokenPair.AccessToken),
+		DeviceInfo:       deviceInfo,
+		IPAddress:        ipAddress,
+		UserAgent:        userAgent,
+		ExpiresAt:        now.Add(s.cfg.JWT.RefreshTokenDuration),
+		Revoked:          false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := s.userRepo.CreateSession(ctx, session); err != nil {
@@ -1062,20 +1059,21 @@ func (s *AuthService) generateAuthResponse(
 		return nil, utils.NewInternalError("Failed to generate tokens", err)
 	}
 
-	// Create session
+	// Create session with hashed refresh token for security
 	now := time.Now()
 	session := &models.UserSession{
-		ID:              sessionID,
-		UserID:          user.ID,
-		RefreshToken:    tokenPair.RefreshToken,
-		AccessTokenHash: s.jwtService.HashToken(tokenPair.AccessToken),
-		DeviceInfo:      deviceInfo,
-		IPAddress:       ipAddress,
-		UserAgent:       userAgent,
-		ExpiresAt:       now.Add(s.cfg.JWT.RefreshTokenDuration),
-		Revoked:         false,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:               sessionID,
+		UserID:           user.ID,
+		RefreshToken:     tokenPair.RefreshToken,
+		RefreshTokenHash: s.jwtService.HashToken(tokenPair.RefreshToken),
+		AccessTokenHash:  s.jwtService.HashToken(tokenPair.AccessToken),
+		DeviceInfo:       deviceInfo,
+		IPAddress:        ipAddress,
+		UserAgent:        userAgent,
+		ExpiresAt:        now.Add(s.cfg.JWT.RefreshTokenDuration),
+		Revoked:          false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := s.userRepo.CreateSession(ctx, session); err != nil {

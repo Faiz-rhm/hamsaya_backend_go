@@ -8,3 +8,8 @@ SET is_active = (deleted_at IS NULL);
 
 -- Add comment for documentation
 COMMENT ON COLUMN users.is_active IS 'Whether the user account is active (true) or deactivated (false)';
+
+-- Add index for users.is_active
+CREATE INDEX IF NOT EXISTS idx_users_is_active
+ON users(is_active)
+WHERE is_active = true;

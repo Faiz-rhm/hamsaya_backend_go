@@ -16,21 +16,24 @@ import (
 
 // AuthMiddleware handles JWT authentication
 type AuthMiddleware struct {
-	jwtService *services.JWTService
-	userRepo   repositories.UserRepository
-	logger     *zap.Logger
+	jwtService   *services.JWTService
+	userRepo     repositories.UserRepository
+	tokenStorage *services.TokenStorageService
+	logger       *zap.Logger
 }
 
 // NewAuthMiddleware creates a new auth middleware
 func NewAuthMiddleware(
 	jwtService *services.JWTService,
 	userRepo repositories.UserRepository,
+	tokenStorage *services.TokenStorageService,
 	logger *zap.Logger,
 ) *AuthMiddleware {
 	return &AuthMiddleware{
-		jwtService: jwtService,
-		userRepo:   userRepo,
-		logger:     logger,
+		jwtService:   jwtService,
+		userRepo:     userRepo,
+		tokenStorage: tokenStorage,
+		logger:       logger,
 	}
 }
 
@@ -279,9 +282,31 @@ func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTCla
 	return claims, nil
 }
 
-// verifySession checks if the session is still active and not revoked
+// verifySession checks if the session is still active and not revoked.
+// It first checks a Redis cache to avoid hitting the database on every request.
+// Cache misses fall through to the database and populate the cache for subsequent requests.
 func (m *AuthMiddleware) verifySession(ctx context.Context, sessionID, accessToken string) error {
-	// Get session from database
+	accessTokenHash := m.jwtService.HashToken(accessToken)
+
+	// Try Redis cache first (fast path)
+	if m.tokenStorage != nil {
+		cached, err := m.tokenStorage.GetCachedSession(ctx, sessionID)
+		if err == nil && cached != nil {
+			// Cache hit — validate without DB
+			if cached.Revoked {
+				return utils.NewUnauthorizedError("Session has been revoked", nil)
+			}
+			if cached.AccessTokenHash != accessTokenHash {
+				return utils.NewUnauthorizedError("Token mismatch", nil)
+			}
+			if cached.ExpiresAt.Before(time.Now()) {
+				return utils.NewUnauthorizedError("Session has expired", nil)
+			}
+			return nil
+		}
+	}
+
+	// Cache miss — fall through to database
 	session, err := m.userRepo.GetSessionByID(ctx, sessionID)
 	if err != nil {
 		m.logger.Warn("Session not found",
@@ -289,6 +314,16 @@ func (m *AuthMiddleware) verifySession(ctx context.Context, sessionID, accessTok
 			zap.Error(err),
 		)
 		return utils.NewUnauthorizedError("Invalid session", err)
+	}
+
+	// Populate cache for next time (best-effort, ignore errors)
+	if m.tokenStorage != nil {
+		_ = m.tokenStorage.CacheSession(ctx, sessionID, &services.SessionCacheData{
+			UserID:          session.UserID,
+			AccessTokenHash: session.AccessTokenHash,
+			Revoked:         session.Revoked,
+			ExpiresAt:       session.ExpiresAt,
+		})
 	}
 
 	// Check if session is revoked
@@ -301,7 +336,6 @@ func (m *AuthMiddleware) verifySession(ctx context.Context, sessionID, accessTok
 	}
 
 	// Verify access token hash matches
-	accessTokenHash := m.jwtService.HashToken(accessToken)
 	if session.AccessTokenHash != accessTokenHash {
 		m.logger.Warn("Access token hash mismatch",
 			zap.String("session_id", sessionID),

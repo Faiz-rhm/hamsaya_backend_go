@@ -7,6 +7,7 @@ import (
 
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/pkg/database"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // SearchRepository defines the interface for search operations
@@ -53,16 +54,23 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 	args := []interface{}{}
 	argCount := 1
 
-	// Full-text search on title and description
+	// Full-text search using tsvector/tsquery (GIN indexed) for performance at scale.
+	// Falls back to ILIKE for short queries where full-text may be too strict.
 	if filter.Query != "" {
-		searchTerm := "%" + strings.ToLower(filter.Query) + "%"
-		query += fmt.Sprintf(`
-			AND (
-				LOWER(p.title) LIKE $%d
-				OR LOWER(p.description) LIKE $%d
-			)
-		`, argCount, argCount)
-		args = append(args, searchTerm)
+		if len(filter.Query) >= 3 {
+			// Use PostgreSQL full-text search with tsquery
+			query += fmt.Sprintf(`
+				AND p.search_vector @@ plainto_tsquery('english', $%d)
+			`, argCount)
+			args = append(args, filter.Query)
+		} else {
+			// Short queries: use prefix match with ILIKE
+			searchTerm := "%" + strings.ToLower(filter.Query) + "%"
+			query += fmt.Sprintf(`
+				AND (LOWER(p.title) LIKE $%d OR LOWER(p.description) LIKE $%d)
+			`, argCount, argCount)
+			args = append(args, searchTerm)
+		}
 		argCount++
 	}
 
@@ -182,7 +190,7 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 	args := []interface{}{}
 	argCount := 1
 
-	// Full-text search on name
+	// Search on name using ILIKE with prefix match for user names
 	if filter.Query != "" {
 		searchTerm := "%" + strings.ToLower(filter.Query) + "%"
 		query += fmt.Sprintf(`
@@ -272,7 +280,12 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 // SearchBusinesses searches for businesses using full-text search
 func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.SearchFilter) ([]*models.BusinessProfile, error) {
 	query := `
-		SELECT DISTINCT bp.*,
+		SELECT DISTINCT
+			bp.id, bp.user_id, bp.name, bp.license_no, bp.description, bp.address,
+			bp.phone_number, bp.email, bp.website, bp.avatar, bp.cover, bp.status,
+			bp.additional_info, bp.country, bp.province,
+			bp.district, bp.neighborhood, bp.show_location, bp.total_views,
+			bp.total_follow, bp.created_at, bp.updated_at, bp.deleted_at,
 			ST_Y(bp.address_location::geometry) as latitude,
 			ST_X(bp.address_location::geometry) as longitude
 	`
@@ -295,17 +308,20 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 	args := []interface{}{}
 	argCount := 1
 
-	// Full-text search on name and description
+	// Full-text search using tsvector/tsquery (GIN indexed) for performance at scale.
 	if filter.Query != "" {
-		searchTerm := "%" + strings.ToLower(filter.Query) + "%"
-		query += fmt.Sprintf(`
-			AND (
-				LOWER(bp.name) LIKE $%d
-				OR LOWER(bp.description) LIKE $%d
-				OR LOWER(bp.address) LIKE $%d
-			)
-		`, argCount, argCount, argCount)
-		args = append(args, searchTerm)
+		if len(filter.Query) >= 3 {
+			query += fmt.Sprintf(`
+				AND bp.search_vector @@ plainto_tsquery('english', $%d)
+			`, argCount)
+			args = append(args, filter.Query)
+		} else {
+			searchTerm := "%" + strings.ToLower(filter.Query) + "%"
+			query += fmt.Sprintf(`
+				AND (LOWER(bp.name) LIKE $%d OR LOWER(bp.description) LIKE $%d OR LOWER(bp.address) LIKE $%d)
+			`, argCount, argCount, argCount)
+			args = append(args, searchTerm)
+		}
 		argCount++
 	}
 
@@ -360,7 +376,6 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 			&business.Cover,
 			&business.Status,
 			&business.AdditionalInfo,
-			&business.AddressLocation,
 			&business.Country,
 			&business.Province,
 			&business.District,
@@ -381,6 +396,14 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 
 		if err := rows.Scan(scanArgs...); err != nil {
 			return nil, fmt.Errorf("failed to scan business: %w", err)
+		}
+
+		// Build AddressLocation from lat/lng
+		if lat != nil && lng != nil {
+			business.AddressLocation = &pgtype.Point{
+				P:     pgtype.Vec2{X: *lng, Y: *lat},
+				Valid: true,
+			}
 		}
 
 		businesses = append(businesses, business)
@@ -500,7 +523,12 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 // GetDiscoverBusinesses gets businesses within a radius for map discovery
 func (r *searchRepository) GetDiscoverBusinesses(ctx context.Context, lat, lng, radiusKm float64, limit int) ([]*models.BusinessProfile, error) {
 	query := `
-		SELECT bp.*,
+		SELECT
+			bp.id, bp.user_id, bp.name, bp.license_no, bp.description, bp.address,
+			bp.phone_number, bp.email, bp.website, bp.avatar, bp.cover, bp.status,
+			bp.additional_info, bp.country, bp.province,
+			bp.district, bp.neighborhood, bp.show_location, bp.total_views,
+			bp.total_follow, bp.created_at, bp.updated_at, bp.deleted_at,
 			ST_Y(bp.address_location::geometry) as latitude,
 			ST_X(bp.address_location::geometry) as longitude,
 			ST_Distance(
@@ -530,7 +558,7 @@ func (r *searchRepository) GetDiscoverBusinesses(ctx context.Context, lat, lng, 
 	var businesses []*models.BusinessProfile
 	for rows.Next() {
 		business := &models.BusinessProfile{}
-		var lat, lng, distance *float64
+		var bLat, bLng, distance *float64
 
 		err := rows.Scan(
 			&business.ID,
@@ -546,7 +574,6 @@ func (r *searchRepository) GetDiscoverBusinesses(ctx context.Context, lat, lng, 
 			&business.Cover,
 			&business.Status,
 			&business.AdditionalInfo,
-			&business.AddressLocation,
 			&business.Country,
 			&business.Province,
 			&business.District,
@@ -557,12 +584,19 @@ func (r *searchRepository) GetDiscoverBusinesses(ctx context.Context, lat, lng, 
 			&business.CreatedAt,
 			&business.UpdatedAt,
 			&business.DeletedAt,
-			&lat,
-			&lng,
+			&bLat,
+			&bLng,
 			&distance,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan business: %w", err)
+		}
+
+		if bLat != nil && bLng != nil {
+			business.AddressLocation = &pgtype.Point{
+				P:     pgtype.Vec2{X: *bLng, Y: *bLat},
+				Valid: true,
+			}
 		}
 
 		businesses = append(businesses, business)

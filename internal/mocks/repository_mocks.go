@@ -67,6 +67,11 @@ func (m *MockUserRepository) UpdateProfile(ctx context.Context, profile *models.
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) CreateUserWithProfile(ctx context.Context, user *models.User, profile *models.Profile) error {
+	args := m.Called(ctx, user, profile)
+	return args.Error(0)
+}
+
 func (m *MockUserRepository) CreateSession(ctx context.Context, session *models.UserSession) error {
 	args := m.Called(ctx, session)
 	return args.Error(0)
@@ -88,6 +93,14 @@ func (m *MockUserRepository) GetSessionByRefreshToken(ctx context.Context, refre
 	return args.Get(0).(*models.UserSession), args.Error(1)
 }
 
+func (m *MockUserRepository) GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (*models.UserSession, error) {
+	args := m.Called(ctx, refreshTokenHash)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.UserSession), args.Error(1)
+}
+
 func (m *MockUserRepository) RevokeSession(ctx context.Context, sessionID string) error {
 	args := m.Called(ctx, sessionID)
 	return args.Error(0)
@@ -95,6 +108,11 @@ func (m *MockUserRepository) RevokeSession(ctx context.Context, sessionID string
 
 func (m *MockUserRepository) RevokeAllUserSessions(ctx context.Context, userID string) error {
 	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) RevokeAllUserSessionsExcept(ctx context.Context, userID string, exceptSessionID string) error {
+	args := m.Called(ctx, userID, exceptSessionID)
 	return args.Error(0)
 }
 
@@ -239,6 +257,16 @@ func (m *MockPostRepository) GetBusinessPosts(ctx context.Context, businessID st
 		return nil, args.Error(1)
 	}
 	return args.Get(0).([]*models.Post), args.Error(1)
+}
+
+func (m *MockPostRepository) CountFeed(ctx context.Context, filter *models.FeedFilter) (int64, error) {
+	args := m.Called(ctx, filter)
+	return args.Get(0).(int64), args.Error(1)
+}
+
+func (m *MockPostRepository) CountPostsByUser(ctx context.Context, userID string) (int, error) {
+	args := m.Called(ctx, userID)
+	return args.Int(0), args.Error(1)
 }
 
 // MockReportRepository is a mock implementation of ReportRepository

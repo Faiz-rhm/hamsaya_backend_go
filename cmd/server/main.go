@@ -166,7 +166,7 @@ func main() {
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")
-	authMiddleware := middleware.NewAuthMiddleware(jwtService, userRepo, logger)
+	authMiddleware := middleware.NewAuthMiddleware(jwtService, userRepo, tokenStorage, logger)
 	rateLimiter := middleware.NewRateLimiter(redisClient, logger)
 
 	// Set Gin mode
@@ -176,6 +176,9 @@ func main() {
 
 	// Create router
 	router := gin.New()
+
+	// Set max multipart memory (10 MB for file uploads)
+	router.MaxMultipartMemory = 10 << 20
 
 	// Global middleware
 	router.Use(gin.Recovery())
@@ -195,7 +198,7 @@ func main() {
 	commentHandler := handlers.NewCommentHandler(commentService, validator, logger)
 	pollHandler := handlers.NewPollHandler(pollService, validator, logger)
 	eventHandler := handlers.NewEventHandler(eventService, validator, logger)
-	businessHandler := handlers.NewBusinessHandler(businessService, validator, logger)
+	businessHandler := handlers.NewBusinessHandler(businessService, storageService, validator, logger)
 	categoryHandler := handlers.NewCategoryHandler(categoryService, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatService, wsHub, validator, logger, cfg)
 	notificationHandler := handlers.NewNotificationHandler(notificationService, validator, logger)
@@ -528,6 +531,10 @@ func main() {
 	<-quit
 
 	sugaredLogger.Info("Shutting down server...")
+
+	// Shut down WebSocket hub (close all client connections)
+	sugaredLogger.Info("Shutting down WebSocket hub...")
+	wsHub.Shutdown()
 
 	// Graceful shutdown with timeout
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)

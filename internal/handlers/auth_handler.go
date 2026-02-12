@@ -467,6 +467,13 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
+	// Get session ID from context so we can preserve the current session
+	sessionID, _ := c.Get("session_id")
+	currentSessionID := ""
+	if sessionID != nil {
+		currentSessionID = sessionID.(string)
+	}
+
 	var req models.ChangePasswordRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -479,7 +486,7 @@ func (h *AuthHandler) ChangePassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.ChangePassword(c.Request.Context(), userID.(string), &req); err != nil {
+	if err := h.authService.ChangePassword(c.Request.Context(), userID.(string), currentSessionID, &req); err != nil {
 		h.handleError(c, err)
 		return
 	}
