@@ -55,6 +55,28 @@ type PostRepository interface {
 	CountPostsByUser(ctx context.Context, userID string) (int, error)
 }
 
+// locationSelectFragment selects post location columns as four doubles instead
+// of raw GEOGRAPHY(POINT) columns. pgx cannot scan PostGIS geography into
+// pgtype.Point, so we extract lng/lat with ST_X/ST_Y.
+const locationSelectFragment = `ST_X(address_location::geometry)::double precision, ST_Y(address_location::geometry)::double precision, ST_X(user_location::geometry)::double precision, ST_Y(user_location::geometry)::double precision`
+
+func float8ToFloat64(f pgtype.Float8) *float64 {
+	if !f.Valid {
+		return nil
+	}
+	v := f.Float64
+	return &v
+}
+
+func scanPostLocations(addrLng, addrLat, userLng, userLat *float64, post *models.Post) {
+	if addrLng != nil && addrLat != nil {
+		post.AddressLocation = &pgtype.Point{P: pgtype.Vec2{X: *addrLng, Y: *addrLat}, Valid: true}
+	}
+	if userLng != nil && userLat != nil {
+		post.UserLocation = &pgtype.Point{P: pgtype.Vec2{X: *userLng, Y: *userLat}, Valid: true}
+	}
+}
+
 type postRepository struct {
 	db *database.DB
 }
@@ -116,7 +138,8 @@ func (r *postRepository) GetByID(ctx context.Context, postID string) (*models.Po
 			title, description, type, status, visibility,
 			currency, price, discount, free, sold, is_promoted, country_code, contact_no, is_location,
 			start_date, start_time, end_date, end_time, event_state, interested_count, going_count, expired_at,
-			address_location, user_location, country, province, district, neighborhood,
+			` + locationSelectFragment + `,
+			country, province, district, neighborhood,
 			total_comments, total_likes, total_shares,
 			created_at, updated_at, deleted_at
 		FROM posts
@@ -124,15 +147,20 @@ func (r *postRepository) GetByID(ctx context.Context, postID string) (*models.Po
 	`
 
 	post := &models.Post{}
+	var addrLng, addrLat, userLng, userLat pgtype.Float8
 	err := r.db.Pool.QueryRow(ctx, query, postID).Scan(
 		&post.ID, &post.UserID, &post.BusinessID, &post.OriginalPostID, &post.CategoryID,
 		&post.Title, &post.Description, &post.Type, &post.Status, &post.Visibility,
 		&post.Currency, &post.Price, &post.Discount, &post.Free, &post.Sold, &post.IsPromoted, &post.CountryCode, &post.ContactNo, &post.IsLocation,
 		&post.StartDate, &post.StartTime, &post.EndDate, &post.EndTime, &post.EventState, &post.InterestedCount, &post.GoingCount, &post.ExpiredAt,
-		&post.AddressLocation, &post.UserLocation, &post.Country, &post.Province, &post.District, &post.Neighborhood,
+		&addrLng, &addrLat, &userLng, &userLat,
+		&post.Country, &post.Province, &post.District, &post.Neighborhood,
 		&post.TotalComments, &post.TotalLikes, &post.TotalShares,
 		&post.CreatedAt, &post.UpdatedAt, &post.DeletedAt,
 	)
+	if err == nil {
+		scanPostLocations(float8ToFloat64(addrLng), float8ToFloat64(addrLat), float8ToFloat64(userLng), float8ToFloat64(userLat), post)
+	}
 
 	if err == pgx.ErrNoRows {
 		return nil, fmt.Errorf("post not found")
@@ -376,7 +404,8 @@ func (r *postRepository) GetUserBookmarks(ctx context.Context, userID string, li
 			p.title, p.description, p.type, p.status, p.visibility,
 			p.currency, p.price, p.discount, p.free, p.sold, p.is_promoted, p.country_code, p.contact_no, p.is_location,
 			p.start_date, p.start_time, p.end_date, p.end_time, p.event_state, p.interested_count, p.going_count, p.expired_at,
-			p.address_location, p.user_location, p.country, p.province, p.district, p.neighborhood,
+			ST_X(p.address_location::geometry)::double precision, ST_Y(p.address_location::geometry)::double precision, ST_X(p.user_location::geometry)::double precision, ST_Y(p.user_location::geometry)::double precision,
+			p.country, p.province, p.district, p.neighborhood,
 			p.total_comments, p.total_likes, p.total_shares,
 			p.created_at, p.updated_at, p.deleted_at
 		FROM posts p
@@ -453,7 +482,8 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 			title, description, type, status, visibility,
 			currency, price, discount, free, sold, is_promoted, country_code, contact_no, is_location,
 			start_date, start_time, end_date, end_time, event_state, interested_count, going_count, expired_at,
-			address_location, user_location, country, province, district, neighborhood,
+			` + locationSelectFragment + `,
+			country, province, district, neighborhood,
 			total_comments, total_likes, total_shares,
 			created_at, updated_at, deleted_at
 		FROM posts
@@ -631,7 +661,8 @@ func (r *postRepository) GetUserPosts(ctx context.Context, userID string, limit,
 			title, description, type, status, visibility,
 			currency, price, discount, free, sold, is_promoted, country_code, contact_no, is_location,
 			start_date, start_time, end_date, end_time, event_state, interested_count, going_count, expired_at,
-			address_location, user_location, country, province, district, neighborhood,
+			` + locationSelectFragment + `,
+			country, province, district, neighborhood,
 			total_comments, total_likes, total_shares,
 			created_at, updated_at, deleted_at
 		FROM posts
@@ -651,7 +682,8 @@ func (r *postRepository) GetBusinessPosts(ctx context.Context, businessID string
 			title, description, type, status, visibility,
 			currency, price, discount, free, sold, is_promoted, country_code, contact_no, is_location,
 			start_date, start_time, end_date, end_time, event_state, interested_count, going_count, expired_at,
-			address_location, user_location, country, province, district, neighborhood,
+			` + locationSelectFragment + `,
+			country, province, district, neighborhood,
 			total_comments, total_likes, total_shares,
 			created_at, updated_at, deleted_at
 		FROM posts
@@ -698,18 +730,21 @@ func (r *postRepository) queryPosts(ctx context.Context, query string, args ...i
 	var posts []*models.Post
 	for rows.Next() {
 		post := &models.Post{}
+		var addrLng, addrLat, userLng, userLat pgtype.Float8
 		err := rows.Scan(
 			&post.ID, &post.UserID, &post.BusinessID, &post.OriginalPostID, &post.CategoryID,
 			&post.Title, &post.Description, &post.Type, &post.Status, &post.Visibility,
 			&post.Currency, &post.Price, &post.Discount, &post.Free, &post.Sold, &post.IsPromoted, &post.CountryCode, &post.ContactNo, &post.IsLocation,
 			&post.StartDate, &post.StartTime, &post.EndDate, &post.EndTime, &post.EventState, &post.InterestedCount, &post.GoingCount, &post.ExpiredAt,
-			&post.AddressLocation, &post.UserLocation, &post.Country, &post.Province, &post.District, &post.Neighborhood,
+			&addrLng, &addrLat, &userLng, &userLat,
+			&post.Country, &post.Province, &post.District, &post.Neighborhood,
 			&post.TotalComments, &post.TotalLikes, &post.TotalShares,
 			&post.CreatedAt, &post.UpdatedAt, &post.DeletedAt,
 		)
 		if err != nil {
 			return nil, err
 		}
+		scanPostLocations(float8ToFloat64(addrLng), float8ToFloat64(addrLat), float8ToFloat64(userLng), float8ToFloat64(userLat), post)
 		posts = append(posts, post)
 	}
 

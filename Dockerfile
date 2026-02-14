@@ -1,27 +1,23 @@
 # Build stage
-FROM golang:1.23-alpine AS builder
+FROM golang:1.24-alpine AS builder
 
-# Install dependencies
-RUN apk add --no-cache git make
+# Install dependencies (libwebp for go-webp, gcc/musl-dev for cgo)
+RUN apk add --no-cache git make gcc musl-dev libwebp-dev
 
 # Set working directory
 WORKDIR /app
 
-# Copy go mod files
-COPY go.mod go.sum ./
-RUN go mod download
-
-# Copy source code
+# Copy source and vendored modules (build offline, no go mod download)
 COPY . .
 
-# Build binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/server
+# Build binary using vendor (CGO required for go-webp)
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -a -o main ./cmd/server
 
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates for HTTPS
-RUN apk --no-cache add ca-certificates tzdata
+# Install ca-certificates and libwebp (runtime for go-webp)
+RUN apk --no-cache add ca-certificates tzdata libwebp
 
 # Set timezone
 ENV TZ=UTC
