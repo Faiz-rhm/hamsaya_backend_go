@@ -8,18 +8,20 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/storage"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
 // PostService handles post operations
 type PostService struct {
-	postRepo     repositories.PostRepository
-	pollRepo     repositories.PollRepository
-	userRepo     repositories.UserRepository
-	businessRepo repositories.BusinessRepository
-	categoryRepo repositories.CategoryRepository
-	logger       *zap.Logger
+	postRepo          repositories.PostRepository
+	pollRepo          repositories.PollRepository
+	userRepo          repositories.UserRepository
+	businessRepo      repositories.BusinessRepository
+	categoryRepo      repositories.CategoryRepository
+	storageBucketName string
+	logger            *zap.Logger
 }
 
 // NewPostService creates a new post service
@@ -29,15 +31,17 @@ func NewPostService(
 	userRepo repositories.UserRepository,
 	businessRepo repositories.BusinessRepository,
 	categoryRepo repositories.CategoryRepository,
+	storageBucketName string,
 	logger *zap.Logger,
 ) *PostService {
 	return &PostService{
-		postRepo:     postRepo,
-		pollRepo:     pollRepo,
-		userRepo:     userRepo,
-		businessRepo: businessRepo,
-		categoryRepo: categoryRepo,
-		logger:       logger,
+		postRepo:          postRepo,
+		pollRepo:          pollRepo,
+		userRepo:          userRepo,
+		businessRepo:      businessRepo,
+		categoryRepo:      categoryRepo,
+		storageBucketName: storageBucketName,
+		logger:            logger,
 	}
 }
 
@@ -156,10 +160,14 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		}
 	}
 
-	// Handle location
-	if req.Latitude != nil && req.Longitude != nil {
+	// Handle location (top-level or nested from app)
+	lat, lon := req.Latitude, req.Longitude
+	if (lat == nil || lon == nil) && req.Location != nil {
+		lat, lon = req.Location.Latitude, req.Location.Longitude
+	}
+	if lat != nil && lon != nil {
 		post.AddressLocation = &pgtype.Point{
-			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude},
+			P:     pgtype.Vec2{X: *lon, Y: *lat},
 			Valid: true,
 		}
 		post.Country = req.Country
@@ -174,16 +182,21 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		post.OriginalPostID = req.OriginalPostID
 	}
 
-	// Create attachments if provided
+	// Create attachments if provided (full Photo or URL-only)
 	if len(req.Attachments) > 0 {
-		for _, photoURL := range req.Attachments {
+		for _, raw := range req.Attachments {
+			photo, err := models.ParseAttachmentPhoto(raw)
+			if err != nil {
+				s.logger.Warn("Failed to parse attachment", zap.Error(err))
+				continue
+			}
+			if photo.URL == "" {
+				continue
+			}
 			attachment := &models.Attachment{
-				ID:     uuid.New().String(),
-				PostID: postID,
-				Photo: models.Photo{
-					URL: photoURL,
-					// TODO: Get photo metadata (width, height, size) from storage service when available
-				},
+				ID:        uuid.New().String(),
+				PostID:    postID,
+				Photo:     photo,
 				CreatedAt: now,
 				UpdatedAt: now,
 			}
@@ -193,7 +206,6 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 					zap.String("post_id", postID),
 					zap.Error(err),
 				)
-				// Continue with other attachments
 			}
 		}
 	}
@@ -517,8 +529,14 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
 	if err == nil && len(attachments) > 0 {
 		var photos []models.Photo
+		bucket := s.storageBucketName
+		if bucket == "" {
+			bucket = "hamsaya-uploads"
+		}
 		for _, att := range attachments {
-			photos = append(photos, att.Photo)
+			photo := att.Photo
+			photo.URL = storage.EnsureBucketInStorageURL(photo.URL, bucket)
+			photos = append(photos, photo)
 		}
 		response.Attachments = photos
 	}
@@ -638,8 +656,14 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
 	if err == nil && len(attachments) > 0 {
 		var photos []models.Photo
+		bucket := s.storageBucketName
+		if bucket == "" {
+			bucket = "hamsaya-uploads"
+		}
 		for _, att := range attachments {
-			photos = append(photos, att.Photo)
+			photo := att.Photo
+			photo.URL = storage.EnsureBucketInStorageURL(photo.URL, bucket)
+			photos = append(photos, photo)
 		}
 		response.Attachments = photos
 	}

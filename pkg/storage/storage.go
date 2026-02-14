@@ -230,41 +230,76 @@ func (c *Client) GetPresignedURL(ctx context.Context, key string, expiry time.Du
 	return url.String(), nil
 }
 
-// getPublicURL constructs the public URL for an object
-func (c *Client) getPublicURL(key string) string {
-	// If CDN URL is configured, use it
-	if c.cdnURL != "" {
-		return fmt.Sprintf("%s/%s", strings.TrimRight(c.cdnURL, "/"), key)
+// EnsureBucketInStorageURL rewrites a storage URL to include the bucket in the path if missing.
+// Legacy URLs may be /post/xxx; MinIO path-style requires /bucketName/post/xxx.
+func EnsureBucketInStorageURL(url, bucketName string) string {
+	if url == "" || bucketName == "" {
+		return url
 	}
-
-	// Otherwise, construct MinIO URL
-	scheme := "http"
-	if c.useSSL {
-		scheme = "https"
+	idx := strings.Index(url, "://")
+	if idx < 0 {
+		return url
 	}
-	return fmt.Sprintf("%s://%s/%s/%s", scheme, c.endpoint, c.bucketName, key)
+	rest := url[idx+3:]
+	pathIdx := strings.Index(rest, "/")
+	if pathIdx < 0 {
+		return url
+	}
+	path := rest[pathIdx:]
+	if path == "" || path == "/" {
+		return url
+	}
+	if strings.HasPrefix(path, "/"+bucketName+"/") || path == "/"+bucketName {
+		return url
+	}
+	if strings.HasPrefix(path, "/post/") {
+		return url[:idx+3+pathIdx] + "/" + bucketName + path
+	}
+	return url
 }
 
-// extractKeyFromURL extracts the object key from a full URL
-func (c *Client) extractKeyFromURL(url string) string {
-	// Handle CDN URLs
-	if c.cdnURL != "" && strings.HasPrefix(url, c.cdnURL) {
-		return strings.TrimPrefix(url, c.cdnURL+"/")
+// getPublicURL constructs the public URL for an object.
+// MinIO path-style URLs require the bucket in the path: /bucket/key.
+func (c *Client) getPublicURL(key string) string {
+	base := ""
+	if c.cdnURL != "" {
+		base = strings.TrimRight(c.cdnURL, "/")
+	} else {
+		scheme := "http"
+		if c.useSSL {
+			scheme = "https"
+		}
+		base = fmt.Sprintf("%s://%s", scheme, c.endpoint)
 	}
+	// Always include bucket name so MinIO resolves bucket/key correctly
+	return fmt.Sprintf("%s/%s/%s", base, c.bucketName, key)
+}
 
-	// Handle MinIO direct URLs
-	// Format: http(s)://host/bucket/key
-	parts := strings.Split(url, "/")
-	if len(parts) >= 5 {
-		// Find bucket name and take everything after it
-		for i, part := range parts {
-			if part == c.bucketName && i+1 < len(parts) {
-				return strings.Join(parts[i+1:], "/")
-			}
+// extractKeyFromURL extracts the object key from a full URL.
+// URL format is base/bucketName/key (e.g. http://localhost:9000/hamsaya-uploads/post/xxx.webp).
+func (c *Client) extractKeyFromURL(url string) string {
+	// Strip scheme and host to get path: bucketName/key
+	path := ""
+	if c.cdnURL != "" && strings.HasPrefix(url, c.cdnURL) {
+		path = strings.TrimPrefix(strings.TrimPrefix(url, c.cdnURL), "/")
+	} else {
+		parts := strings.SplitN(url, "/", 4) // scheme, "", host, path
+		if len(parts) >= 4 && parts[3] != "" {
+			path = parts[3]
 		}
 	}
-
-	return ""
+	if path == "" {
+		return ""
+	}
+	// Path is bucketName/key; key is everything after first segment
+	prefix := c.bucketName + "/"
+	if strings.HasPrefix(path, prefix) {
+		return strings.TrimPrefix(path, prefix)
+	}
+	if path == c.bucketName {
+		return ""
+	}
+	return path
 }
 
 // getExtensionFromFormat returns file extension from image format

@@ -285,7 +285,8 @@ Key configurations:
 - `DB_HOST` - PostgreSQL host
 - `REDIS_HOST` - Redis host
 - `JWT_SECRET` - JWT signing secret (⚠️ change in production!)
-- `STORAGE_ENDPOINT` - MinIO/S3 endpoint
+- `STORAGE_ENDPOINT` - MinIO/S3 endpoint (where the server connects to MinIO)
+- `CDN_URL` - Base URL for stored files returned to clients. Use `http://localhost:9000` only when the client runs on the same machine. When testing from a mobile device, set to a URL the device can reach (e.g. `http://YOUR_MACHINE_IP:9000`) so image URLs work in the app.
 
 ## Deployment
 

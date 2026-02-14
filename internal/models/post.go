@@ -1,6 +1,7 @@
 package models
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -132,19 +133,44 @@ type CreatePostRequest struct {
 	PollOptions []string          `json:"poll_options,omitempty" validate:"omitempty,min=2,max=10,dive,required,min=1,max=100"`
 	Poll        *PollRequestData  `json:"poll,omitempty"`
 
-	// Location
-	Latitude     *float64 `json:"latitude,omitempty"`
-	Longitude    *float64 `json:"longitude,omitempty"`
+	// Location (accept top-level latitude/longitude or nested location object from app)
+	Latitude     *float64             `json:"latitude,omitempty"`
+	Longitude    *float64             `json:"longitude,omitempty"`
+	Location     *CreatePostLocation  `json:"location,omitempty"`
 	Country      *string  `json:"country,omitempty" validate:"omitempty,max=100"`
 	Province     *string  `json:"province,omitempty" validate:"omitempty,max=100"`
 	District     *string  `json:"district,omitempty" validate:"omitempty,max=100"`
 	Neighborhood *string  `json:"neighborhood,omitempty" validate:"omitempty,max=100"`
 
-	// Attachments (photo URLs - already uploaded)
-	Attachments []string `json:"attachments,omitempty"`
+	// Attachments: already uploaded. Accepts []string (URLs only) or []Photo (full metadata).
+	// Use json.RawMessage so we can unmarshal flexibly in the service and avoid binding issues.
+	Attachments []json.RawMessage `json:"attachments,omitempty"`
 
 	// For shared posts
 	OriginalPostID *string `json:"original_post_id,omitempty" validate:"omitempty,uuid"`
+}
+
+// CreatePostLocation is the nested location format sent by the app.
+type CreatePostLocation struct {
+	Latitude  *float64 `json:"latitude,omitempty"`
+	Longitude *float64 `json:"longitude,omitempty"`
+}
+
+// ParseAttachmentPhoto parses a single attachment value (JSON string or object) into a Photo.
+// Handles both "url" (string) and {"url":"...","name":"...","size":0,...} from the app.
+func ParseAttachmentPhoto(data json.RawMessage) (Photo, error) {
+	if len(data) == 0 {
+		return Photo{}, nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		return Photo{URL: s}, nil
+	}
+	var p Photo
+	if err := json.Unmarshal(data, &p); err != nil {
+		return Photo{}, err
+	}
+	return p, nil
 }
 
 // UpdatePostRequest represents a request to update a post
