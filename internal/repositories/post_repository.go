@@ -25,6 +25,7 @@ type PostRepository interface {
 	CreateAttachment(ctx context.Context, attachment *models.Attachment) error
 	GetAttachmentsByPostID(ctx context.Context, postID string) ([]*models.Attachment, error)
 	DeleteAttachment(ctx context.Context, attachmentID string) error
+	DeleteAttachmentForPost(ctx context.Context, postID, attachmentID string) error
 
 	// Likes
 	LikePost(ctx context.Context, userID, postID string) error
@@ -278,6 +279,13 @@ func (r *postRepository) DeleteAttachment(ctx context.Context, attachmentID stri
 	`
 
 	_, err := r.db.Pool.Exec(ctx, query, attachmentID, time.Now())
+	return err
+}
+
+// DeleteAttachmentForPost soft deletes an attachment only if it belongs to the given post.
+func (r *postRepository) DeleteAttachmentForPost(ctx context.Context, postID, attachmentID string) error {
+	query := `UPDATE attachments SET deleted_at = $3 WHERE id = $1 AND post_id = $2 AND deleted_at IS NULL`
+	_, err := r.db.Pool.Exec(ctx, query, attachmentID, postID, time.Now())
 	return err
 }
 

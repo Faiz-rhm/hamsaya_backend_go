@@ -286,6 +286,50 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 		return nil, utils.NewInternalError("Failed to update post", err)
 	}
 
+	// ── Attachment changes ──────────────────────────────────────────────
+
+	// Remove requested attachments (scoped to this post for safety).
+	for _, attID := range req.DeletedAttachments {
+		if attID == "" {
+			continue
+		}
+		if err := s.postRepo.DeleteAttachmentForPost(ctx, postID, attID); err != nil {
+			s.logger.Warn("Failed to delete attachment on update",
+				zap.String("post_id", postID),
+				zap.String("attachment_id", attID),
+				zap.Error(err),
+			)
+		}
+	}
+
+	// Add new attachments (same parsing as create: accepts Photo objects or bare URL strings).
+	if len(req.Attachments) > 0 {
+		now := time.Now()
+		for _, raw := range req.Attachments {
+			photo, err := models.ParseAttachmentPhoto(raw)
+			if err != nil {
+				s.logger.Warn("Failed to parse attachment on update", zap.Error(err))
+				continue
+			}
+			if photo.URL == "" {
+				continue
+			}
+			attachment := &models.Attachment{
+				ID:        uuid.New().String(),
+				PostID:    postID,
+				Photo:     photo,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := s.postRepo.CreateAttachment(ctx, attachment); err != nil {
+				s.logger.Error("Failed to create attachment on update",
+					zap.String("post_id", postID),
+					zap.Error(err),
+				)
+			}
+		}
+	}
+
 	s.logger.Info("Post updated", zap.String("post_id", postID), zap.String("user_id", userID))
 
 	// Return enriched post
@@ -525,10 +569,9 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		}
 	}
 
-	// Get attachments
+	// Get attachments (return full objects with IDs so the client can reference them)
 	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
 	if err == nil && len(attachments) > 0 {
-		var photos []models.Photo
 		bucket := s.storageBucketName
 		if bucket == "" {
 			bucket = "hamsaya-uploads"
@@ -536,9 +579,11 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		for _, att := range attachments {
 			photo := att.Photo
 			photo.URL = storage.EnsureBucketInStorageURL(photo.URL, bucket)
-			photos = append(photos, photo)
+			response.Attachments = append(response.Attachments, models.AttachmentResponse{
+				ID:    att.ID,
+				Photo: photo,
+			})
 		}
-		response.Attachments = photos
 	}
 
 	// Add type-specific fields
@@ -652,10 +697,9 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		}
 	}
 
-	// Get attachments
+	// Get attachments (return full objects with IDs)
 	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
 	if err == nil && len(attachments) > 0 {
-		var photos []models.Photo
 		bucket := s.storageBucketName
 		if bucket == "" {
 			bucket = "hamsaya-uploads"
@@ -663,9 +707,11 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		for _, att := range attachments {
 			photo := att.Photo
 			photo.URL = storage.EnsureBucketInStorageURL(photo.URL, bucket)
-			photos = append(photos, photo)
+			response.Attachments = append(response.Attachments, models.AttachmentResponse{
+				ID:    att.ID,
+				Photo: photo,
+			})
 		}
-		response.Attachments = photos
 	}
 
 	// Add type-specific fields

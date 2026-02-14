@@ -205,7 +205,7 @@ func (s *SearchService) enrichPosts(ctx context.Context, posts []*models.Post, u
 			Description:    post.Description,
 			Visibility:     post.Visibility,
 			Status:         post.Status,
-			Attachments:    []models.Photo{}, // Will be populated if needed
+			Attachments:    []models.AttachmentResponse{}, // Will be populated if needed
 			TotalComments:  post.TotalComments,
 			TotalLikes:     post.TotalLikes,
 			TotalShares:    post.TotalShares,

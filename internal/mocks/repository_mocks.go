@@ -171,6 +171,11 @@ func (m *MockPostRepository) DeleteAttachment(ctx context.Context, attachmentID 
 	return args.Error(0)
 }
 
+func (m *MockPostRepository) DeleteAttachmentForPost(ctx context.Context, postID, attachmentID string) error {
+	args := m.Called(ctx, postID, attachmentID)
+	return args.Error(0)
+}
+
 func (m *MockPostRepository) LikePost(ctx context.Context, userID, postID string) error {
 	args := m.Called(ctx, userID, postID)
 	return args.Error(0)

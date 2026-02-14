@@ -100,6 +100,13 @@ type Attachment struct {
 	DeletedAt *time.Time `json:"-"`
 }
 
+// AttachmentResponse is the API‐facing attachment that includes the database ID
+// so clients can reference specific attachments (e.g. for deletion on update).
+type AttachmentResponse struct {
+	ID    string `json:"id"`
+	Photo Photo  `json:"photo"`
+}
+
 // PollRequestData represents poll data from mobile app
 type PollRequestData struct {
 	Question string   `json:"question"`
@@ -189,6 +196,10 @@ type UpdatePostRequest struct {
 	StartTime *time.Time `json:"start_time,omitempty"`
 	EndDate   *time.Time `json:"end_date,omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty"`
+
+	// Attachment changes: newly uploaded photo objects / URLs, and IDs of attachments to remove.
+	Attachments        []json.RawMessage `json:"attachments,omitempty"`
+	DeletedAttachments []string          `json:"deleted_attachments,omitempty"`
 }
 
 // PostResponse represents a post in API responses
@@ -204,8 +215,8 @@ type PostResponse struct {
 	Author  *AuthorInfo  `json:"author,omitempty"`
 	Business *BusinessInfo `json:"business,omitempty"`
 
-	// Attachments
-	Attachments []Photo `json:"attachments,omitempty"`
+	// Attachments (full objects with id so the client can reference them for deletion)
+	Attachments []AttachmentResponse `json:"attachments,omitempty"`
 
 	// Sell-specific
 	Currency    *string  `json:"currency,omitempty"`
