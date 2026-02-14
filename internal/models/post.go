@@ -200,6 +200,9 @@ type UpdatePostRequest struct {
 	// Attachment changes: newly uploaded photo objects / URLs, and IDs of attachments to remove.
 	Attachments        []json.RawMessage `json:"attachments,omitempty"`
 	DeletedAttachments []string          `json:"deleted_attachments,omitempty"`
+
+	// PULL-specific: updated poll options (replaces existing options when present).
+	PollOptions []string `json:"poll_options,omitempty" validate:"omitempty,min=2,max=10,dive,required,min=1,max=100"`
 }
 
 // PostResponse represents a post in API responses

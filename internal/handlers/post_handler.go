@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -132,12 +135,38 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 
 	postID := c.Param("post_id")
 
-	// Parse request
+	// Read body once so we can restore for binding and fallback parse poll_options
+	bodyBytes, errRead := io.ReadAll(c.Request.Body)
+	if errRead != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
 	var req models.UpdatePostRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
 		return
 	}
+	// Fallback: if binding left poll_options empty but body has them, parse manually
+	if len(req.PollOptions) == 0 {
+		var aux struct {
+			PollOptions []string `json:"poll_options"`
+		}
+		if _ = json.Unmarshal(bodyBytes, &aux); len(aux.PollOptions) >= 2 {
+			req.PollOptions = aux.PollOptions
+			h.logger.Info("UpdatePost: poll_options restored from body",
+				zap.String("post_id", postID),
+				zap.Int("count", len(req.PollOptions)),
+				zap.Strings("options", req.PollOptions),
+			)
+		}
+	}
+	h.logger.Info("UpdatePost request",
+		zap.String("post_id", postID),
+		zap.Int("poll_options_count", len(req.PollOptions)),
+		zap.Strings("poll_options", req.PollOptions),
+	)
 
 	// Validate request
 	if err := h.validator.Validate(&req); err != nil {

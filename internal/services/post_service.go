@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -328,6 +329,46 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 				)
 			}
 		}
+	}
+
+	// ── PULL: update poll options (replace all options when poll_options sent) ──
+	isPull := strings.EqualFold(string(post.Type), string(models.PostTypePull))
+	if isPull && len(req.PollOptions) >= 2 {
+		s.logger.Info("Updating poll options for PULL post",
+			zap.String("post_id", postID),
+			zap.String("post_type", string(post.Type)),
+			zap.Int("poll_options_count", len(req.PollOptions)),
+			zap.Strings("poll_options", req.PollOptions),
+		)
+		poll, err := s.pollRepo.GetByPostID(ctx, postID)
+		if err != nil {
+			s.logger.Error("Failed to get poll for update", zap.String("post_id", postID), zap.Error(err))
+			return nil, utils.NewNotFoundError("Poll not found for this post", err)
+		}
+		if err := s.pollRepo.DeleteOptionsByPollID(ctx, poll.ID); err != nil {
+			s.logger.Error("Failed to delete old poll options", zap.String("poll_id", poll.ID), zap.Error(err))
+			return nil, utils.NewInternalError("Failed to update poll options", err)
+		}
+		now := time.Now()
+		for _, optionText := range req.PollOptions {
+			option := &models.PollOption{
+				ID:        uuid.New().String(),
+				PollID:    poll.ID,
+				Option:    optionText,
+				VoteCount: 0,
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := s.pollRepo.CreateOption(ctx, option); err != nil {
+				s.logger.Error("Failed to create poll option on update",
+					zap.String("poll_id", poll.ID),
+					zap.String("option", optionText),
+					zap.Error(err),
+				)
+				return nil, utils.NewInternalError("Failed to create poll option: "+optionText, err)
+			}
+		}
+		s.logger.Info("Poll options updated", zap.String("post_id", postID), zap.Int("options", len(req.PollOptions)))
 	}
 
 	s.logger.Info("Post updated", zap.String("post_id", postID), zap.String("user_id", userID))

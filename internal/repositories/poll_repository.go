@@ -23,6 +23,7 @@ type PollRepository interface {
 	GetOptionsByPollID(ctx context.Context, pollID string) ([]*models.PollOption, error)
 	GetOptionByID(ctx context.Context, optionID string) (*models.PollOption, error)
 	UpdateOptionVoteCount(ctx context.Context, optionID string, increment int) error
+	DeleteOptionsByPollID(ctx context.Context, pollID string) error
 
 	// User Votes
 	VotePoll(ctx context.Context, vote *models.UserPoll) error
@@ -206,6 +207,17 @@ func (r *pollRepository) UpdateOptionVoteCount(ctx context.Context, optionID str
 	`
 
 	_, err := r.db.Pool.Exec(ctx, query, optionID, increment, time.Now())
+	return err
+}
+
+// DeleteOptionsByPollID soft-deletes all options for a poll (e.g. before replacing on update).
+func (r *pollRepository) DeleteOptionsByPollID(ctx context.Context, pollID string) error {
+	query := `
+		UPDATE poll_options
+		SET deleted_at = $2
+		WHERE poll_id = $1 AND deleted_at IS NULL
+	`
+	_, err := r.db.Pool.Exec(ctx, query, pollID, time.Now())
 	return err
 }
 
