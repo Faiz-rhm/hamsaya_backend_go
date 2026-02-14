@@ -52,8 +52,8 @@ func (r *categoryRepository) Create(ctx context.Context, category *models.SellCa
 		category.ID,
 		category.Name,
 		iconJSON,
-		category.Status,
 		category.Color,
+		category.Status,
 		category.CreatedAt,
 	)
 
