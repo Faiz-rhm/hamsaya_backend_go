@@ -124,7 +124,7 @@ type CreatePostRequest struct {
 	// Sell-specific
 	Currency    *string  `json:"currency,omitempty" validate:"omitempty,len=3"`
 	Price       *float64 `json:"price,omitempty" validate:"omitempty,min=0"`
-	Discount    *float64 `json:"discount,omitempty" validate:"omitempty,min=0,max=100"`
+	Discount    *float64 `json:"discount,omitempty" validate:"omitempty,min=0"`
 	Free        *bool    `json:"free,omitempty"`
 	CategoryID  *string  `json:"category_id,omitempty" validate:"omitempty,uuid"`
 	CountryCode *string  `json:"country_code,omitempty"`
@@ -144,6 +144,7 @@ type CreatePostRequest struct {
 	Latitude     *float64             `json:"latitude,omitempty"`
 	Longitude    *float64             `json:"longitude,omitempty"`
 	Location     *CreatePostLocation  `json:"location,omitempty"`
+	IsLocation   *bool    `json:"is_location,omitempty"` // When true, show item on map (SELL)
 	Country      *string  `json:"country,omitempty" validate:"omitempty,max=100"`
 	Province     *string  `json:"province,omitempty" validate:"omitempty,max=100"`
 	District     *string  `json:"district,omitempty" validate:"omitempty,max=100"`
@@ -187,9 +188,15 @@ type UpdatePostRequest struct {
 	Visibility  *PostVisibility `json:"visibility,omitempty" validate:"omitempty,oneof=PUBLIC FRIENDS PRIVATE"`
 
 	// Sell-specific
-	Price    *float64 `json:"price,omitempty" validate:"omitempty,min=0"`
-	Discount *float64 `json:"discount,omitempty" validate:"omitempty,min=0,max=100"`
-	Sold     *bool    `json:"sold,omitempty"`
+	Price       *float64 `json:"price,omitempty" validate:"omitempty,min=0"`
+	Discount    *float64 `json:"discount,omitempty" validate:"omitempty,min=0"`
+	Free        *bool    `json:"free,omitempty"`
+	Sold        *bool    `json:"sold,omitempty"`
+	Currency    *string  `json:"currency,omitempty" validate:"omitempty,len=3"`
+	CategoryID  *string  `json:"category_id,omitempty" validate:"omitempty,uuid"`
+	CountryCode *string  `json:"country_code,omitempty"`
+	ContactNo   *string  `json:"contact_no,omitempty"`
+	IsLocation  *bool    `json:"is_location,omitempty"`
 
 	// Event-specific
 	StartDate *time.Time `json:"start_date,omitempty"`
@@ -222,14 +229,16 @@ type PostResponse struct {
 	Attachments []AttachmentResponse `json:"attachments,omitempty"`
 
 	// Sell-specific
-	Currency    *string  `json:"currency,omitempty"`
-	Price       *float64 `json:"price,omitempty"`
-	Discount    *float64 `json:"discount,omitempty"`
-	Free        *bool    `json:"free,omitempty"`
-	Sold        *bool    `json:"sold,omitempty"`
-	IsPromoted  *bool    `json:"is_promoted,omitempty"`
-	Category    *CategoryInfo `json:"category,omitempty"`
-	ContactNo   *string  `json:"contact_no,omitempty"`
+	Currency    *string         `json:"currency,omitempty"`
+	Price       *float64        `json:"price,omitempty"`
+	Discount    *float64        `json:"discount,omitempty"`
+	Free        *bool           `json:"free,omitempty"`
+	Sold        *bool           `json:"sold,omitempty"`
+	IsPromoted  *bool           `json:"is_promoted,omitempty"`
+	CategoryID  *string         `json:"category_id,omitempty"` // so clients get ID for edit without parsing category.id
+	Category    *CategoryInfo   `json:"category,omitempty"`
+	ContactNo   *string         `json:"contact_no,omitempty"`
+	IsLocation  *bool           `json:"is_location"` // when true, show item on map (SELL)
 
 	// Event-specific
 	StartDate       *time.Time  `json:"start_date,omitempty"`

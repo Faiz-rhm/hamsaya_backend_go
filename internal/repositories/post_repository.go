@@ -179,12 +179,18 @@ func (r *postRepository) Update(ctx context.Context, post *models.Post) error {
 			visibility = $4,
 			price = $5,
 			discount = $6,
-			sold = $7,
-			start_date = $8,
-			start_time = $9,
-			end_date = $10,
-			end_time = $11,
-			updated_at = $12
+			free = $7,
+			sold = $8,
+			currency = $9,
+			country_code = $10,
+			contact_no = $11,
+			is_location = $12,
+			category_id = $13,
+			start_date = $14,
+			start_time = $15,
+			end_date = $16,
+			end_time = $17,
+			updated_at = $18
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -195,7 +201,13 @@ func (r *postRepository) Update(ctx context.Context, post *models.Post) error {
 		post.Visibility,
 		post.Price,
 		post.Discount,
+		post.Free,
 		post.Sold,
+		post.Currency,
+		post.CountryCode,
+		post.ContactNo,
+		post.IsLocation,
+		post.CategoryID,
 		post.StartDate,
 		post.StartTime,
 		post.EndDate,

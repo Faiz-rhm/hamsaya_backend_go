@@ -175,7 +175,13 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		post.Province = req.Province
 		post.District = req.District
 		post.Neighborhood = req.Neighborhood
-		post.IsLocation = true
+		if req.IsLocation != nil {
+			post.IsLocation = *req.IsLocation
+		} else {
+			post.IsLocation = true
+		}
+	} else if req.IsLocation != nil {
+		post.IsLocation = *req.IsLocation
 	}
 
 	// Handle shared post
@@ -263,6 +269,9 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 	if req.Discount != nil {
 		post.Discount = req.Discount
 	}
+	if req.Free != nil {
+		post.Free = *req.Free
+	}
 	if req.Sold != nil {
 		post.Sold = *req.Sold
 	}
@@ -277,6 +286,21 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 	}
 	if req.EndTime != nil {
 		post.EndTime = req.EndTime
+	}
+	if req.Currency != nil {
+		post.Currency = req.Currency
+	}
+	if req.ContactNo != nil {
+		post.ContactNo = req.ContactNo
+	}
+	if req.CountryCode != nil {
+		post.CountryCode = req.CountryCode
+	}
+	if req.IsLocation != nil {
+		post.IsLocation = *req.IsLocation
+	}
+	if req.CategoryID != nil {
+		post.CategoryID = req.CategoryID
 	}
 
 	post.UpdatedAt = time.Now()
@@ -636,9 +660,11 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		response.Sold = &post.Sold
 		response.IsPromoted = &post.IsPromoted
 		response.ContactNo = post.ContactNo
+		response.IsLocation = &post.IsLocation
 
 		// Get category info if post has a category
 		if post.CategoryID != nil && *post.CategoryID != "" {
+			response.CategoryID = post.CategoryID
 			category, err := s.categoryRepo.GetByID(ctx, *post.CategoryID)
 			if err == nil {
 				response.Category = &models.CategoryInfo{
@@ -764,9 +790,11 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		response.Sold = &post.Sold
 		response.IsPromoted = &post.IsPromoted
 		response.ContactNo = post.ContactNo
+		response.IsLocation = &post.IsLocation
 
 		// Get category info if post has a category
 		if post.CategoryID != nil && *post.CategoryID != "" {
+			response.CategoryID = post.CategoryID
 			category, err := s.categoryRepo.GetByID(ctx, *post.CategoryID)
 			if err == nil {
 				response.Category = &models.CategoryInfo{

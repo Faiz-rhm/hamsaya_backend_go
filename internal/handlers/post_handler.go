@@ -162,11 +162,20 @@ func (h *PostHandler) UpdatePost(c *gin.Context) {
 			)
 		}
 	}
-	h.logger.Info("UpdatePost request",
-		zap.String("post_id", postID),
-		zap.Int("poll_options_count", len(req.PollOptions)),
-		zap.Strings("poll_options", req.PollOptions),
-	)
+	// Fallback: ensure "free" is set from body (in case binding missed it)
+	if req.Free == nil {
+		var aux struct {
+			Free *bool `json:"free"`
+		}
+		if _ = json.Unmarshal(bodyBytes, &aux); aux.Free != nil {
+			req.Free = aux.Free
+		}
+	}
+	logFields := []zap.Field{zap.String("post_id", postID), zap.Int("poll_options_count", len(req.PollOptions)), zap.Strings("poll_options", req.PollOptions)}
+	if req.Free != nil {
+		logFields = append(logFields, zap.Bool("free", *req.Free))
+	}
+	h.logger.Info("UpdatePost request", logFields...)
 
 	// Validate request
 	if err := h.validator.Validate(&req); err != nil {
