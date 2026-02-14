@@ -19,7 +19,7 @@ Follow these steps to run the API locally.
 From the project root (`hamsaya_backend_go/`):
 
 ```bash
-# Copy environment file and keep defaults (or edit .env if needed)
+# Copy environment file (use DB_PORT=5433 if Postgres runs via Docker)
 cp .env.example .env
 
 # Download Go dependencies
@@ -65,7 +65,7 @@ make install-air   # once
 make dev           # run with auto-reload
 ```
 
-For more details, troubleshooting, and production deployment, see the sections below and [QUICKSTART.md](./QUICKSTART.md).
+**Full guideline:** See **[docs/RUNNING.md](./docs/RUNNING.md)** for step-by-step instructions, environment notes, troubleshooting, and command reference.
 
 ---
 
@@ -134,11 +134,13 @@ For a short run guide, see **[How to run the backend](#how-to-run-the-backend)**
 1. **Clone the repository** (or start from this directory)
 
 2. **Copy environment file**
+
    ```bash
    cp .env.example .env
    ```
 
 3. **Install dependencies**
+
    ```bash
    go mod download
    # or
@@ -146,6 +148,7 @@ For a short run guide, see **[How to run the backend](#how-to-run-the-backend)**
    ```
 
 4. **Start infrastructure services**
+
    ```bash
    docker-compose up -d postgres redis minio
    # or
@@ -153,6 +156,7 @@ For a short run guide, see **[How to run the backend](#how-to-run-the-backend)**
    ```
 
 5. **Run database migrations**
+
    ```bash
    make migrate-up
    ```
@@ -175,11 +179,13 @@ docker-compose up -d
 ```
 
 View logs:
+
 ```bash
 docker-compose logs -f api
 ```
 
 Stop all services:
+
 ```bash
 docker-compose down
 ```
@@ -225,11 +231,13 @@ make migrate-down
 ### Hot Reload (Development)
 
 Install Air for hot reload:
+
 ```bash
 make install-air
 ```
 
 Run with hot reload:
+
 ```bash
 make dev
 ```
@@ -254,6 +262,7 @@ See [HEALTH_CHECKS.md](./HEALTH_CHECKS.md) for detailed documentation.
 All API endpoints are prefixed with `/api/v1`
 
 #### Authentication
+
 - `POST /api/v1/auth/register` - User registration
 - `POST /api/v1/auth/login` - User login
 - `POST /api/v1/auth/refresh` - Refresh access token
@@ -264,13 +273,14 @@ All API endpoints are prefixed with `/api/v1`
 - `POST /api/v1/auth/mfa/enroll` - Enroll in MFA
 - `POST /api/v1/auth/mfa/verify` - Verify MFA code
 
-*More endpoints to be added in subsequent phases*
+_More endpoints to be added in subsequent phases_
 
 ## Configuration
 
 Configuration is managed through environment variables. See `.env.example` for all available options.
 
 Key configurations:
+
 - `SERVER_PORT` - HTTP server port (default: 8080)
 - `DB_HOST` - PostgreSQL host
 - `REDIS_HOST` - Redis host
@@ -324,6 +334,7 @@ make migrate-status
 ### Environment Variables
 
 Ensure all required environment variables are set in production:
+
 - Generate a strong `JWT_SECRET` (32+ characters)
 - Set `ENV=production`
 - Configure external services (OAuth, Firebase, etc.)
@@ -335,6 +346,7 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete production deployment guide.
 ### Health Checks
 
 The application exposes comprehensive health check endpoints for Kubernetes and monitoring:
+
 - Liveness: `/health/live`
 - Readiness: `/health/ready`
 - Startup: `/health/startup`
@@ -347,6 +359,7 @@ See [HEALTH_CHECKS.md](./HEALTH_CHECKS.md) for complete health check documentati
 ### Logs
 
 The application uses structured logging with Zap:
+
 - All HTTP requests are logged with method, path, status, latency
 - Errors are logged with context
 - Request IDs are attached to all logs
@@ -368,6 +381,7 @@ Prometheus metrics are exposed at `/metrics` (when enabled)
 ### Commit Messages
 
 Use conventional commits:
+
 - `feat:` - New feature
 - `fix:` - Bug fix
 - `docs:` - Documentation changes
@@ -402,4 +416,5 @@ See [DEPLOYMENT.md](./DEPLOYMENT.md) for production deployment guide.
 ---
 
 Built with ❤️ using Go and modern best practices
+
 # hamsaya_backend_go
