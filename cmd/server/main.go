@@ -364,6 +364,7 @@ func main() {
 			// Business media
 			businesses.POST("/:business_id/avatar", authMiddleware.RequireAuth(), businessHandler.UploadAvatar)
 			businesses.POST("/:business_id/cover", authMiddleware.RequireAuth(), businessHandler.UploadCover)
+			businesses.GET("/:business_id/attachments", authMiddleware.OptionalAuth(), businessHandler.GetGallery)
 			businesses.POST("/:business_id/attachments", authMiddleware.RequireAuth(), businessHandler.AddGalleryImage)
 			businesses.DELETE("/:business_id/attachments/:attachment_id", authMiddleware.RequireAuth(), businessHandler.DeleteGalleryImage)
 

@@ -372,6 +372,29 @@ func (h *BusinessHandler) UploadCover(c *gin.Context) {
 	})
 }
 
+// GetGallery godoc
+// @Summary Get business gallery
+// @Description Get all gallery images for a business (id + photo per item)
+// @Tags businesses
+// @Produce json
+// @Param business_id path string true "Business ID"
+// @Success 200 {object} utils.Response{data=[]models.GalleryItem}
+// @Failure 404 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /businesses/{business_id}/attachments [get]
+func (h *BusinessHandler) GetGallery(c *gin.Context) {
+	businessID := c.Param("business_id")
+	gallery, err := h.businessService.GetBusinessGallery(c.Request.Context(), businessID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	if gallery == nil {
+		gallery = []*models.GalleryItem{}
+	}
+	utils.SendSuccess(c, http.StatusOK, "Gallery retrieved successfully", gallery)
+}
+
 // AddGalleryImage godoc
 // @Summary Add gallery image
 // @Description Add an image to business gallery (multipart file upload)

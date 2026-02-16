@@ -62,6 +62,12 @@ type BusinessHours struct {
 	UpdatedAt         time.Time  `json:"updated_at"`
 }
 
+// GalleryItem is a single gallery image with id (for client delete)
+type GalleryItem struct {
+	ID    string `json:"id"`
+	Photo Photo  `json:"photo"`
+}
+
 // BusinessAttachment represents a business gallery image
 type BusinessAttachment struct {
 	ID                string     `json:"id"`
@@ -159,7 +165,7 @@ type BusinessResponse struct {
 	TotalFollow    int                       `json:"total_follow"`
 	Categories     []BusinessCategory        `json:"categories"`
 	Hours          []BusinessHoursResponse   `json:"hours,omitempty"`
-	Gallery        []Photo                   `json:"gallery,omitempty"`
+	Gallery        []GalleryItem             `json:"gallery,omitempty"`
 	IsFollowing    bool                      `json:"is_following"`
 	CreatedAt      time.Time                 `json:"created_at"`
 	UpdatedAt      time.Time                 `json:"updated_at"`

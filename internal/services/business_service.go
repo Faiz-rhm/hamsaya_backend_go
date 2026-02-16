@@ -389,7 +389,9 @@ func (s *BusinessService) UploadCover(ctx context.Context, businessID, userID, p
 	return nil
 }
 
-// AddGalleryImage adds an image to business gallery
+const maxBusinessGalleryImages = 10
+
+// AddGalleryImage adds an image to business gallery (max 10 per business).
 func (s *BusinessService) AddGalleryImage(ctx context.Context, businessID, userID, photoURL string) error {
 	// Get existing business
 	business, err := s.businessRepo.GetByID(ctx, businessID)
@@ -400,6 +402,15 @@ func (s *BusinessService) AddGalleryImage(ctx context.Context, businessID, userI
 	// Check ownership
 	if business.UserID != userID {
 		return utils.NewUnauthorizedError("You don't have permission to update this business", nil)
+	}
+
+	// Enforce gallery limit
+	existing, err := s.businessRepo.GetAttachmentsByBusinessID(ctx, businessID)
+	if err != nil {
+		return utils.NewInternalError("Failed to get gallery", err)
+	}
+	if len(existing) >= maxBusinessGalleryImages {
+		return utils.NewBadRequestError("Gallery limit reached (max 10 images)", nil)
 	}
 
 	// Add attachment
@@ -509,7 +520,24 @@ func (s *BusinessService) GetAllCategories(ctx context.Context, search *string) 
 	return categories, nil
 }
 
-// enrichBusiness enriches a business with categories, hours, gallery, and following status
+// GetBusinessGallery returns all gallery attachments for a business (separate from profile).
+func (s *BusinessService) GetBusinessGallery(ctx context.Context, businessID string) ([]*models.GalleryItem, error) {
+	attachments, err := s.businessRepo.GetAttachmentsByBusinessID(ctx, businessID)
+	if err != nil {
+		s.logger.Error("Failed to get business gallery", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get gallery", err)
+	}
+	if len(attachments) == 0 {
+		return []*models.GalleryItem{}, nil
+	}
+	out := make([]*models.GalleryItem, len(attachments))
+	for i, att := range attachments {
+		out[i] = &models.GalleryItem{ID: att.ID, Photo: att.Photo}
+	}
+	return out, nil
+}
+
+// enrichBusiness enriches a business with categories, hours, and following status (gallery is separate endpoint).
 func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.BusinessProfile, viewerID *string) (*models.BusinessResponse, error) {
 	response := &models.BusinessResponse{
 		ID:             business.ID,
@@ -574,16 +602,6 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 			hoursResponse = append(hoursResponse, hourResp)
 		}
 		response.Hours = hoursResponse
-	}
-
-	// Get gallery attachments
-	attachments, err := s.businessRepo.GetAttachmentsByBusinessID(ctx, business.ID)
-	if err == nil && len(attachments) > 0 {
-		var photos []models.Photo
-		for _, att := range attachments {
-			photos = append(photos, att.Photo)
-		}
-		response.Gallery = photos
 	}
 
 	// Get following status if viewer is authenticated
