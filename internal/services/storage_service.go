@@ -3,6 +3,7 @@ package services
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -79,22 +80,26 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 		return nil, utils.NewBadRequestError("File size exceeds 10MB limit", nil)
 	}
 
-	// Validate file type
-	contentType := header.Header.Get("Content-Type")
-	if !s.isValidImageType(contentType) {
-		return nil, utils.NewBadRequestError(fmt.Sprintf("Invalid image type: %s. Only JPEG, PNG, and WebP are allowed", contentType), nil)
-	}
-
-	// Read and validate image
+	// Read image data first
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return nil, utils.NewBadRequestError("Failed to read image file", err)
 	}
 
+	// Decode image to validate it and get format/dimensions
 	img, format, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		s.logger.Error("Failed to decode image", zap.Error(err))
 		return nil, utils.NewBadRequestError("Invalid image file", err)
+	}
+
+	// Use the multipart Content-Type if valid; otherwise infer from decoded format
+	contentType := header.Header.Get("Content-Type")
+	if !s.isValidImageType(contentType) {
+		contentType = mimeFromFormat(format)
+		if !s.isValidImageType(contentType) {
+			return nil, utils.NewBadRequestError(fmt.Sprintf("Invalid image type: %s. Only JPEG, PNG, and WebP are allowed", contentType), nil)
+		}
 	}
 
 	// Process image based on type
@@ -225,6 +230,21 @@ func (s *StorageService) generateMockUploadResult(folder, format, contentType st
 
 // Helper functions
 
+func mimeFromFormat(format string) string {
+	switch strings.ToLower(format) {
+	case "jpeg", "jpg":
+		return "image/jpeg"
+	case "png":
+		return "image/png"
+	case "gif":
+		return "image/gif"
+	case "webp":
+		return "image/webp"
+	default:
+		return "application/octet-stream"
+	}
+}
+
 func getExtensionFromFormat(format string) string {
 	switch strings.ToLower(format) {
 	case "jpeg", "jpg":
@@ -241,8 +261,11 @@ func getExtensionFromFormat(format string) string {
 }
 
 func generateUUID() string {
-	// Simple UUID v4 generation
+	// UUID v4 generation using crypto/rand
 	b := make([]byte, 16)
+	_, _ = rand.Read(b)
+	b[6] = (b[6] & 0x0f) | 0x40 // version 4
+	b[8] = (b[8] & 0x3f) | 0x80 // variant 10
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
 }
 
