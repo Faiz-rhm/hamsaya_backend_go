@@ -190,7 +190,7 @@ func (s *CommentService) GetCommentReplies(ctx context.Context, commentID string
 	return enrichedReplies, nil
 }
 
-// UpdateComment updates a comment
+// UpdateComment updates a comment (text, add new images, remove images by ID)
 func (s *CommentService) UpdateComment(ctx context.Context, commentID, userID string, req *models.UpdateCommentRequest) (*models.CommentResponse, error) {
 	// Get existing comment
 	comment, err := s.commentRepo.GetByID(ctx, commentID)
@@ -203,13 +203,37 @@ func (s *CommentService) UpdateComment(ctx context.Context, commentID, userID st
 		return nil, utils.NewUnauthorizedError("You don't have permission to update this comment", nil)
 	}
 
-	// Update comment
+	// Update comment text
 	comment.Text = req.Text
 	comment.UpdatedAt = time.Now()
 
 	if err := s.commentRepo.Update(ctx, comment); err != nil {
 		s.logger.Error("Failed to update comment", zap.String("comment_id", commentID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to update comment", err)
+	}
+
+	// Delete removed attachments
+	for _, attID := range req.DeletedAttachmentIDs {
+		if err := s.commentRepo.DeleteAttachment(ctx, attID); err != nil {
+			s.logger.Warn("Failed to delete comment attachment", zap.String("attachment_id", attID), zap.Error(err))
+		}
+	}
+
+	// Add new attachments (URLs already uploaded by the client)
+	if len(req.Attachments) > 0 {
+		now := time.Now()
+		for _, photoURL := range req.Attachments {
+			attachment := &models.CommentAttachment{
+				ID:        uuid.New().String(),
+				CommentID: commentID,
+				Photo:     models.Photo{URL: photoURL},
+				CreatedAt: now,
+				UpdatedAt: now,
+			}
+			if err := s.commentRepo.CreateAttachment(ctx, attachment); err != nil {
+				s.logger.Warn("Failed to create comment attachment", zap.String("comment_id", commentID), zap.Error(err))
+			}
+		}
 	}
 
 	s.logger.Info("Comment updated", zap.String("comment_id", commentID), zap.String("user_id", userID))
@@ -298,14 +322,15 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 		}
 	}
 
-	// Get attachments
+	// Get attachments (include ID so client can reference them for deletion)
 	attachments, err := s.commentRepo.GetAttachmentsByCommentID(ctx, comment.ID)
 	if err == nil && len(attachments) > 0 {
-		var photos []models.Photo
 		for _, att := range attachments {
-			photos = append(photos, att.Photo)
+			response.Attachments = append(response.Attachments, models.CommentAttachmentResponse{
+				ID:    att.ID,
+				Photo: att.Photo,
+			})
 		}
-		response.Attachments = photos
 	}
 
 	// Add location info
