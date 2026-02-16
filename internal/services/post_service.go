@@ -21,6 +21,7 @@ type PostService struct {
 	userRepo          repositories.UserRepository
 	businessRepo      repositories.BusinessRepository
 	categoryRepo      repositories.CategoryRepository
+	eventRepo         repositories.EventRepository
 	storageBucketName string
 	logger            *zap.Logger
 }
@@ -32,6 +33,7 @@ func NewPostService(
 	userRepo repositories.UserRepository,
 	businessRepo repositories.BusinessRepository,
 	categoryRepo repositories.CategoryRepository,
+	eventRepo repositories.EventRepository,
 	storageBucketName string,
 	logger *zap.Logger,
 ) *PostService {
@@ -41,6 +43,7 @@ func NewPostService(
 		userRepo:          userRepo,
 		businessRepo:      businessRepo,
 		categoryRepo:      categoryRepo,
+		eventRepo:         eventRepo,
 		storageBucketName: storageBucketName,
 		logger:            logger,
 	}
@@ -685,6 +688,12 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		response.EventState = post.EventState
 		response.InterestedCount = &post.InterestedCount
 		response.GoingCount = &post.GoingCount
+		// Current user's event interest (interested/going/not_interested)
+		if viewerID != nil && *viewerID != "" {
+			if userInterest, err := s.eventRepo.GetUserInterest(ctx, *viewerID, post.ID); err == nil && userInterest != nil {
+				response.UserEventState = &userInterest.EventState
+			}
+		}
 	}
 
 	// Add location info
@@ -815,6 +824,12 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		response.EventState = post.EventState
 		response.InterestedCount = &post.InterestedCount
 		response.GoingCount = &post.GoingCount
+		// Current user's event interest (interested/going/not_interested)
+		if viewerID != nil && *viewerID != "" {
+			if userInterest, err := s.eventRepo.GetUserInterest(ctx, *viewerID, post.ID); err == nil && userInterest != nil {
+				response.UserEventState = &userInterest.EventState
+			}
+		}
 	}
 
 	// Add location info

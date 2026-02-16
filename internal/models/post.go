@@ -241,13 +241,14 @@ type PostResponse struct {
 	IsLocation  *bool           `json:"is_location"` // when true, show item on map (SELL)
 
 	// Event-specific
-	StartDate       *time.Time  `json:"start_date,omitempty"`
-	StartTime       *time.Time  `json:"start_time,omitempty"`
-	EndDate         *time.Time  `json:"end_date,omitempty"`
-	EndTime         *time.Time  `json:"end_time,omitempty"`
-	EventState      *EventState `json:"event_state,omitempty"`
-	InterestedCount *int        `json:"interested_count,omitempty"`
-	GoingCount      *int        `json:"going_count,omitempty"`
+	StartDate       *time.Time           `json:"start_date,omitempty"`
+	StartTime       *time.Time           `json:"start_time,omitempty"`
+	EndDate         *time.Time          `json:"end_date,omitempty"`
+	EndTime         *time.Time          `json:"end_time,omitempty"`
+	EventState      *EventState          `json:"event_state,omitempty"`       // event lifecycle: upcoming/ongoing/ended
+	UserEventState  *EventInterestState  `json:"user_event_state,omitempty"`  // current user's interest: interested/going/not_interested
+	InterestedCount *int                 `json:"interested_count,omitempty"`
+	GoingCount      *int                 `json:"going_count,omitempty"`
 
 	// Location
 	Location     *LocationInfo `json:"location,omitempty"`
