@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -205,16 +206,43 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID, userID
 		return nil, utils.NewInternalError("Failed to update business", err)
 	}
 
-	// Update categories if provided
-	if req.CategoryIDs != nil {
+	// Update categories if provided (category_ids and/or category_names)
+	if req.CategoryIDs != nil || (req.CategoryNames != nil && len(req.CategoryNames) > 0) {
 		// Remove existing categories
 		if err := s.businessRepo.RemoveCategories(ctx, businessID); err != nil {
 			s.logger.Error("Failed to remove business categories", zap.String("business_id", businessID), zap.Error(err))
 		}
 
-		// Add new categories
-		if len(req.CategoryIDs) > 0 {
-			if err := s.businessRepo.AddCategories(ctx, businessID, req.CategoryIDs); err != nil {
+		// Build final list: existing IDs + get-or-create from names
+		seen := make(map[string]bool)
+		var finalIDs []string
+		if req.CategoryIDs != nil {
+			for _, id := range req.CategoryIDs {
+				if id != "" && !seen[id] {
+					seen[id] = true
+					finalIDs = append(finalIDs, id)
+				}
+			}
+		}
+		if req.CategoryNames != nil {
+			for _, name := range req.CategoryNames {
+				name = strings.TrimSpace(name)
+				if name == "" {
+					continue
+				}
+				id, err := s.businessRepo.GetOrCreateCategoryByName(ctx, name)
+				if err != nil {
+					s.logger.Warn("GetOrCreateCategoryByName failed", zap.String("name", name), zap.Error(err))
+					continue
+				}
+				if !seen[id] {
+					seen[id] = true
+					finalIDs = append(finalIDs, id)
+				}
+			}
+		}
+		if len(finalIDs) > 0 {
+			if err := s.businessRepo.AddCategories(ctx, businessID, finalIDs); err != nil {
 				s.logger.Error("Failed to add business categories", zap.String("business_id", businessID), zap.Error(err))
 			}
 		}
@@ -468,14 +496,16 @@ func (s *BusinessService) ListBusinesses(ctx context.Context, filter *models.Bus
 	return enrichedBusinesses, nil
 }
 
-// GetAllCategories gets all business categories
-func (s *BusinessService) GetAllCategories(ctx context.Context) ([]*models.BusinessCategory, error) {
-	categories, err := s.businessRepo.GetAllCategories(ctx)
+// GetAllCategories gets all business categories, optionally filtered by search (name).
+func (s *BusinessService) GetAllCategories(ctx context.Context, search *string) ([]*models.BusinessCategory, error) {
+	categories, err := s.businessRepo.GetAllCategories(ctx, search)
 	if err != nil {
 		s.logger.Error("Failed to get business categories", zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get categories", err)
 	}
-
+	if categories == nil {
+		categories = []*models.BusinessCategory{}
+	}
 	return categories, nil
 }
 
@@ -514,9 +544,10 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 		}
 	}
 
-	// Get categories
+	// Get categories (always set so API returns "categories" key, never null)
+	response.Categories = []models.BusinessCategory{}
 	categories, err := s.businessRepo.GetCategoriesByBusinessID(ctx, business.ID)
-	if err == nil {
+	if err == nil && len(categories) > 0 {
 		response.Categories = make([]models.BusinessCategory, len(categories))
 		for i, cat := range categories {
 			response.Categories[i] = *cat

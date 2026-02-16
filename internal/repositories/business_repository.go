@@ -44,7 +44,9 @@ type BusinessRepository interface {
 	GetFollowers(ctx context.Context, businessID string, limit, offset int) ([]string, error)
 
 	// Categories Management
-	GetAllCategories(ctx context.Context) ([]*models.BusinessCategory, error)
+	GetAllCategories(ctx context.Context, search *string) ([]*models.BusinessCategory, error)
+	// GetOrCreateCategoryByName returns category id by name; creates the category if it doesn't exist.
+	GetOrCreateCategoryByName(ctx context.Context, name string) (string, error)
 }
 
 type businessRepository struct {
@@ -767,16 +769,21 @@ func (r *businessRepository) GetFollowers(ctx context.Context, businessID string
 	return followerIDs, rows.Err()
 }
 
-// GetAllCategories gets all business categories
-func (r *businessRepository) GetAllCategories(ctx context.Context) ([]*models.BusinessCategory, error) {
+// GetAllCategories gets all business categories, optionally filtered by search (name).
+func (r *businessRepository) GetAllCategories(ctx context.Context, search *string) ([]*models.BusinessCategory, error) {
 	query := `
 		SELECT id, name, is_active, created_at
 		FROM business_categories
 		WHERE is_active = true
-		ORDER BY name ASC
 	`
+	args := []interface{}{}
+	if search != nil && *search != "" {
+		query += ` AND name ILIKE '%' || $1 || '%'`
+		args = append(args, *search)
+	}
+	query += ` ORDER BY name ASC`
 
-	rows, err := r.db.Pool.Query(ctx, query)
+	rows, err := r.db.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -791,6 +798,35 @@ func (r *businessRepository) GetAllCategories(ctx context.Context) ([]*models.Bu
 		}
 		categories = append(categories, category)
 	}
-
+	if categories == nil {
+		categories = []*models.BusinessCategory{}
+	}
 	return categories, rows.Err()
+}
+
+// GetOrCreateCategoryByName returns category id by name; creates the category if it doesn't exist.
+func (r *businessRepository) GetOrCreateCategoryByName(ctx context.Context, name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "", fmt.Errorf("category name is required")
+	}
+	var id string
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT id FROM business_categories WHERE LOWER(name) = LOWER($1) AND is_active = true`,
+		name,
+	).Scan(&id)
+	if err == nil {
+		return id, nil
+	}
+	if err != pgx.ErrNoRows {
+		return "", err
+	}
+	// Create new category
+	err = r.db.Pool.QueryRow(ctx,
+		`INSERT INTO business_categories (id, name, is_active, created_at)
+		 VALUES (uuid_generate_v4(), $1, true, NOW())
+		 RETURNING id`,
+		name,
+	).Scan(&id)
+	return id, err
 }

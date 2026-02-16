@@ -602,20 +602,26 @@ func (h *BusinessHandler) ListBusinesses(c *gin.Context) {
 
 // GetCategories godoc
 // @Summary Get business categories
-// @Description Get all active business categories
+// @Description Get all active business categories, optionally filtered by search query
 // @Tags businesses
 // @Produce json
+// @Param search query string false "Search by category name"
 // @Success 200 {object} utils.Response{data=[]models.BusinessCategory}
 // @Failure 500 {object} utils.Response
 // @Router /businesses/categories [get]
 func (h *BusinessHandler) GetCategories(c *gin.Context) {
-	// Get categories
-	categories, err := h.businessService.GetAllCategories(c.Request.Context())
+	var search *string
+	if q := c.Query("search"); q != "" {
+		search = &q
+	}
+	categories, err := h.businessService.GetAllCategories(c.Request.Context(), search)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
-
+	if categories == nil {
+		categories = []*models.BusinessCategory{}
+	}
 	utils.SendSuccess(c, http.StatusOK, "Categories retrieved successfully", categories)
 }
 
