@@ -29,12 +29,24 @@ go mod download
 
 ### 3. Start infrastructure (PostgreSQL, Redis, MinIO)
 
+**Option A – With Docker (recommended)**
+
 ```bash
 docker-compose up -d postgres redis minio
 # or: make docker-up
 ```
 
-Wait a few seconds for the containers to start.
+Ensure `.env` has `DB_PORT=5433`. Wait a few seconds for the containers to start.
+
+**Option B – Without Docker (local PostgreSQL)**
+
+1. Install and start PostgreSQL (e.g. `brew install postgresql@16` then `brew services start postgresql@16`).
+2. Install PostGIS (required for migrations): `brew install postgis`
+3. In `.env` set `DB_PORT=5432`. Create DB and user if needed:
+   ```bash
+   psql -d postgres -c "CREATE USER postgres WITH PASSWORD 'postgres' SUPERUSER CREATEDB;"
+   psql -d postgres -c "CREATE DATABASE hamsaya OWNER postgres;"
+   ```
 
 ### 4. Run database migrations
 
@@ -51,6 +63,8 @@ make run
 ```
 
 The API will be available at **http://localhost:8080**.
+
+**After code changes:** Restart the server (stop and run again) so responses use the latest code. For example, GET `/api/v1/posts/:id` for event posts includes `user_event_state` (interested/going) only when the server is running the current build.
 
 ### 6. Verify
 
