@@ -553,9 +553,13 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	}
 
 	if filter.Search != nil && *filter.Search != "" {
-		queryBuilder.WriteString(fmt.Sprintf(" AND (title ILIKE '%%' || $%d || '%%' OR description ILIKE '%%' || $%d || '%%')", argCount, argCount+1))
-		args = append(args, *filter.Search, *filter.Search)
-		argCount += 2
+		searchPattern := "%" + *filter.Search + "%"
+		queryBuilder.WriteString(fmt.Sprintf(
+			` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d))`,
+			argCount, argCount+1, argCount+2,
+		))
+		args = append(args, searchPattern, searchPattern, searchPattern)
+		argCount += 3
 	}
 
 	if filter.Sold != nil {
@@ -680,9 +684,13 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 	}
 
 	if filter.Search != nil && *filter.Search != "" {
-		queryBuilder.WriteString(fmt.Sprintf(" AND (title ILIKE '%%' || $%d || '%%' OR description ILIKE '%%' || $%d || '%%')", argCount, argCount+1))
-		args = append(args, *filter.Search, *filter.Search)
-		argCount += 2
+		searchPattern := "%" + *filter.Search + "%"
+		queryBuilder.WriteString(fmt.Sprintf(
+			` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d))`,
+			argCount, argCount+1, argCount+2,
+		))
+		args = append(args, searchPattern, searchPattern, searchPattern)
+		argCount += 3
 	}
 
 	if filter.Sold != nil {

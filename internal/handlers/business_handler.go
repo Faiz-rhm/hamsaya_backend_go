@@ -607,9 +607,14 @@ func (h *BusinessHandler) ListBusinesses(c *gin.Context) {
 		}
 	}
 
+	// Support both "offset" and "page" (page is 0-based: offset = page * limit)
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		if offset, err := strconv.Atoi(offsetStr); err == nil && offset >= 0 {
 			filter.Offset = offset
+		}
+	} else if pageStr := c.Query("page"); pageStr != "" {
+		if page, err := strconv.Atoi(pageStr); err == nil && page >= 0 {
+			filter.Offset = page * filter.Limit
 		}
 	}
 

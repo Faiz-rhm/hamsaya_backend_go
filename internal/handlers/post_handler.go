@@ -449,6 +449,23 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		filter.Search = &search
 	}
 
+	// Location-based filtering
+	if latStr := c.Query("latitude"); latStr != "" {
+		if lat, err := strconv.ParseFloat(latStr, 64); err == nil {
+			filter.Latitude = &lat
+		}
+	}
+	if lngStr := c.Query("longitude"); lngStr != "" {
+		if lng, err := strconv.ParseFloat(lngStr, 64); err == nil {
+			filter.Longitude = &lng
+		}
+	}
+	if radiusStr := c.Query("radius_km"); radiusStr != "" {
+		if radius, err := strconv.ParseFloat(radiusStr, 64); err == nil {
+			filter.RadiusKm = &radius
+		}
+	}
+
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 100 {
 			filter.Limit = limit

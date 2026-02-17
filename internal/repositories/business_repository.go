@@ -778,8 +778,8 @@ func (r *businessRepository) GetAllCategories(ctx context.Context, search *strin
 	`
 	args := []interface{}{}
 	if search != nil && *search != "" {
-		query += ` AND name ILIKE '%' || $1 || '%'`
-		args = append(args, *search)
+		query += ` AND name ILIKE $1`
+		args = append(args, "%"+*search+"%")
 	}
 	query += ` ORDER BY name ASC`
 
