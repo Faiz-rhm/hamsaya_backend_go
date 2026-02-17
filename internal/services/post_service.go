@@ -63,6 +63,7 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 	post := &models.Post{
 		ID:          postID,
 		UserID:      &userID,
+		BusinessID:  req.BusinessID,
 		Type:        req.Type,
 		Title:       req.Title,
 		Description: req.Description,
@@ -601,6 +602,7 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		Description:   post.Description,
 		Visibility:    post.Visibility,
 		Status:        post.Status,
+		BusinessID:    post.BusinessID,
 		TotalComments: post.TotalComments,
 		TotalLikes:    post.TotalLikes,
 		TotalShares:   post.TotalShares,
@@ -626,13 +628,23 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 	}
 
 	// Get business info if post is from a business
+	var fetchedBusiness *models.BusinessProfile
 	if post.BusinessID != nil && *post.BusinessID != "" {
 		business, err := s.businessRepo.GetByID(ctx, *post.BusinessID)
 		if err == nil {
+			fetchedBusiness = business
 			response.Business = &models.BusinessInfo{
-				BusinessID: business.ID,
-				Name:       business.Name,
-				Avatar:     business.Avatar,
+				BusinessID:   business.ID,
+				Name:         business.Name,
+				Description:  business.Description,
+				PhoneNumber:  business.PhoneNumber,
+				Email:        business.Email,
+				Website:      business.Website,
+				Avatar:       business.Avatar,
+				Cover:        business.Cover,
+				Province:     business.Province,
+				District:     business.District,
+				Neighborhood: business.Neighborhood,
 			}
 		}
 	}
@@ -716,10 +728,10 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 			response.BookmarkedByMe = bookmarked
 		}
 
-		// Check if post belongs to viewer
+		// Check if post belongs to viewer (direct or via business ownership)
 		if post.UserID != nil && *post.UserID == *viewerID {
 			response.IsMine = true
-		} else if post.BusinessID != nil && *post.BusinessID == *viewerID {
+		} else if fetchedBusiness != nil && fetchedBusiness.UserID == *viewerID {
 			response.IsMine = true
 		}
 	}
@@ -749,6 +761,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		Description:   post.Description,
 		Visibility:    post.Visibility,
 		Status:        post.Status,
+		BusinessID:    post.BusinessID,
 		TotalComments: post.TotalComments,
 		TotalLikes:    post.TotalLikes,
 		TotalShares:   post.TotalShares,
@@ -769,6 +782,28 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 				Province:     profile.Province,
 				District:     profile.District,
 				Neighborhood: profile.Neighborhood,
+			}
+		}
+	}
+
+	// Get business info if post is from a business
+	var fetchedBusinessSimple *models.BusinessProfile
+	if post.BusinessID != nil && *post.BusinessID != "" {
+		business, err := s.businessRepo.GetByID(ctx, *post.BusinessID)
+		if err == nil {
+			fetchedBusinessSimple = business
+			response.Business = &models.BusinessInfo{
+				BusinessID:   business.ID,
+				Name:         business.Name,
+				Description:  business.Description,
+				PhoneNumber:  business.PhoneNumber,
+				Email:        business.Email,
+				Website:      business.Website,
+				Avatar:       business.Avatar,
+				Cover:        business.Cover,
+				Province:     business.Province,
+				District:     business.District,
+				Neighborhood: business.Neighborhood,
 			}
 		}
 	}
@@ -852,10 +887,10 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 			response.BookmarkedByMe = bookmarked
 		}
 
-		// Check if post belongs to viewer
+		// Check if post belongs to viewer (direct or via business ownership)
 		if post.UserID != nil && *post.UserID == *viewerID {
 			response.IsMine = true
-		} else if post.BusinessID != nil && *post.BusinessID == *viewerID {
+		} else if fetchedBusinessSimple != nil && fetchedBusinessSimple.UserID == *viewerID {
 			response.IsMine = true
 		}
 	}

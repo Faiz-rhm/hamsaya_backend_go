@@ -423,6 +423,10 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		filter.CategoryID = &categoryID
 	}
 
+	if businessID := c.Query("business_id"); businessID != "" {
+		filter.BusinessID = &businessID
+	}
+
 	if province := c.Query("province"); province != "" {
 		filter.Province = &province
 	}

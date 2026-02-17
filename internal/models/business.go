@@ -160,6 +160,9 @@ type BusinessResponse struct {
 	Status         bool                      `json:"status"`
 	AdditionalInfo *string                   `json:"additional_info,omitempty"`
 	Location       *LocationInfo             `json:"location,omitempty"`
+	Province       *string                   `json:"province,omitempty"`
+	District       *string                   `json:"district,omitempty"`
+	Neighborhood   *string                   `json:"neighborhood,omitempty"`
 	ShowLocation   bool                      `json:"show_location"`
 	TotalViews     int                       `json:"total_views"`
 	TotalFollow    int                       `json:"total_follow"`

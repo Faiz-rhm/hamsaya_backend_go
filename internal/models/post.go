@@ -156,6 +156,9 @@ type CreatePostRequest struct {
 
 	// For shared posts
 	OriginalPostID *string `json:"original_post_id,omitempty" validate:"omitempty,uuid"`
+
+	// Business post: when set, post is attributed to this business
+	BusinessID *string `json:"business_id,omitempty" validate:"omitempty,uuid"`
 }
 
 // CreatePostLocation is the nested location format sent by the app.
@@ -222,8 +225,9 @@ type PostResponse struct {
 	Status      bool            `json:"status"`
 
 	// Author info
-	Author  *AuthorInfo  `json:"author,omitempty"`
-	Business *BusinessInfo `json:"business,omitempty"`
+	Author     *AuthorInfo   `json:"author,omitempty"`
+	BusinessID *string       `json:"business_id,omitempty"`
+	Business   *BusinessInfo `json:"business_profile,omitempty"`
 
 	// Attachments (full objects with id so the client can reference them for deletion)
 	Attachments []AttachmentResponse `json:"attachments,omitempty"`
@@ -283,9 +287,17 @@ type AuthorInfo struct {
 
 // BusinessInfo represents business information for business posts
 type BusinessInfo struct {
-	BusinessID string  `json:"business_id"`
-	Name       string  `json:"name"`
-	Avatar     *Photo  `json:"avatar,omitempty"`
+	BusinessID   string  `json:"id"`
+	Name         string  `json:"name"`
+	Description  *string `json:"description,omitempty"`
+	PhoneNumber  *string `json:"phone_number,omitempty"`
+	Email        *string `json:"email,omitempty"`
+	Website      *string `json:"website,omitempty"`
+	Avatar       *Photo  `json:"avatar,omitempty"`
+	Cover        *Photo  `json:"cover,omitempty"`
+	Province     *string `json:"province,omitempty"`
+	District     *string `json:"district,omitempty"`
+	Neighborhood *string `json:"neighborhood,omitempty"`
 }
 
 // LocationInfo represents location information
