@@ -269,8 +269,9 @@ type PostResponse struct {
 	OriginalPost *PostResponse `json:"original_post,omitempty"`
 
 	// Timestamps
-	CreatedAt time.Time  `json:"created_at"`
-	UpdatedAt time.Time  `json:"updated_at"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  time.Time  `json:"updated_at"`
+	ExpiredAt  *time.Time `json:"expired_at,omitempty"`
 }
 
 // AuthorInfo represents post author information
@@ -368,6 +369,7 @@ type FeedFilter struct {
 	IsFree       *bool      `json:"is_free,omitempty"`
 	HasDiscount  *bool      `json:"has_discount,omitempty"`
 	Search       *string    `json:"search,omitempty"`
+	Sold         *bool      `json:"sold,omitempty"`
 
 	// Cursor-based pagination (preferred over offset for performance at scale).
 	// When Cursor is set, Offset is ignored. Cursor is the created_at timestamp

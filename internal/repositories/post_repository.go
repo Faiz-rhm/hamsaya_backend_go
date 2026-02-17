@@ -516,7 +516,7 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	// Apply filters
 	if filter.Type != nil {
 		queryBuilder.WriteString(fmt.Sprintf(" AND type = $%d", argCount))
-		args = append(args, *filter.Type)
+		args = append(args, string(*filter.Type))
 		argCount++
 	}
 
@@ -556,6 +556,12 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		queryBuilder.WriteString(fmt.Sprintf(" AND (title ILIKE '%%' || $%d || '%%' OR description ILIKE '%%' || $%d || '%%')", argCount, argCount+1))
 		args = append(args, *filter.Search, *filter.Search)
 		argCount += 2
+	}
+
+	if filter.Sold != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND sold = $%d", argCount))
+		args = append(args, *filter.Sold)
+		argCount++
 	}
 
 	// Location-based filtering (radius search)
@@ -637,7 +643,7 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 	// Apply same filters as GetFeed
 	if filter.Type != nil {
 		queryBuilder.WriteString(fmt.Sprintf(" AND type = $%d", argCount))
-		args = append(args, *filter.Type)
+		args = append(args, string(*filter.Type))
 		argCount++
 	}
 
@@ -677,6 +683,12 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 		queryBuilder.WriteString(fmt.Sprintf(" AND (title ILIKE '%%' || $%d || '%%' OR description ILIKE '%%' || $%d || '%%')", argCount, argCount+1))
 		args = append(args, *filter.Search, *filter.Search)
 		argCount += 2
+	}
+
+	if filter.Sold != nil {
+		queryBuilder.WriteString(fmt.Sprintf(" AND sold = $%d", argCount))
+		args = append(args, *filter.Sold)
+		argCount++
 	}
 
 	// Location-based filtering (radius search)

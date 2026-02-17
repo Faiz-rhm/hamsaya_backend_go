@@ -556,6 +556,19 @@ func (h *PostHandler) GetMyPosts(c *gin.Context) {
 		Offset: offset,
 	}
 
+	// Filter by post type (e.g., SELL, EVENT, PULL)
+	if typeStr := c.Query("type"); typeStr != "" {
+		pt := models.PostType(typeStr)
+		filter.Type = &pt
+	}
+
+	// Filter by sold status (true/false)
+	if soldStr := c.Query("sold"); soldStr != "" {
+		if s, err := strconv.ParseBool(soldStr); err == nil {
+			filter.Sold = &s
+		}
+	}
+
 	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, &userIDStr)
 	if err != nil {
 		h.handleError(c, err)

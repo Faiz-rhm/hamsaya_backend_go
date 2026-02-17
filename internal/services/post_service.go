@@ -89,6 +89,10 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		post.CategoryID = req.CategoryID
 		post.CountryCode = req.CountryCode
 		post.ContactNo = req.ContactNo
+
+		// Auto-expire SELL posts after 30 days
+		expiry := now.AddDate(0, 1, 0) // 1 month from creation
+		post.ExpiredAt = &expiry
 	}
 
 	// Handle event-specific fields
@@ -676,6 +680,7 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		response.IsPromoted = &post.IsPromoted
 		response.ContactNo = post.ContactNo
 		response.IsLocation = &post.IsLocation
+		response.ExpiredAt = post.ExpiredAt
 
 		// Get category info if post has a category
 		if post.CategoryID != nil && *post.CategoryID != "" {
@@ -835,6 +840,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		response.IsPromoted = &post.IsPromoted
 		response.ContactNo = post.ContactNo
 		response.IsLocation = &post.IsLocation
+		response.ExpiredAt = post.ExpiredAt
 
 		// Get category info if post has a category
 		if post.CategoryID != nil && *post.CategoryID != "" {
