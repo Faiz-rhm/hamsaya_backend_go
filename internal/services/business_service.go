@@ -80,9 +80,36 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, userID string, req
 		return nil, utils.NewInternalError("Failed to create business", err)
 	}
 
-	// Add categories if provided
+	// Add categories if provided (category_ids and/or category_names)
+	var finalCategoryIDs []string
+	seen := make(map[string]bool)
 	if len(req.CategoryIDs) > 0 {
-		if err := s.businessRepo.AddCategories(ctx, businessID, req.CategoryIDs); err != nil {
+		for _, id := range req.CategoryIDs {
+			if id != "" && !seen[id] {
+				seen[id] = true
+				finalCategoryIDs = append(finalCategoryIDs, id)
+			}
+		}
+	}
+	if len(req.CategoryNames) > 0 {
+		for _, name := range req.CategoryNames {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				continue
+			}
+			id, err := s.businessRepo.GetOrCreateCategoryByName(ctx, name)
+			if err != nil {
+				s.logger.Warn("GetOrCreateCategoryByName failed", zap.String("name", name), zap.Error(err))
+				continue
+			}
+			if !seen[id] {
+				seen[id] = true
+				finalCategoryIDs = append(finalCategoryIDs, id)
+			}
+		}
+	}
+	if len(finalCategoryIDs) > 0 {
+		if err := s.businessRepo.AddCategories(ctx, businessID, finalCategoryIDs); err != nil {
 			s.logger.Error("Failed to add business categories", zap.String("business_id", businessID), zap.Error(err))
 			// Continue - don't fail the whole operation
 		}

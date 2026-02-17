@@ -54,14 +54,127 @@ func (h *BusinessHandler) CreateBusiness(c *gin.Context) {
 		return
 	}
 
-	// Parse request
-	var req models.CreateBusinessRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// Parse raw body first to reliably capture category_ids and category_names
+	// (some clients may send lat/lng instead of latitude/longitude, etc.)
+	var raw map[string]interface{}
+	if err := c.ShouldBindJSON(&raw); err != nil {
 		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
 		return
 	}
 
-	// Validate request
+	// Build request from raw map so we don't miss any fields
+	req := models.CreateBusinessRequest{Name: ""}
+	if v, ok := raw["name"]; ok {
+		if s, ok := v.(string); ok {
+			req.Name = s
+		}
+	}
+	// Copy other optional fields...
+	if v, ok := raw["license_no"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.LicenseNo = &s
+		}
+	}
+	if v, ok := raw["description"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.Description = &s
+		}
+	}
+	if v, ok := raw["address"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.Address = &s
+		}
+	}
+	if v, ok := raw["phone_number"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.PhoneNumber = &s
+		}
+	}
+	if v, ok := raw["email"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.Email = &s
+		}
+	}
+	if v, ok := raw["website"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.Website = &s
+		}
+	}
+	if v, ok := raw["show_location"]; ok && v != nil {
+		if b, ok := v.(bool); ok {
+			req.ShowLocation = &b
+		}
+	}
+	// Support both "lat"/"lng" and "latitude"/"longitude"
+	if v, ok := raw["lat"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			req.Latitude = &f
+		}
+	}
+	if v, ok := raw["lng"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			req.Longitude = &f
+		}
+	}
+	if v, ok := raw["latitude"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			req.Latitude = &f
+		}
+	}
+	if v, ok := raw["longitude"]; ok && v != nil {
+		if f, ok := v.(float64); ok {
+			req.Longitude = &f
+		}
+	}
+	// Extract category_ids
+	if v, ok := raw["category_ids"]; ok && v != nil {
+		if arr, ok := v.([]interface{}); ok {
+			for _, item := range arr {
+				if s, ok := item.(string); ok && s != "" {
+					req.CategoryIDs = append(req.CategoryIDs, s)
+				}
+			}
+		}
+	}
+	// Extract category_names
+	if v, ok := raw["category_names"]; ok && v != nil {
+		if arr, ok := v.([]interface{}); ok {
+			for _, item := range arr {
+				if s, ok := item.(string); ok && s != "" {
+					req.CategoryNames = append(req.CategoryNames, s)
+				}
+			}
+		}
+	}
+	// Fallback: extract from "categories" array [{id, name}]
+	if v, ok := raw["categories"]; ok && v != nil {
+		if arr, ok := v.([]interface{}); ok {
+			for _, item := range arr {
+				m, ok := item.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				var idStr, nameStr string
+				if id, ok := m["id"]; ok && id != nil {
+					if s, ok := id.(string); ok {
+						idStr = s
+					}
+				}
+				if name, ok := m["name"]; ok && name != nil {
+					if s, ok := name.(string); ok {
+						nameStr = s
+					}
+				}
+				if idStr != "" {
+					req.CategoryIDs = append(req.CategoryIDs, idStr)
+				} else if nameStr != "" {
+					req.CategoryNames = append(req.CategoryNames, nameStr)
+				}
+			}
+		}
+	}
+
+	// Validate required fields
 	if err := h.validator.Validate(&req); err != nil {
 		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
 		return

@@ -106,6 +106,8 @@ type CreateBusinessRequest struct {
 	Neighborhood   *string  `json:"neighborhood,omitempty" validate:"omitempty,max=100"`
 	ShowLocation   *bool    `json:"show_location,omitempty"`
 	CategoryIDs    []string `json:"category_ids,omitempty" validate:"omitempty,dive,uuid"`
+	// CategoryNames are created if they don't exist, then linked (with category_ids).
+	CategoryNames []string `json:"category_names,omitempty" validate:"omitempty,dive,max=100"`
 }
 
 // UpdateBusinessRequest represents a request to update a business profile
