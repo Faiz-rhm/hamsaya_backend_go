@@ -544,6 +544,20 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		argCount++
 	}
 
+	if filter.IsFree != nil && *filter.IsFree {
+		queryBuilder.WriteString(" AND free = true")
+	}
+
+	if filter.HasDiscount != nil && *filter.HasDiscount {
+		queryBuilder.WriteString(" AND discount IS NOT NULL AND discount > 0")
+	}
+
+	if filter.Search != nil && *filter.Search != "" {
+		queryBuilder.WriteString(fmt.Sprintf(" AND (title ILIKE '%%' || $%d || '%%' OR description ILIKE '%%' || $%d || '%%')", argCount, argCount+1))
+		args = append(args, *filter.Search, *filter.Search)
+		argCount += 2
+	}
+
 	// Location-based filtering (radius search)
 	var locationSearchActive bool
 	if filter.Latitude != nil && filter.Longitude != nil && filter.RadiusKm != nil {
@@ -649,6 +663,20 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 		queryBuilder.WriteString(fmt.Sprintf(" AND province = $%d", argCount))
 		args = append(args, *filter.Province)
 		argCount++
+	}
+
+	if filter.IsFree != nil && *filter.IsFree {
+		queryBuilder.WriteString(" AND free = true")
+	}
+
+	if filter.HasDiscount != nil && *filter.HasDiscount {
+		queryBuilder.WriteString(" AND discount IS NOT NULL AND discount > 0")
+	}
+
+	if filter.Search != nil && *filter.Search != "" {
+		queryBuilder.WriteString(fmt.Sprintf(" AND (title ILIKE '%%' || $%d || '%%' OR description ILIKE '%%' || $%d || '%%')", argCount, argCount+1))
+		args = append(args, *filter.Search, *filter.Search)
+		argCount += 2
 	}
 
 	// Location-based filtering (radius search)

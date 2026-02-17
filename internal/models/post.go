@@ -364,6 +364,11 @@ type FeedFilter struct {
 	Longitude    *float64   `json:"longitude,omitempty"`
 	RadiusKm     *float64   `json:"radius_km,omitempty"`
 
+	// Sell-specific filters
+	IsFree       *bool      `json:"is_free,omitempty"`
+	HasDiscount  *bool      `json:"has_discount,omitempty"`
+	Search       *string    `json:"search,omitempty"`
+
 	// Cursor-based pagination (preferred over offset for performance at scale).
 	// When Cursor is set, Offset is ignored. Cursor is the created_at timestamp
 	// of the last item from the previous page.

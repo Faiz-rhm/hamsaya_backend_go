@@ -435,6 +435,20 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		filter.SortBy = sortBy
 	}
 
+	if isFree := c.Query("is_free"); isFree == "true" {
+		t := true
+		filter.IsFree = &t
+	}
+
+	if hasDiscount := c.Query("has_discount"); hasDiscount == "true" {
+		t := true
+		filter.HasDiscount = &t
+	}
+
+	if search := c.Query("search"); search != "" {
+		filter.Search = &search
+	}
+
 	if limitStr := c.Query("limit"); limitStr != "" {
 		if limit, err := strconv.Atoi(limitStr); err == nil && limit > 0 && limit <= 100 {
 			filter.Limit = limit
