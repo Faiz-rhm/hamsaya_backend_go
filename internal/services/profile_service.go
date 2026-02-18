@@ -75,7 +75,14 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID string, viewerID
 	}
 	response.PostsCount = postsCount
 
-	// TODO: Populate relationship status if viewerID is provided
+	// Populate relationship status (is_blocked, has_blocked_me) if viewer is authenticated
+	if viewerID != nil && *viewerID != "" && *viewerID != userID {
+		status, err := s.relationshipsRepo.GetRelationshipStatus(ctx, *viewerID, userID)
+		if err == nil {
+			response.IsBlocked = status.IsBlocked    // viewer blocks target (I am blocking them)
+			response.HasBlockedMe = status.HasBlockedMe // target blocks viewer (they blocked me)
+		}
+	}
 
 	s.logger.Info("Profile retrieved",
 		zap.String("user_id", userID),
@@ -238,6 +245,19 @@ func (s *ProfileService) UpdateCover(ctx context.Context, userID string, photo *
 }
 
 // DeleteCover deletes a user's cover photo
+// DeactivateAccount soft-deletes the user and revokes all sessions
+func (s *ProfileService) DeactivateAccount(ctx context.Context, userID string) error {
+	if err := s.userRepo.SoftDelete(ctx, userID); err != nil {
+		s.logger.Error("Failed to soft delete user", zap.String("user_id", userID), zap.Error(err))
+		return utils.NewInternalError("Failed to deactivate account", err)
+	}
+	if err := s.userRepo.RevokeAllUserSessions(ctx, userID); err != nil {
+		s.logger.Warn("Failed to revoke sessions after deactivation", zap.String("user_id", userID), zap.Error(err))
+	}
+	s.logger.Info("Account deactivated", zap.String("user_id", userID))
+	return nil
+}
+
 func (s *ProfileService) DeleteCover(ctx context.Context, userID string) error {
 	// Get current profile
 	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)

@@ -261,6 +261,7 @@ func main() {
 			// Protected routes (require authentication)
 			users.GET("/me", authMiddleware.RequireAuth(), profileHandler.GetMyProfile)
 			users.PUT("/me", authMiddleware.RequireAuth(), profileHandler.UpdateProfile)
+			users.DELETE("/me", authMiddleware.RequireAuth(), profileHandler.DeleteAccount)
 			users.POST("/me/avatar", authMiddleware.RequireAuth(), profileHandler.UploadAvatar)
 			users.DELETE("/me/avatar", authMiddleware.RequireAuth(), profileHandler.DeleteAvatar)
 			users.POST("/me/cover", authMiddleware.RequireAuth(), profileHandler.UploadCover)

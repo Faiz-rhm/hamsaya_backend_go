@@ -539,7 +539,8 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	}
 
 	if filter.Province != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND province = $%d", argCount))
+		// Filter by author's province (users.province); post-level province is often null for FEED/EVENT/PULL
+		queryBuilder.WriteString(fmt.Sprintf(" AND EXISTS (SELECT 1 FROM users u WHERE u.id = posts.user_id AND u.province = $%d)", argCount))
 		args = append(args, *filter.Province)
 		argCount++
 	}
@@ -670,7 +671,8 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 	}
 
 	if filter.Province != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND province = $%d", argCount))
+		// Filter by author's province (users.province); post-level province is often null for FEED/EVENT/PULL
+		queryBuilder.WriteString(fmt.Sprintf(" AND EXISTS (SELECT 1 FROM users u WHERE u.id = posts.user_id AND u.province = $%d)", argCount))
 		args = append(args, *filter.Province)
 		argCount++
 	}

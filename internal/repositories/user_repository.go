@@ -32,6 +32,9 @@ type UserRepository interface {
 	// Transactional operations
 	CreateUserWithProfile(ctx context.Context, user *models.User, profile *models.Profile) error
 
+	// Soft delete (deactivate) user
+	SoftDelete(ctx context.Context, userID string) error
+
 	// Session operations
 	CreateSession(ctx context.Context, session *models.UserSession) error
 	GetSessionByID(ctx context.Context, sessionID string) (*models.UserSession, error)
@@ -537,6 +540,23 @@ func (r *userRepository) GetSessionByRefreshTokenHash(ctx context.Context, refre
 	}
 
 	return session, nil
+}
+
+// SoftDelete soft-deletes a user by setting deleted_at (deactivate account)
+func (r *userRepository) SoftDelete(ctx context.Context, userID string) error {
+	query := `
+		UPDATE users
+		SET deleted_at = $2, updated_at = $2
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	result, err := r.db.Pool.Exec(ctx, query, userID, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to soft delete user: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found or already deleted")
+	}
+	return nil
 }
 
 // RevokeSession revokes a specific session

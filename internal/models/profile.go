@@ -61,10 +61,11 @@ type FullProfileResponse struct {
 	PostsCount      int `json:"posts_count"`
 
 	// Relationship status (relative to authenticated user)
-	IsFollowing     bool `json:"is_following,omitempty"`
-	IsFollowedBy    bool `json:"is_followed_by,omitempty"`
-	IsBlocked       bool `json:"is_blocked,omitempty"`
-	HasBlockedMe    bool `json:"has_blocked_me,omitempty"`
+	// No omitempty so client always receives block status for Block/Unblock UI
+	IsFollowing  bool `json:"is_following,omitempty"`
+	IsFollowedBy bool `json:"is_followed_by,omitempty"`
+	IsBlocked    bool `json:"is_blocked"`
+	HasBlockedMe bool `json:"has_blocked_me"`
 }
 
 // UserSearchResult represents a user in search results

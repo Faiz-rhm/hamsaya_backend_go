@@ -49,6 +49,11 @@ func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, userID string)
 	return args.Error(0)
 }
 
+func (m *MockUserRepository) SoftDelete(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
 func (m *MockUserRepository) CreateProfile(ctx context.Context, profile *models.Profile) error {
 	args := m.Called(ctx, profile)
 	return args.Error(0)

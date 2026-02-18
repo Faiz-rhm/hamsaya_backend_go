@@ -40,7 +40,7 @@ func NewMFARepository(db *database.DB) MFARepository {
 // CreateFactor creates a new MFA factor
 func (r *mfaRepository) CreateFactor(ctx context.Context, factor *models.MFAFactor) error {
 	query := `
-		INSERT INTO mfa_factors (id, user_id, type, secret_key, factor_id, status, created_at, updated_at)
+		INSERT INTO mfa_factors (id, user_id, factor_type, secret_key, factor_id, status, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
@@ -65,7 +65,7 @@ func (r *mfaRepository) CreateFactor(ctx context.Context, factor *models.MFAFact
 // GetFactorByID retrieves an MFA factor by ID
 func (r *mfaRepository) GetFactorByID(ctx context.Context, factorID string) (*models.MFAFactor, error) {
 	query := `
-		SELECT id, user_id, type, secret_key, factor_id, status, created_at, updated_at, deleted_at
+		SELECT id, user_id, factor_type, secret_key, factor_id, status, created_at, updated_at, deleted_at
 		FROM mfa_factors
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -96,7 +96,7 @@ func (r *mfaRepository) GetFactorByID(ctx context.Context, factorID string) (*mo
 // GetFactorsByUserID retrieves all MFA factors for a user
 func (r *mfaRepository) GetFactorsByUserID(ctx context.Context, userID string) ([]*models.MFAFactor, error) {
 	query := `
-		SELECT id, user_id, type, secret_key, factor_id, status, created_at, updated_at, deleted_at
+		SELECT id, user_id, factor_type, secret_key, factor_id, status, created_at, updated_at, deleted_at
 		FROM mfa_factors
 		WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC

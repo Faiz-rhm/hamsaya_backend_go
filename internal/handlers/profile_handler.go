@@ -297,6 +297,31 @@ func (h *ProfileHandler) DeleteCover(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Cover photo deleted successfully", nil)
 }
 
+// DeleteAccount godoc
+// @Summary Deactivate (soft delete) account
+// @Description Soft-deletes the authenticated user's account and revokes all sessions
+// @Tags profile
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /users/me [delete]
+func (h *ProfileHandler) DeleteAccount(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	if err := h.profileService.DeactivateAccount(c.Request.Context(), userID.(string)); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Account deactivated successfully", nil)
+}
+
 // handleError handles service errors and sends appropriate HTTP responses
 func (h *ProfileHandler) handleError(c *gin.Context, err error) {
 	// Check if it's an AppError
