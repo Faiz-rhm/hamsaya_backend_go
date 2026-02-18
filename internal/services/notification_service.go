@@ -183,6 +183,15 @@ func (s *NotificationService) GetUnreadCount(ctx context.Context, userID string)
 	return count, nil
 }
 
+// Default notification categories (all push enabled)
+var defaultNotificationCategories = []models.NotificationCategory{
+	models.NotificationCategoryPosts,
+	models.NotificationCategoryMessages,
+	models.NotificationCategoryEvents,
+	models.NotificationCategorySales,
+	models.NotificationCategoryBusiness,
+}
+
 // GetNotificationSettings retrieves notification settings for a user
 func (s *NotificationService) GetNotificationSettings(ctx context.Context, profileID string) ([]*models.NotificationSetting, error) {
 	settings, err := s.settingsRepo.GetByProfileID(ctx, profileID)
@@ -198,17 +207,39 @@ func (s *NotificationService) GetNotificationSettings(ctx context.Context, profi
 	if len(settings) == 0 {
 		if err := s.settingsRepo.InitializeDefaults(ctx, profileID); err != nil {
 			s.logger.Warn("Failed to initialize default settings", zap.Error(err))
-		} else {
-			settings, _ = s.settingsRepo.GetByProfileID(ctx, profileID)
+		}
+		refetched, err2 := s.settingsRepo.GetByProfileID(ctx, profileID)
+		if err2 == nil && len(refetched) > 0 {
+			settings = refetched
 		}
 	}
 
+	// If still empty (e.g. init failed or no profile), return default list so client shows all enabled
+	if len(settings) == 0 {
+		now := time.Now()
+		settings = make([]*models.NotificationSetting, 0, len(defaultNotificationCategories))
+		for _, cat := range defaultNotificationCategories {
+			settings = append(settings, &models.NotificationSetting{
+				ID:        fmt.Sprintf("%s-%s", profileID, cat),
+				ProfileID: profileID,
+				Category:  cat,
+				PushPref:  true,
+				CreatedAt: now,
+				UpdatedAt: now,
+			})
+		}
+	}
+
+	// Ensure we never return nil (JSON would serialize as null)
+	if settings == nil {
+		settings = []*models.NotificationSetting{}
+	}
 	return settings, nil
 }
 
-// UpdateNotificationSetting updates a notification setting
+// UpdateNotificationSetting updates a notification setting (upserts so it works when no row exists yet)
 func (s *NotificationService) UpdateNotificationSetting(ctx context.Context, profileID string, req *models.UpdateNotificationSettingsRequest) error {
-	if err := s.settingsRepo.UpdateCategory(ctx, profileID, req.Category, req.PushPref); err != nil {
+	if err := s.settingsRepo.UpsertCategory(ctx, profileID, req.Category, req.PushPref); err != nil {
 		s.logger.Error("Failed to update notification setting",
 			zap.Error(err),
 			zap.String("profile_id", profileID),

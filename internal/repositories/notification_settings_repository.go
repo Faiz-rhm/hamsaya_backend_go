@@ -17,6 +17,8 @@ type NotificationSettingsRepository interface {
 	GetByProfileAndCategory(ctx context.Context, profileID string, category models.NotificationCategory) (*models.NotificationSetting, error)
 	Upsert(ctx context.Context, setting *models.NotificationSetting) error
 	UpdateCategory(ctx context.Context, profileID string, category models.NotificationCategory, pushPref bool) error
+	// UpsertCategory creates or updates a single category setting (avoids "not found" when no row exists)
+	UpsertCategory(ctx context.Context, profileID string, category models.NotificationCategory, pushPref bool) error
 
 	// Bulk operations
 	InitializeDefaults(ctx context.Context, profileID string) error
@@ -146,6 +148,22 @@ func (r *notificationSettingsRepository) UpdateCategory(ctx context.Context, pro
 	return nil
 }
 
+// UpsertCategory inserts or updates a single category (creates row if missing)
+func (r *notificationSettingsRepository) UpsertCategory(ctx context.Context, profileID string, category models.NotificationCategory, pushPref bool) error {
+	query := `
+		INSERT INTO notification_settings (profile_id, category, push_pref, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (profile_id, category)
+		DO UPDATE SET push_pref = EXCLUDED.push_pref, updated_at = EXCLUDED.updated_at
+	`
+	now := time.Now()
+	_, err := r.db.Pool.Exec(ctx, query, profileID, category, pushPref, now, now)
+	if err != nil {
+		return fmt.Errorf("failed to upsert notification setting: %w", err)
+	}
+	return nil
+}
+
 // InitializeDefaults creates default notification settings for a new profile
 func (r *notificationSettingsRepository) InitializeDefaults(ctx context.Context, profileID string) error {
 	categories := []models.NotificationCategory{
@@ -157,29 +175,19 @@ func (r *notificationSettingsRepository) InitializeDefaults(ctx context.Context,
 	}
 
 	query := `
-		INSERT INTO notification_settings (id, profile_id, category, push_pref, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO notification_settings (profile_id, category, push_pref, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5)
 		ON CONFLICT (profile_id, category) DO NOTHING
 	`
 
 	now := time.Now()
 	for _, category := range categories {
-		setting := &models.NotificationSetting{
-			ID:        fmt.Sprintf("%s-%s", profileID, category),
-			ProfileID: profileID,
-			Category:  category,
-			PushPref:  true, // Default to enabled
-			CreatedAt: now,
-			UpdatedAt: now,
-		}
-
 		_, err := r.db.Pool.Exec(ctx, query,
-			setting.ID,
-			setting.ProfileID,
-			setting.Category,
-			setting.PushPref,
-			setting.CreatedAt,
-			setting.UpdatedAt,
+			profileID,
+			category,
+			true, // push_pref default enabled
+			now,
+			now,
 		)
 
 		if err != nil {
