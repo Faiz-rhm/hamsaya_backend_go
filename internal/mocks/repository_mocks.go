@@ -34,6 +34,14 @@ func (m *MockUserRepository) GetByIDIncludingDeleted(ctx context.Context, id str
 	return args.Get(0).(*models.User), args.Error(1)
 }
 
+func (m *MockUserRepository) GetByEmailIncludingDeleted(ctx context.Context, email string) (*models.User, error) {
+	args := m.Called(ctx, email)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
 func (m *MockUserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	args := m.Called(ctx, email)
 	if args.Get(0) == nil {
@@ -58,6 +66,11 @@ func (m *MockUserRepository) UpdateLastLogin(ctx context.Context, userID string)
 }
 
 func (m *MockUserRepository) SoftDelete(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) Restore(ctx context.Context, userID string) error {
 	args := m.Called(ctx, userID)
 	return args.Error(0)
 }

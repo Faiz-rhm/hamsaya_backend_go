@@ -365,12 +365,29 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 	// Normalize email
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Get user by email
+	// Get user by email (active only)
 	user, err := s.userRepo.GetByEmail(ctx, email)
 
-	// USER DOESN'T EXIST - Auto-register
+	// USER NOT FOUND - Check if deactivated (soft-deleted) for reactivation
 	if err != nil {
-		s.logger.Info("Auto-registering new user via login", zap.String("email", email))
+		deletedUser, delErr := s.userRepo.GetByEmailIncludingDeleted(ctx, email)
+		if delErr == nil && deletedUser != nil && deletedUser.DeletedAt != nil {
+			// Deactivated user trying to login - reactivate on valid password
+			if deletedUser.PasswordHash != nil && s.passwordService.Verify(req.Password, *deletedUser.PasswordHash) {
+				if err := s.userRepo.Restore(ctx, deletedUser.ID); err != nil {
+					s.logger.Error("Failed to restore deactivated user", zap.String("user_id", deletedUser.ID), zap.Error(err))
+					return nil, utils.NewInternalError("Failed to reactivate account", err)
+				}
+				s.logger.Info("User reactivated via login", zap.String("user_id", deletedUser.ID), zap.String("email", email))
+				user = deletedUser
+				user.DeletedAt = nil
+				// Fall through to normal login flow below
+			} else {
+				return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
+			}
+		} else {
+			// Truly new user - auto-register
+			s.logger.Info("Auto-registering new user via login", zap.String("email", email))
 
 		// Validate password strength
 		if err := s.passwordService.ValidatePasswordStrength(req.Password); err != nil {
@@ -421,9 +438,10 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 
 		// Return auth response for newly created user
 		return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
+		}
 	}
 
-	// USER EXISTS - Normal login flow
+	// USER EXISTS (or was just reactivated) - Normal login flow
 	// Check if account is locked
 	if user.IsLocked() {
 		s.logger.Warn("Login attempt for locked account",

@@ -21,6 +21,7 @@ type UserRepository interface {
 	GetByID(ctx context.Context, id string) (*models.User, error)
 	GetByIDIncludingDeleted(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
+	GetByEmailIncludingDeleted(ctx context.Context, email string) (*models.User, error)
 	Update(ctx context.Context, user *models.User) error
 	UpdateLoginAttempts(ctx context.Context, userID string, attempts int, lockedUntil *time.Time) error
 	UpdateLastLogin(ctx context.Context, userID string) error
@@ -36,6 +37,8 @@ type UserRepository interface {
 
 	// Soft delete (deactivate) user
 	SoftDelete(ctx context.Context, userID string) error
+	// Restore reactivates a soft-deleted user
+	Restore(ctx context.Context, userID string) error
 
 	// Session operations
 	CreateSession(ctx context.Context, session *models.UserSession) error
@@ -179,6 +182,46 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 			locked_until, created_at, updated_at, deleted_at
 		FROM users
 		WHERE email = $1 AND deleted_at IS NULL
+	`
+
+	user := &models.User{}
+	err := r.db.Pool.QueryRow(ctx, query, email).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Phone,
+		&user.PasswordHash,
+		&user.EmailVerified,
+		&user.PhoneVerified,
+		&user.MFAEnabled,
+		&user.Role,
+		&user.OAuthProvider,
+		&user.OAuthProviderID,
+		&user.LastLoginAt,
+		&user.FailedLoginAttempts,
+		&user.LockedUntil,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.DeletedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}
+
+// GetByEmailIncludingDeleted retrieves a user by email, including soft-deleted
+func (r *userRepository) GetByEmailIncludingDeleted(ctx context.Context, email string) (*models.User, error) {
+	query := `
+		SELECT id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
+			locked_until, created_at, updated_at, deleted_at
+		FROM users
+		WHERE email = $1
 	`
 
 	user := &models.User{}
@@ -650,6 +693,23 @@ func (r *userRepository) SoftDelete(ctx context.Context, userID string) error {
 	}
 	if result.RowsAffected() == 0 {
 		return fmt.Errorf("user not found or already deleted")
+	}
+	return nil
+}
+
+// Restore reactivates a soft-deleted user by clearing deleted_at
+func (r *userRepository) Restore(ctx context.Context, userID string) error {
+	query := `
+		UPDATE users
+		SET deleted_at = NULL, updated_at = $2
+		WHERE id = $1 AND deleted_at IS NOT NULL
+	`
+	result, err := r.db.Pool.Exec(ctx, query, userID, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to restore user: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found or not deleted")
 	}
 	return nil
 }
