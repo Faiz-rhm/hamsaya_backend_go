@@ -19,6 +19,7 @@ type UserRepository interface {
 	// User operations
 	Create(ctx context.Context, user *models.User) error
 	GetByID(ctx context.Context, id string) (*models.User, error)
+	GetByIDIncludingDeleted(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
 	Update(ctx context.Context, user *models.User) error
 	UpdateLoginAttempts(ctx context.Context, userID string, attempts int, lockedUntil *time.Time) error
@@ -27,6 +28,7 @@ type UserRepository interface {
 	// Profile operations
 	CreateProfile(ctx context.Context, profile *models.Profile) error
 	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
+	GetProfileByUserIDIncludingDeleted(ctx context.Context, userID string) (*models.Profile, error)
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
 
 	// Transactional operations
@@ -97,6 +99,46 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*models.User, 
 			locked_until, created_at, updated_at, deleted_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	user := &models.User{}
+	err := r.db.Pool.QueryRow(ctx, query, id).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Phone,
+		&user.PasswordHash,
+		&user.EmailVerified,
+		&user.PhoneVerified,
+		&user.MFAEnabled,
+		&user.Role,
+		&user.OAuthProvider,
+		&user.OAuthProviderID,
+		&user.LastLoginAt,
+		&user.FailedLoginAttempts,
+		&user.LockedUntil,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.DeletedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}
+
+// GetByIDIncludingDeleted retrieves a user by ID even if soft-deleted
+func (r *userRepository) GetByIDIncludingDeleted(ctx context.Context, id string) (*models.User, error) {
+	query := `
+		SELECT id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
+			locked_until, created_at, updated_at, deleted_at
+		FROM users
+		WHERE id = $1
 	`
 
 	user := &models.User{}
@@ -313,6 +355,59 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	}
 
 	// Construct pgtype.Point from latitude and longitude if both exist
+	if latitude != nil && longitude != nil {
+		profile.Location = &pgtype.Point{
+			P:     pgtype.Vec2{X: *longitude, Y: *latitude},
+			Valid: true,
+		}
+	}
+
+	return profile, nil
+}
+
+// GetProfileByUserIDIncludingDeleted retrieves a profile by user ID, including soft-deleted
+func (r *userRepository) GetProfileByUserIDIncludingDeleted(ctx context.Context, userID string) (*models.Profile, error) {
+	query := `
+		SELECT id, first_name, last_name, avatar, cover, about, gender, dob, website,
+			ST_X(location::geometry) as longitude,
+			ST_Y(location::geometry) as latitude,
+			country, province, district, neighborhood, is_complete,
+			created_at, updated_at, deleted_at
+		FROM profiles
+		WHERE id = $1
+	`
+
+	profile := &models.Profile{}
+	var latitude, longitude *float64
+	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(
+		&profile.ID,
+		&profile.FirstName,
+		&profile.LastName,
+		&profile.Avatar,
+		&profile.Cover,
+		&profile.About,
+		&profile.Gender,
+		&profile.DOB,
+		&profile.Website,
+		&longitude,
+		&latitude,
+		&profile.Country,
+		&profile.Province,
+		&profile.District,
+		&profile.Neighborhood,
+		&profile.IsComplete,
+		&profile.CreatedAt,
+		&profile.UpdatedAt,
+		&profile.DeletedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("profile not found")
+		}
+		return nil, fmt.Errorf("failed to get profile: %w", err)
+	}
+
 	if latitude != nil && longitude != nil {
 		profile.Location = &pgtype.Point{
 			P:     pgtype.Vec2{X: *longitude, Y: *latitude},

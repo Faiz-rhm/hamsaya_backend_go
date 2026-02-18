@@ -36,11 +36,20 @@ func NewProfileService(
 
 // GetProfile gets a user's profile by user ID
 func (s *ProfileService) GetProfile(ctx context.Context, userID string, viewerID *string) (*models.FullProfileResponse, error) {
-	// Get user
+	// Get user (active only)
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		s.logger.Warn("User not found", zap.String("user_id", userID), zap.Error(err))
-		return nil, utils.NewNotFoundError("User not found", err)
+		// User not found as active - check if soft-deleted (deactivated)
+		deletedUser, delErr := s.userRepo.GetByIDIncludingDeleted(ctx, userID)
+		if delErr != nil || deletedUser == nil || deletedUser.DeletedAt == nil {
+			s.logger.Warn("User not found", zap.String("user_id", userID), zap.Error(err))
+			return nil, utils.NewNotFoundError("User not found", err)
+		}
+		// Return minimal deactivated profile
+		postsCount, _ := s.postRepo.CountPostsByUser(ctx, userID)
+		response := models.ToDeactivatedProfileResponse(userID, postsCount)
+		s.logger.Info("Deactivated profile retrieved", zap.String("user_id", userID))
+		return response, nil
 	}
 
 	// Get profile

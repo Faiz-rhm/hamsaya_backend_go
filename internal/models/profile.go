@@ -66,6 +66,9 @@ type FullProfileResponse struct {
 	IsFollowedBy bool `json:"is_followed_by,omitempty"`
 	IsBlocked    bool `json:"is_blocked"`
 	HasBlockedMe bool `json:"has_blocked_me"`
+
+	// Deactivated is true when the account has been soft-deleted
+	Deactivated bool `json:"deactivated"`
 }
 
 // UserSearchResult represents a user in search results
@@ -121,6 +124,7 @@ func ToFullProfileResponse(user *User, profile *Profile) *FullProfileResponse {
 		FollowersCount: 0,
 		FollowingCount: 0,
 		PostsCount:     0,
+		Deactivated:    false,
 	}
 
 	// Extract latitude and longitude from pgtype.Point
@@ -132,6 +136,44 @@ func ToFullProfileResponse(user *User, profile *Profile) *FullProfileResponse {
 	}
 
 	return resp
+}
+
+// ToDeactivatedProfileResponse returns a minimal profile for a soft-deleted account
+func ToDeactivatedProfileResponse(userID string, postsCount int) *FullProfileResponse {
+	fullName := "Deactivated Account"
+	return &FullProfileResponse{
+		ID:            userID,
+		FirstName:     &fullName,
+		LastName:      nil,
+		FullName:      fullName,
+		Avatar:        nil,
+		Cover:         nil,
+		About:         nil,
+		Gender:        nil,
+		DOB:           nil,
+		Website:       nil,
+		Country:       nil,
+		Province:      nil,
+		District:      nil,
+		Neighborhood:  nil,
+		Latitude:      nil,
+		Longitude:     nil,
+		IsComplete:    false,
+		CreatedAt:     time.Time{},
+		UpdatedAt:     time.Time{},
+		Email:         "",
+		EmailVerified: false,
+		PhoneVerified: false,
+		MFAEnabled:    false,
+		FollowersCount: 0,
+		FollowingCount: 0,
+		PostsCount:     postsCount,
+		IsFollowing:   false,
+		IsFollowedBy:  false,
+		IsBlocked:     false,
+		HasBlockedMe:  false,
+		Deactivated:   true,
+	}
 }
 
 // ToUserSearchResult converts Profile to UserSearchResult

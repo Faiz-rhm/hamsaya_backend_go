@@ -26,6 +26,14 @@ func (m *MockUserRepository) GetByID(ctx context.Context, id string) (*models.Us
 	return args.Get(0).(*models.User), args.Error(1)
 }
 
+func (m *MockUserRepository) GetByIDIncludingDeleted(ctx context.Context, id string) (*models.User, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.User), args.Error(1)
+}
+
 func (m *MockUserRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	args := m.Called(ctx, email)
 	if args.Get(0) == nil {
@@ -60,6 +68,14 @@ func (m *MockUserRepository) CreateProfile(ctx context.Context, profile *models.
 }
 
 func (m *MockUserRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Profile), args.Error(1)
+}
+
+func (m *MockUserRepository) GetProfileByUserIDIncludingDeleted(ctx context.Context, userID string) (*models.Profile, error) {
 	args := m.Called(ctx, userID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
