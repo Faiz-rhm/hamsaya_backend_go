@@ -91,11 +91,15 @@ type UserResponse struct {
 
 // ProfileResponse represents a profile for API responses
 type ProfileResponse struct {
-	ID         string  `json:"id"`
-	FirstName  *string `json:"first_name,omitempty"`
-	LastName   *string `json:"last_name,omitempty"`
-	Avatar     *Photo  `json:"avatar,omitempty"`
-	IsComplete bool    `json:"is_complete"`
+	ID           string  `json:"id"`
+	FirstName    *string `json:"first_name,omitempty"`
+	LastName     *string `json:"last_name,omitempty"`
+	Avatar       *Photo  `json:"avatar,omitempty"`
+	Province     *string `json:"province,omitempty"`
+	District     *string `json:"district,omitempty"`
+	Neighborhood *string `json:"neighborhood,omitempty"`
+	Country      *string `json:"country,omitempty"`
+	IsComplete   bool    `json:"is_complete"`
 }
 
 // AuthResponse represents the response after successful authentication
