@@ -76,6 +76,21 @@ curl http://localhost:8080/health
 open http://localhost:8080/swagger/index.html
 ```
 
+## Images not loading? (MinIO)
+
+Post images are served from **MinIO** on port **9000**. If image URLs like `http://...:9000/hamsaya-uploads/post/xxx.webp` don't load, start MinIO (and optionally Postgres/Redis if you use Docker for them):
+
+```bash
+docker-compose up -d postgres redis minio
+```
+
+Then ensure your backend `.env` has a `CDN_URL` your app can reach:
+
+- **iOS Simulator:** `CDN_URL=http://127.0.0.1:9000`
+- **Physical device (same Wi‑Fi as Mac):** `CDN_URL=http://YOUR_MAC_IP:9000` (e.g. `http://192.168.100.17:9000`)
+
+Restart the API after changing `.env`.
+
 ## Common Commands
 
 ```bash
