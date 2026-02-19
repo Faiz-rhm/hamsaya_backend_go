@@ -26,6 +26,8 @@ help:
 	@echo "  make migrate-status - Check migration status"
 	@echo "  make seed           - Seed database with sample data"
 	@echo "  make seed-demo      - Seed database with comprehensive demo data"
+	@echo "  make db-reset       - Remove all data from database (keeps schema)"
+	@echo "  make seed-sell-categories - Seed sell_categories only (no data wipe)"
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make lint           - Run linter"
@@ -203,6 +205,18 @@ seed-demo:
 	@echo "Seeding database with comprehensive demo data..."
 	go run cmd/seed-demo/main.go
 	@echo "Demo database seeding complete"
+
+# Remove all data from database (keeps schema)
+db-reset:
+	@echo "Removing all data from database..."
+	go run cmd/db-reset/main.go
+	@echo "Database reset complete"
+
+# Seed sell_categories only (no data wipe). Use when categories are empty.
+seed-sell-categories:
+	@echo "Seeding sell categories..."
+	SEED_CATEGORIES_ONLY=1 go run cmd/db-reset/main.go
+	@echo "Sell categories seeded"
 
 # Run security scanner (gosec)
 security-scan:
