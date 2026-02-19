@@ -567,6 +567,9 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		queryBuilder.WriteString(fmt.Sprintf(" AND sold = $%d", argCount))
 		args = append(args, *filter.Sold)
 		argCount++
+	} else {
+		// Exclude SELL posts marked as sold from feed and listings (they appear only in "my posts" with sold=true)
+		queryBuilder.WriteString(" AND (type != 'SELL' OR sold = false)")
 	}
 
 	// Location-based filtering (radius search)
@@ -699,6 +702,8 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 		queryBuilder.WriteString(fmt.Sprintf(" AND sold = $%d", argCount))
 		args = append(args, *filter.Sold)
 		argCount++
+	} else {
+		queryBuilder.WriteString(" AND (type != 'SELL' OR sold = false)")
 	}
 
 	// Location-based filtering (radius search)

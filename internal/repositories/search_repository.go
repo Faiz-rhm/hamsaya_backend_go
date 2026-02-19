@@ -49,6 +49,7 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 		FROM posts p
 		WHERE p.deleted_at IS NULL
 			AND p.status = true
+			AND (p.type != 'SELL' OR p.sold = false)
 	`
 
 	args := []interface{}{}
@@ -429,6 +430,7 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 		FROM posts p
 		WHERE p.deleted_at IS NULL
 			AND p.status = true
+			AND (p.type != 'SELL' OR p.sold = false)
 			AND p.address_location IS NOT NULL
 			AND ST_DWithin(
 				p.address_location::geography,
