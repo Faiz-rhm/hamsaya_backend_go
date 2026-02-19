@@ -49,13 +49,24 @@ type BusinessSearchResult struct {
 	IsFollowing    bool      `json:"is_following,omitempty"`
 }
 
+// DiscoverFilter is the tab/filter for discover: all, business, event, sell
+type DiscoverFilter string
+
+const (
+	DiscoverFilterAll      DiscoverFilter = "all"
+	DiscoverFilterBusiness DiscoverFilter = "business"
+	DiscoverFilterEvent    DiscoverFilter = "event"
+	DiscoverFilterSell     DiscoverFilter = "sell"
+)
+
 // DiscoverRequest represents a discovery/map request
 type DiscoverRequest struct {
-	Latitude  float64    `json:"latitude" validate:"required,latitude"`
-	Longitude float64    `json:"longitude" validate:"required,longitude"`
-	RadiusKm  float64    `json:"radius_km" validate:"required,min=0.1,max=100"`
-	Type      *PostType  `json:"type" validate:"omitempty,oneof=FEED EVENT SELL PULL"`
-	Limit     int        `json:"limit" validate:"omitempty,min=1,max=500"`
+	Latitude  float64        `json:"latitude" validate:"required,latitude"`
+	Longitude float64        `json:"longitude" validate:"required,longitude"`
+	RadiusKm  float64        `json:"radius_km" validate:"required,min=0.1,max=100"`
+	Filter    DiscoverFilter `json:"filter" validate:"omitempty,oneof=all business event sell"`
+	Type      *PostType      `json:"type" validate:"omitempty,oneof=FEED EVENT SELL PULL"`
+	Limit     int            `json:"limit" validate:"omitempty,min=1,max=500"`
 }
 
 // DiscoverResponse represents discovery results

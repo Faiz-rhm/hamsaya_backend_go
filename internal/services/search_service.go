@@ -116,7 +116,8 @@ func (s *SearchService) Search(ctx context.Context, userID *string, req *models.
 	return response, nil
 }
 
-// Discover performs location-based discovery for map view
+// Discover performs location-based discovery for map view.
+// Filter: all = posts (EVENT+SELL) + businesses; business = only businesses; event = only EVENT posts; sell = only SELL posts.
 func (s *SearchService) Discover(ctx context.Context, userID *string, req *models.DiscoverRequest) (*models.DiscoverResponse, error) {
 	// Set default limit
 	limit := req.Limit
@@ -129,20 +130,38 @@ func (s *SearchService) Discover(ctx context.Context, userID *string, req *model
 		Businesses: []*models.DiscoverBusiness{},
 	}
 
-	// Get posts within radius
-	posts, err := s.searchRepo.GetDiscoverPosts(ctx, req.Latitude, req.Longitude, req.RadiusKm, req.Type, limit)
-	if err != nil {
-		s.logger.Error("Failed to get discover posts", zap.Error(err))
-	} else {
-		response.Posts = s.enrichDiscoverPosts(ctx, posts)
+	filter := req.Filter
+	if filter == "" {
+		filter = models.DiscoverFilterAll
 	}
 
-	// Get businesses within radius
-	businesses, err := s.searchRepo.GetDiscoverBusinesses(ctx, req.Latitude, req.Longitude, req.RadiusKm, limit)
-	if err != nil {
-		s.logger.Error("Failed to get discover businesses", zap.Error(err))
-	} else {
-		response.Businesses = s.enrichDiscoverBusinesses(ctx, businesses)
+	// Fetch posts only when filter is all, event, or sell
+	if filter == models.DiscoverFilterAll || filter == models.DiscoverFilterEvent || filter == models.DiscoverFilterSell {
+		var postType *models.PostType
+		if filter == models.DiscoverFilterEvent {
+			pt := models.PostTypeEvent
+			postType = &pt
+		} else if filter == models.DiscoverFilterSell {
+			pt := models.PostTypeSell
+			postType = &pt
+		}
+		// if all, postType stays nil so GetDiscoverPosts returns both EVENT and SELL
+		posts, err := s.searchRepo.GetDiscoverPosts(ctx, req.Latitude, req.Longitude, req.RadiusKm, postType, limit)
+		if err != nil {
+			s.logger.Error("Failed to get discover posts", zap.Error(err))
+		} else {
+			response.Posts = s.enrichDiscoverPosts(ctx, posts)
+		}
+	}
+
+	// Fetch businesses only when filter is all or business
+	if filter == models.DiscoverFilterAll || filter == models.DiscoverFilterBusiness {
+		businesses, err := s.searchRepo.GetDiscoverBusinesses(ctx, req.Latitude, req.Longitude, req.RadiusKm, limit)
+		if err != nil {
+			s.logger.Error("Failed to get discover businesses", zap.Error(err))
+		} else {
+			response.Businesses = s.enrichDiscoverBusinesses(ctx, businesses)
+		}
 	}
 
 	response.Total = len(response.Posts) + len(response.Businesses)

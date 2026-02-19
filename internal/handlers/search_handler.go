@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/models"
@@ -355,6 +356,7 @@ func (h *SearchHandler) SearchBusinesses(c *gin.Context) {
 // @Param latitude query number true "Latitude"
 // @Param longitude query number true "Longitude"
 // @Param radius_km query number true "Radius in kilometers (max 100)"
+// @Param filter query string false "Filter: all (default), business, event, sell"
 // @Param type query string false "Post type filter: FEED, EVENT, SELL, PULL"
 // @Param limit query int false "Limit results (default 100, max 500)"
 // @Security BearerAuth
@@ -399,6 +401,21 @@ func (h *SearchHandler) Discover(c *gin.Context) {
 		}
 	}
 
+	// filter: all | business | event | sell (accept uppercase from app and normalize)
+	filter := models.DiscoverFilterAll
+	if filterStr := c.Query("filter"); filterStr != "" {
+		switch strings.ToLower(strings.TrimSpace(filterStr)) {
+		case "business":
+			filter = models.DiscoverFilterBusiness
+		case "event":
+			filter = models.DiscoverFilterEvent
+		case "sell":
+			filter = models.DiscoverFilterSell
+		default:
+			filter = models.DiscoverFilterAll
+		}
+	}
+
 	var postType *models.PostType
 	if typeStr := c.Query("type"); typeStr != "" {
 		pt := models.PostType(typeStr)
@@ -410,6 +427,7 @@ func (h *SearchHandler) Discover(c *gin.Context) {
 		Latitude:  latitude,
 		Longitude: longitude,
 		RadiusKm:  radiusKm,
+		Filter:    filter,
 		Type:      postType,
 		Limit:     limit,
 	}
