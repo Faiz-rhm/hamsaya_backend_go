@@ -742,7 +742,7 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		}
 	}
 
-	// Add location info
+	// Add location info (is_location for both SELL and EVENT so discover/map work)
 	if post.AddressLocation != nil && post.AddressLocation.Valid {
 		response.Location = &models.LocationInfo{
 			Latitude:     &post.AddressLocation.P.Y,
@@ -753,6 +753,7 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 			Neighborhood: post.Neighborhood,
 		}
 	}
+	response.IsLocation = &post.IsLocation
 
 	// Get engagement status if viewer is authenticated
 	if viewerID != nil && *viewerID != "" {
@@ -902,7 +903,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		}
 	}
 
-	// Add location info
+	// Add location info (is_location for both SELL and EVENT so discover/map work)
 	if post.AddressLocation != nil && post.AddressLocation.Valid {
 		response.Location = &models.LocationInfo{
 			Latitude:     &post.AddressLocation.P.Y,
@@ -913,6 +914,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 			Neighborhood: post.Neighborhood,
 		}
 	}
+	response.IsLocation = &post.IsLocation
 
 	// Get engagement status if viewer is authenticated
 	if viewerID != nil && *viewerID != "" {
