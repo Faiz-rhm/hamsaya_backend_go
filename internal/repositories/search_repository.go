@@ -430,6 +430,7 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 		FROM posts p
 		WHERE p.deleted_at IS NULL
 			AND p.status = true
+			AND p.type IN ('EVENT', 'SELL')
 			AND (p.type != 'SELL' OR p.sold = false)
 			AND p.address_location IS NOT NULL
 			AND ST_DWithin(
@@ -442,7 +443,7 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 	args := []interface{}{lng, lat, radiusKm * 1000}
 
 	if postType != nil {
-		query += ` AND p.type = $4`
+		query += fmt.Sprintf(` AND p.type = $%d`, len(args)+1)
 		args = append(args, *postType)
 	}
 

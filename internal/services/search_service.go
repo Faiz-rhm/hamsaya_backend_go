@@ -311,20 +311,20 @@ func (s *SearchService) enrichBusinesses(ctx context.Context, businesses []*mode
 
 // enrichDiscoverPosts enriches discover post results
 func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models.Post) []*models.DiscoverPost {
-	var results []*models.DiscoverPost
+	results := make([]*models.DiscoverPost, 0, len(posts))
 
 	for _, post := range posts {
-		// Extract location
 		var location *models.Location
-		if post.AddressLocation != nil {
+		if post.AddressLocation != nil && post.AddressLocation.Valid {
 			location = &models.Location{
-				Country:  post.Country,
-				Province: post.Province,
-				District: post.District,
+				Latitude:  post.AddressLocation.P.Y,
+				Longitude: post.AddressLocation.P.X,
+				Country:   post.Country,
+				Province:  post.Province,
+				District:  post.District,
 			}
 		}
 
-		// Format dates
 		var startDate, startTime *string
 		if post.StartDate != nil {
 			dateStr := post.StartDate.Format("2006-01-02")
@@ -340,9 +340,8 @@ func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models
 			Type:        post.Type,
 			Title:       post.Title,
 			Description: post.Description,
-			Thumbnail:   nil, // Will be empty for now
+			Thumbnail:   nil,
 			Location:    location,
-			Distance:    0, // Distance is calculated in repository
 			Price:       post.Price,
 			StartDate:   startDate,
 			StartTime:   startTime,
@@ -357,16 +356,17 @@ func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models
 
 // enrichDiscoverBusinesses enriches discover business results
 func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses []*models.BusinessProfile) []*models.DiscoverBusiness {
-	var results []*models.DiscoverBusiness
+	results := make([]*models.DiscoverBusiness, 0, len(businesses))
 
 	for _, business := range businesses {
-		// Extract location
 		var location *models.Location
-		if business.AddressLocation != nil {
+		if business.AddressLocation != nil && business.AddressLocation.Valid {
 			location = &models.Location{
-				Country:  business.Country,
-				Province: business.Province,
-				District: business.District,
+				Latitude:  business.AddressLocation.P.Y,
+				Longitude: business.AddressLocation.P.X,
+				Country:   business.Country,
+				Province:  business.Province,
+				District:  business.District,
 			}
 		}
 
@@ -376,8 +376,7 @@ func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses
 			Description: business.Description,
 			Avatar:      business.Avatar,
 			Location:    location,
-			Distance:    0, // Distance is calculated in repository
-			Categories:  []string{}, // Categories will be empty for now
+			Categories:  []string{},
 			TotalFollow: business.TotalFollow,
 		}
 
