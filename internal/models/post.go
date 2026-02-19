@@ -207,6 +207,15 @@ type UpdatePostRequest struct {
 	EndDate   *time.Time `json:"end_date,omitempty"`
 	EndTime   *time.Time `json:"end_time,omitempty"`
 
+	// Location (top-level or nested). When set, address_location is updated so post appears in discover.
+	Latitude   *float64             `json:"latitude,omitempty"`
+	Longitude  *float64             `json:"longitude,omitempty"`
+	Location   *CreatePostLocation  `json:"location,omitempty"`
+	Country    *string              `json:"country,omitempty"`
+	Province   *string              `json:"province,omitempty"`
+	District   *string              `json:"district,omitempty"`
+	Neighborhood *string            `json:"neighborhood,omitempty"`
+
 	// Attachment changes: newly uploaded photo objects / URLs, and IDs of attachments to remove.
 	Attachments        []json.RawMessage `json:"attachments,omitempty"`
 	DeletedAttachments []string          `json:"deleted_attachments,omitempty"`

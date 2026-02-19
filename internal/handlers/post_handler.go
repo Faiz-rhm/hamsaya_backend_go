@@ -14,6 +14,20 @@ import (
 	"go.uber.org/zap"
 )
 
+// parseFloat64 extracts float64 from JSON-decoded interface{} (number types).
+func parseFloat64(v interface{}) (float64, bool) {
+	switch x := v.(type) {
+	case float64:
+		return x, true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	default:
+		return 0, false
+	}
+}
+
 // PostHandler handles post-related endpoints
 type PostHandler struct {
 	postService    *services.PostService
@@ -58,11 +72,56 @@ func (h *PostHandler) CreatePost(c *gin.Context) {
 		return
 	}
 
-	// Parse request
-	var req models.CreatePostRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// Read body once so we can fallback-parse location if binding misses it
+	body, err := io.ReadAll(c.Request.Body)
+	if err != nil {
 		utils.SendError(c, http.StatusBadRequest, "Invalid request body", err)
 		return
+	}
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+	// Parse request
+	var req models.CreatePostRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", err)
+		return
+	}
+
+	// Fallback: some clients/encoding can leave latitude/longitude unset when using map[string]interface{} or number types
+	if req.Latitude == nil || req.Longitude == nil {
+		var raw map[string]interface{}
+		if json.Unmarshal(body, &raw) == nil {
+			if v, ok := raw["latitude"]; ok && v != nil {
+				if f, ok := parseFloat64(v); ok {
+					req.Latitude = &f
+				}
+			}
+			if v, ok := raw["longitude"]; ok && v != nil {
+				if f, ok := parseFloat64(v); ok {
+					req.Longitude = &f
+				}
+			}
+			if v, ok := raw["is_location"]; ok && v != nil {
+				if b, ok := v.(bool); ok {
+					req.IsLocation = &b
+				}
+			}
+			if loc, ok := raw["location"].(map[string]interface{}); ok {
+				if req.Location == nil {
+					req.Location = &models.CreatePostLocation{}
+				}
+				if v, ok := loc["latitude"]; ok && v != nil {
+					if f, ok := parseFloat64(v); ok {
+						req.Location.Latitude = &f
+					}
+				}
+				if v, ok := loc["longitude"]; ok && v != nil {
+					if f, ok := parseFloat64(v); ok {
+						req.Location.Longitude = &f
+					}
+				}
+			}
+		}
 	}
 
 	// Validate request

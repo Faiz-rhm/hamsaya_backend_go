@@ -417,12 +417,20 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 	return businesses, nil
 }
 
-// GetDiscoverPosts gets posts within a radius for map discovery
+// GetDiscoverPosts gets posts within a radius for map discovery.
+// We select location as ST_X/ST_Y (not raw geography) because pgx cannot scan PostGIS geography into pgtype.Point.
 func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiusKm float64, postType *models.PostType, limit int) ([]*models.Post, error) {
 	query := `
-		SELECT p.*,
-			ST_Y(p.address_location::geometry) as latitude,
-			ST_X(p.address_location::geometry) as longitude,
+		SELECT
+			p.id, p.user_id, p.business_id, p.original_post_id, p.category_id,
+			p.title, p.description, p.type, p.status, p.visibility,
+			p.currency, p.price, p.discount, p.free, p.sold, p.is_promoted, p.country_code, p.contact_no, p.is_location,
+			p.start_date, p.start_time, p.end_date, p.end_time, p.event_state, p.interested_count, p.going_count, p.expired_at,
+			ST_X(p.address_location::geometry)::double precision, ST_Y(p.address_location::geometry)::double precision,
+			ST_X(p.user_location::geometry)::double precision, ST_Y(p.user_location::geometry)::double precision,
+			p.country, p.province, p.district, p.neighborhood,
+			p.total_comments, p.total_likes, p.total_shares,
+			p.created_at, p.updated_at, p.deleted_at,
 			ST_Distance(
 				p.address_location::geography,
 				ST_SetSRID(ST_MakePoint($1, $2), 4326)::geography
@@ -463,7 +471,8 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 	var posts []*models.Post
 	for rows.Next() {
 		post := &models.Post{}
-		var lat, lng, distance *float64
+		var addrLng, addrLat, userLng, userLat *float64
+		var distance *float64
 
 		err := rows.Scan(
 			&post.ID,
@@ -493,8 +502,10 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 			&post.InterestedCount,
 			&post.GoingCount,
 			&post.ExpiredAt,
-			&post.AddressLocation,
-			&post.UserLocation,
+			&addrLng,
+			&addrLat,
+			&userLng,
+			&userLat,
 			&post.Country,
 			&post.Province,
 			&post.District,
@@ -505,12 +516,16 @@ func (r *searchRepository) GetDiscoverPosts(ctx context.Context, lat, lng, radiu
 			&post.CreatedAt,
 			&post.UpdatedAt,
 			&post.DeletedAt,
-			&lat,
-			&lng,
 			&distance,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan post: %w", err)
+		}
+		if addrLng != nil && addrLat != nil {
+			post.AddressLocation = &pgtype.Point{P: pgtype.Vec2{X: *addrLng, Y: *addrLat}, Valid: true}
+		}
+		if userLng != nil && userLat != nil {
+			post.UserLocation = &pgtype.Point{P: pgtype.Vec2{X: *userLng, Y: *userLat}, Valid: true}
 		}
 
 		posts = append(posts, post)

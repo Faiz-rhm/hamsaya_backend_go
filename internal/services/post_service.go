@@ -105,6 +105,34 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		post.EventState = &eventState
 	}
 
+	// Handle location (top-level or nested from app) — must run before Create so DB has address_location/is_location
+	lat, lon := req.Latitude, req.Longitude
+	if (lat == nil || lon == nil) && req.Location != nil {
+		lat, lon = req.Location.Latitude, req.Location.Longitude
+	}
+	if lat != nil && lon != nil {
+		post.AddressLocation = &pgtype.Point{
+			P:     pgtype.Vec2{X: *lon, Y: *lat},
+			Valid: true,
+		}
+		post.Country = req.Country
+		post.Province = req.Province
+		post.District = req.District
+		post.Neighborhood = req.Neighborhood
+		if req.IsLocation != nil {
+			post.IsLocation = *req.IsLocation
+		} else {
+			post.IsLocation = true
+		}
+	} else if req.IsLocation != nil {
+		post.IsLocation = *req.IsLocation
+	}
+
+	// Shared post reference (must be set before Create)
+	if req.OriginalPostID != nil {
+		post.OriginalPostID = req.OriginalPostID
+	}
+
 	// Create post in database first (needed before creating poll)
 	if err := s.postRepo.Create(ctx, post); err != nil {
 		s.logger.Error("Failed to create post", zap.String("user_id", userID), zap.Error(err))
@@ -167,34 +195,6 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 				zap.Int("options_count", len(pollOptions)),
 			)
 		}
-	}
-
-	// Handle location (top-level or nested from app)
-	lat, lon := req.Latitude, req.Longitude
-	if (lat == nil || lon == nil) && req.Location != nil {
-		lat, lon = req.Location.Latitude, req.Location.Longitude
-	}
-	if lat != nil && lon != nil {
-		post.AddressLocation = &pgtype.Point{
-			P:     pgtype.Vec2{X: *lon, Y: *lat},
-			Valid: true,
-		}
-		post.Country = req.Country
-		post.Province = req.Province
-		post.District = req.District
-		post.Neighborhood = req.Neighborhood
-		if req.IsLocation != nil {
-			post.IsLocation = *req.IsLocation
-		} else {
-			post.IsLocation = true
-		}
-	} else if req.IsLocation != nil {
-		post.IsLocation = *req.IsLocation
-	}
-
-	// Handle shared post
-	if req.OriginalPostID != nil {
-		post.OriginalPostID = req.OriginalPostID
 	}
 
 	// Create attachments if provided (full Photo or URL-only)
@@ -309,6 +309,35 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 	}
 	if req.CategoryID != nil {
 		post.CategoryID = req.CategoryID
+	}
+
+	// Location: same logic as create (top-level or nested)
+	lat, lon := req.Latitude, req.Longitude
+	if (lat == nil || lon == nil) && req.Location != nil {
+		lat, lon = req.Location.Latitude, req.Location.Longitude
+	}
+	if lat != nil && lon != nil {
+		post.AddressLocation = &pgtype.Point{
+			P:     pgtype.Vec2{X: *lon, Y: *lat},
+			Valid: true,
+		}
+		if req.Country != nil {
+			post.Country = req.Country
+		}
+		if req.Province != nil {
+			post.Province = req.Province
+		}
+		if req.District != nil {
+			post.District = req.District
+		}
+		if req.Neighborhood != nil {
+			post.Neighborhood = req.Neighborhood
+		}
+		if req.IsLocation != nil {
+			post.IsLocation = *req.IsLocation
+		} else {
+			post.IsLocation = true
+		}
 	}
 
 	post.UpdatedAt = time.Now()
