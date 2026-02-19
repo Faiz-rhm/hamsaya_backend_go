@@ -10,6 +10,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/geocoding"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
@@ -222,6 +223,21 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID, userID
 		business.AddressLocation = &pgtype.Point{
 			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude},
 			Valid: true,
+		}
+		// Use client-supplied address if present; otherwise reverse-geocode
+		clientSentAddress := req.Country != nil || req.Province != nil || req.District != nil || req.Neighborhood != nil
+		if !clientSentAddress {
+			rev, err := geocoding.ReverseGeocode(ctx, *req.Latitude, *req.Longitude)
+			if err != nil {
+				s.logger.Warn("Reverse geocode failed", zap.Float64("lat", *req.Latitude), zap.Float64("lng", *req.Longitude), zap.Error(err))
+			} else if rev != nil {
+				business.Country = stringPtr(rev.Country)
+				business.Province = stringPtr(rev.Province)
+				business.District = stringPtr(rev.District)
+				business.Neighborhood = stringPtr(rev.Neighborhood)
+			} else {
+				business.Country, business.Province, business.District, business.Neighborhood = nil, nil, nil, nil
+			}
 		}
 	}
 
@@ -592,15 +608,20 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 
 	// Add location info
 	if business.AddressLocation != nil && business.AddressLocation.Valid {
+		lat, lng := business.AddressLocation.P.Y, business.AddressLocation.P.X
 		response.Location = &models.LocationInfo{
-			Latitude:     &business.AddressLocation.P.Y,
-			Longitude:    &business.AddressLocation.P.X,
+			Latitude:     &lat,
+			Longitude:    &lng,
 			Country:      business.Country,
 			Province:     business.Province,
 			District:     business.District,
 			Neighborhood: business.Neighborhood,
 		}
+		// address_location as "(x,y)" for mobile: app uses x=latitude, y=longitude
+		addrLoc := fmt.Sprintf("(%.6f,%.6f)", lat, lng)
+		response.AddressLocation = &addrLoc
 	}
+	response.Country = business.Country
 
 	// Get categories (always set so API returns "categories" key, never null)
 	response.Categories = []models.BusinessCategory{}
@@ -643,4 +664,12 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 	}
 
 	return response, nil
+}
+
+// stringPtr returns nil for empty s, otherwise a pointer to s.
+func stringPtr(s string) *string {
+	if s == "" {
+		return nil
+	}
+	return &s
 }

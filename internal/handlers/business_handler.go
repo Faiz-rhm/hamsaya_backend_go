@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -286,11 +287,32 @@ func (h *BusinessHandler) UpdateBusiness(c *gin.Context) {
 
 	businessID := c.Param("business_id")
 
-	// Parse request
-	var req models.UpdateBusinessRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	// Parse request (support both top-level and nested "location" for latitude/longitude)
+	body, err := c.GetRawData()
+	if err != nil {
 		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
 		return
+	}
+	var req models.UpdateBusinessRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	var raw map[string]interface{}
+	_ = json.Unmarshal(body, &raw)
+	if loc, ok := raw["location"]; ok && loc != nil {
+		if locMap, ok := loc.(map[string]interface{}); ok {
+			if v, ok := locMap["latitude"]; ok && v != nil {
+				if f, ok := v.(float64); ok {
+					req.Latitude = &f
+				}
+			}
+			if v, ok := locMap["longitude"]; ok && v != nil {
+				if f, ok := v.(float64); ok {
+					req.Longitude = &f
+				}
+			}
+		}
 	}
 
 	// Validate request

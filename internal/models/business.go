@@ -148,24 +148,26 @@ type SetBusinessHoursRequest struct {
 
 // BusinessResponse represents a business profile in API responses
 type BusinessResponse struct {
-	ID             string                    `json:"id"`
-	UserID         string                    `json:"user_id"`
-	Name           string                    `json:"name"`
-	LicenseNo      *string                   `json:"license_no,omitempty"`
-	Description    *string                   `json:"description,omitempty"`
-	Address        *string                   `json:"address,omitempty"`
-	PhoneNumber    *string                   `json:"phone_number,omitempty"`
-	Email          *string                   `json:"email,omitempty"`
-	Website        *string                   `json:"website,omitempty"`
-	Avatar         *Photo                    `json:"avatar,omitempty"`
-	Cover          *Photo                    `json:"cover,omitempty"`
-	Status         bool                      `json:"status"`
-	AdditionalInfo *string                   `json:"additional_info,omitempty"`
-	Location       *LocationInfo             `json:"location,omitempty"`
-	Province       *string                   `json:"province,omitempty"`
-	District       *string                   `json:"district,omitempty"`
-	Neighborhood   *string                   `json:"neighborhood,omitempty"`
-	ShowLocation   bool                      `json:"show_location"`
+	ID               string                    `json:"id"`
+	UserID           string                    `json:"user_id"`
+	Name             string                    `json:"name"`
+	LicenseNo        *string                   `json:"license_no,omitempty"`
+	Description      *string                   `json:"description,omitempty"`
+	Address          *string                   `json:"address,omitempty"`
+	PhoneNumber      *string                   `json:"phone_number,omitempty"`
+	Email            *string                   `json:"email,omitempty"`
+	Website          *string                   `json:"website,omitempty"`
+	Avatar           *Photo                    `json:"avatar,omitempty"`
+	Cover            *Photo                    `json:"cover,omitempty"`
+	Status           bool                      `json:"status"`
+	AdditionalInfo   *string                   `json:"additional_info,omitempty"`
+	Location         *LocationInfo             `json:"location"`              // always present (null if no coordinates)
+	AddressLocation  *string                   `json:"address_location"`       // "(lat,lng)" for mobile; null if not set
+	Country          *string                   `json:"country"`
+	Province         *string                   `json:"province"`
+	District         *string                   `json:"district"`
+	Neighborhood     *string                   `json:"neighborhood"`
+	ShowLocation     bool                      `json:"show_location"`
 	TotalViews     int                       `json:"total_views"`
 	TotalFollow    int                       `json:"total_follow"`
 	Categories     []BusinessCategory        `json:"categories"`
