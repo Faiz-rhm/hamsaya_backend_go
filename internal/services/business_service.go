@@ -125,13 +125,22 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, userID string, req
 	return s.GetBusiness(ctx, businessID, &userID)
 }
 
-// GetBusiness gets a business profile by ID
+// GetBusiness gets a business profile by ID.
+// If status is false (not visible to others), only the owner can view; others get 404.
 func (s *BusinessService) GetBusiness(ctx context.Context, businessID string, viewerID *string) (*models.BusinessResponse, error) {
 	// Get business
 	business, err := s.businessRepo.GetByID(ctx, businessID)
 	if err != nil {
 		s.logger.Warn("Business not found", zap.String("business_id", businessID), zap.Error(err))
 		return nil, utils.NewNotFoundError("Business not found", err)
+	}
+
+	// If business is not visible to others, only owner can view
+	if !business.Status {
+		isOwner := viewerID != nil && *viewerID == business.UserID
+		if !isOwner {
+			return nil, utils.NewNotFoundError("Business not found", nil)
+		}
 	}
 
 	// Enrich business

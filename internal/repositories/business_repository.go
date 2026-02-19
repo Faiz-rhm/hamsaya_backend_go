@@ -388,6 +388,8 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 	argCount := 1
 
 	conditions = append(conditions, "bp.deleted_at IS NULL")
+	// Only list businesses that are visible to others (status = true)
+	conditions = append(conditions, "bp.status = true")
 
 	if filter.UserID != nil {
 		conditions = append(conditions, fmt.Sprintf("bp.user_id = $%d", argCount))
