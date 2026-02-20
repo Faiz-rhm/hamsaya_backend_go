@@ -150,16 +150,16 @@ func main() {
 	oauthService := services.NewOAuthService(cfg, userRepo, logger)
 	storageService := services.NewStorageService(cfg, logger)
 	profileService := services.NewProfileService(userRepo, postRepo, relationshipsRepo, logger)
-	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, logger)
+	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, fcmClient, redisClient, logger)
+	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
-	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, categoryRepo, eventRepo, cfg.Storage.BucketName, logger)
-	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, logger)
-	pollService := services.NewPollService(pollRepo, postRepo, logger)
-	eventService := services.NewEventService(eventRepo, postRepo, userRepo, logger)
+	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, categoryRepo, eventRepo, notificationService, cfg.Storage.BucketName, logger)
+	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, notificationService, logger)
+	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
+	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
 	authService := services.NewAuthService(userRepo, passwordService, jwtService, emailService, tokenStorage, mfaService, cfg, logger)
 	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, wsHub, logger)
-	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, fcmClient, redisClient, logger)
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	adminService := services.NewAdminService(adminRepo, logger)
@@ -500,8 +500,16 @@ func main() {
 
 	sugaredLogger.Info("Routes registered successfully")
 
-	// Create HTTP server
-	addr := fmt.Sprintf("%s:%s", cfg.Server.Host, cfg.Server.Port)
+	// Bind to all interfaces when host is empty or localhost so the app can connect via LAN IP (e.g. 192.168.x.x:8080)
+	host := cfg.Server.Host
+	if host == "" || host == "localhost" || host == "127.0.0.1" {
+		host = "0.0.0.0"
+	}
+	port := cfg.Server.Port
+	if port == "" {
+		port = "8080"
+	}
+	addr := fmt.Sprintf("%s:%s", host, port)
 	srv := &http.Server{
 		Addr:           addr,
 		Handler:        router,

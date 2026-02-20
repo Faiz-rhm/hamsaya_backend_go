@@ -13,10 +13,11 @@ import (
 
 // EventService handles event interest operations
 type EventService struct {
-	eventRepo repositories.EventRepository
-	postRepo  repositories.PostRepository
-	userRepo  repositories.UserRepository
-	logger    *zap.Logger
+	eventRepo           repositories.EventRepository
+	postRepo            repositories.PostRepository
+	userRepo            repositories.UserRepository
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewEventService creates a new event service
@@ -24,13 +25,15 @@ func NewEventService(
 	eventRepo repositories.EventRepository,
 	postRepo repositories.PostRepository,
 	userRepo repositories.UserRepository,
+	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *EventService {
 	return &EventService{
-		eventRepo: eventRepo,
-		postRepo:  postRepo,
-		userRepo:  userRepo,
-		logger:    logger,
+		eventRepo:           eventRepo,
+		postRepo:            postRepo,
+		userRepo:            userRepo,
+		notificationService: notificationService,
+		logger:              logger,
 	}
 }
 
@@ -85,6 +88,33 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 		zap.String("user_id", userID),
 		zap.String("state", string(req.EventState)),
 	)
+
+	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID)
+			if err != nil {
+				s.logger.Warn("Failed to get actor for event notification", zap.Error(err))
+				return
+			}
+			actorName := actor.FullName()
+			title := actorName + " is interested in your event"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":     userID,
+				"actor_name":   actorName,
+				"actor_avatar": actor.Avatar,
+				"post_id":      postID,
+			}
+			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  *post.UserID,
+				Type:    models.NotificationTypeEventInterest,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
+	}
 
 	// Return updated status
 	return s.GetEventInterestStatus(ctx, postID, &userID)

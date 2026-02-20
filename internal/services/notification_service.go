@@ -45,9 +45,37 @@ func NewNotificationService(
 	}
 }
 
-// CreateNotification creates a notification and sends push notification if enabled
+// typeToCategory maps a notification type to its preference category.
+func typeToCategory(t models.NotificationType) models.NotificationCategory {
+	switch t {
+	case models.NotificationTypeLike, models.NotificationTypeComment,
+		models.NotificationTypeMention, models.NotificationTypePostShare,
+		models.NotificationTypePollVote, models.NotificationTypeFollow:
+		return models.NotificationCategoryPosts
+	case models.NotificationTypeMessage:
+		return models.NotificationCategoryMessages
+	case models.NotificationTypeEventInterest:
+		return models.NotificationCategoryEvents
+	case models.NotificationTypeBusinessFollow:
+		return models.NotificationCategoryBusiness
+	default:
+		return models.NotificationCategoryPosts
+	}
+}
+
+// CreateNotification creates a notification and optionally sends a push via FCM.
+// The notification is always saved to the database so the user sees it in the in-app
+// notification list regardless of push being enabled, FCM token presence, or push preferences.
+// It skips self-notifications and only sends push if the user's per-category push preference allows.
 func (s *NotificationService) CreateNotification(ctx context.Context, req *models.CreateNotificationRequest) (*models.NotificationResponse, error) {
-	// Create notification in database
+	// Don't notify the actor themselves
+	if actorID, ok := req.Data["actor_id"]; ok {
+		if actorStr, isStr := actorID.(string); isStr && actorStr == req.UserID {
+			return nil, nil
+		}
+	}
+
+	// Always persist so it appears in the notification list (even when push is disabled)
 	notificationID := uuid.New().String()
 	notification := &models.Notification{
 		ID:        notificationID,
@@ -74,8 +102,22 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 		zap.String("type", string(req.Type)),
 	)
 
-	// Send push notification asynchronously
-	go s.sendPushNotification(ctx, notification)
+	// Check user push preference before sending push
+	sendPush := true
+	category := typeToCategory(req.Type)
+	settings, err := s.settingsRepo.GetByProfileID(ctx, req.UserID)
+	if err == nil {
+		for _, setting := range settings {
+			if setting.Category == category {
+				sendPush = setting.PushPref
+				break
+			}
+		}
+	}
+
+	if sendPush {
+		go s.sendPushNotification(context.WithoutCancel(ctx), notification)
+	}
 
 	return notification.ToNotificationResponse(), nil
 }
@@ -98,7 +140,7 @@ func (s *NotificationService) GetNotifications(ctx context.Context, userID strin
 		return nil, utils.NewInternalError("Failed to get notifications", err)
 	}
 
-	var responses []*models.NotificationResponse
+	responses := make([]*models.NotificationResponse, 0, len(notifications))
 	for _, notification := range notifications {
 		responses = append(responses, notification.ToNotificationResponse())
 	}

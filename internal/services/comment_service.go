@@ -14,10 +14,11 @@ import (
 
 // CommentService handles comment operations
 type CommentService struct {
-	commentRepo repositories.CommentRepository
-	postRepo    repositories.PostRepository
-	userRepo    repositories.UserRepository
-	logger      *zap.Logger
+	commentRepo         repositories.CommentRepository
+	postRepo            repositories.PostRepository
+	userRepo            repositories.UserRepository
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewCommentService creates a new comment service
@@ -25,20 +26,21 @@ func NewCommentService(
 	commentRepo repositories.CommentRepository,
 	postRepo repositories.PostRepository,
 	userRepo repositories.UserRepository,
+	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *CommentService {
 	return &CommentService{
-		commentRepo: commentRepo,
-		postRepo:    postRepo,
-		userRepo:    userRepo,
-		logger:      logger,
+		commentRepo:         commentRepo,
+		postRepo:            postRepo,
+		userRepo:            userRepo,
+		notificationService: notificationService,
+		logger:              logger,
 	}
 }
 
 // CreateComment creates a new comment
 func (s *CommentService) CreateComment(ctx context.Context, postID, userID string, req *models.CreateCommentRequest) (*models.CommentResponse, error) {
-	// Validate post exists
-	_, err := s.postRepo.GetByID(ctx, postID)
+	post, err := s.postRepo.GetByID(ctx, postID)
 	if err != nil {
 		return nil, utils.NewNotFoundError("Post not found", err)
 	}
@@ -114,6 +116,35 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		zap.String("post_id", postID),
 		zap.String("user_id", userID),
 	)
+
+	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			actorName := "Someone"
+			var actorAvatar interface{}
+			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
+				actorName = actor.FullName()
+				actorAvatar = actor.Avatar
+			} else {
+				s.logger.Warn("Failed to get actor for comment notification, using fallback", zap.Error(err))
+			}
+			title := actorName + " commented on your post"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":     userID,
+				"actor_name":   actorName,
+				"actor_avatar": actorAvatar,
+				"post_id":      postID,
+			}
+			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  *post.UserID,
+				Type:    models.NotificationTypeComment,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
+	}
 
 	// Return enriched comment
 	return s.GetComment(ctx, commentID, &userID)

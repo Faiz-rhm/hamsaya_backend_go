@@ -16,14 +16,15 @@ import (
 
 // PostService handles post operations
 type PostService struct {
-	postRepo          repositories.PostRepository
-	pollRepo          repositories.PollRepository
-	userRepo          repositories.UserRepository
-	businessRepo      repositories.BusinessRepository
-	categoryRepo      repositories.CategoryRepository
-	eventRepo         repositories.EventRepository
-	storageBucketName string
-	logger            *zap.Logger
+	postRepo            repositories.PostRepository
+	pollRepo            repositories.PollRepository
+	userRepo            repositories.UserRepository
+	businessRepo        repositories.BusinessRepository
+	categoryRepo        repositories.CategoryRepository
+	eventRepo           repositories.EventRepository
+	notificationService *NotificationService
+	storageBucketName   string
+	logger              *zap.Logger
 }
 
 // NewPostService creates a new post service
@@ -34,18 +35,20 @@ func NewPostService(
 	businessRepo repositories.BusinessRepository,
 	categoryRepo repositories.CategoryRepository,
 	eventRepo repositories.EventRepository,
+	notificationService *NotificationService,
 	storageBucketName string,
 	logger *zap.Logger,
 ) *PostService {
 	return &PostService{
-		postRepo:          postRepo,
-		pollRepo:          pollRepo,
-		userRepo:          userRepo,
-		businessRepo:      businessRepo,
-		categoryRepo:      categoryRepo,
-		eventRepo:         eventRepo,
-		storageBucketName: storageBucketName,
-		logger:            logger,
+		postRepo:            postRepo,
+		pollRepo:            pollRepo,
+		userRepo:            userRepo,
+		businessRepo:        businessRepo,
+		categoryRepo:        categoryRepo,
+		eventRepo:           eventRepo,
+		notificationService: notificationService,
+		storageBucketName:   storageBucketName,
+		logger:              logger,
 	}
 }
 
@@ -463,18 +466,22 @@ func (s *PostService) DeletePost(ctx context.Context, postID, userID string) err
 
 // LikePost likes a post
 func (s *PostService) LikePost(ctx context.Context, userID, postID string) error {
-	// Check if post exists
-	if _, err := s.postRepo.GetByID(ctx, postID); err != nil {
+	post, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
 		return utils.NewNotFoundError("Post not found", err)
 	}
 
-	// Like post (idempotent)
 	if err := s.postRepo.LikePost(ctx, userID, postID); err != nil {
 		s.logger.Error("Failed to like post", zap.String("post_id", postID), zap.Error(err))
 		return utils.NewInternalError("Failed to like post", err)
 	}
 
 	s.logger.Info("Post liked", zap.String("post_id", postID), zap.String("user_id", userID))
+
+	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
+		go s.sendPostNotification(context.WithoutCancel(ctx), userID, *post.UserID, postID, models.NotificationTypeLike, "liked your post")
+	}
+
 	return nil
 }
 
@@ -564,6 +571,10 @@ func (s *PostService) SharePost(ctx context.Context, userID, originalPostID stri
 		zap.String("original_post_id", originalPostID),
 		zap.String("user_id", userID),
 	)
+
+	if originalPost.UserID != nil && *originalPost.UserID != userID && s.notificationService != nil {
+		go s.sendPostNotification(context.WithoutCancel(ctx), userID, *originalPost.UserID, originalPostID, models.NotificationTypePostShare, "shared your post")
+	}
 
 	// Return the original post or the new shared post
 	if share.SharedPostID != nil {
@@ -935,6 +946,33 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 	// Note: OriginalPost is NOT enriched here to prevent infinite recursion
 
 	return response, nil
+}
+
+// sendPostNotification fires a notification for the post owner when someone likes or shares the post.
+func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, recipientUserID, postID string, notifType models.NotificationType, action string) {
+	actorName := "Someone"
+	var actorAvatar interface{}
+	if actor, err := s.userRepo.GetProfileByUserID(ctx, actorUserID); err == nil {
+		actorName = actor.FullName()
+		actorAvatar = actor.Avatar
+	} else {
+		s.logger.Warn("Failed to get actor profile for notification, using fallback", zap.Error(err), zap.String("actor_user_id", actorUserID))
+	}
+	title := actorName + " " + action
+	msg := title
+	data := map[string]interface{}{
+		"actor_id":     actorUserID,
+		"actor_name":   actorName,
+		"actor_avatar": actorAvatar,
+		"post_id":      postID,
+	}
+	s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
+		UserID:  recipientUserID,
+		Type:    notifType,
+		Title:   &title,
+		Message: &msg,
+		Data:    data,
+	})
 }
 
 // validatePostRequest validates post creation request

@@ -11,21 +11,24 @@ import (
 
 // RelationshipsService handles user relationship operations
 type RelationshipsService struct {
-	relationshipsRepo repositories.RelationshipsRepository
-	userRepo          repositories.UserRepository
-	logger            *zap.Logger
+	relationshipsRepo   repositories.RelationshipsRepository
+	userRepo            repositories.UserRepository
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewRelationshipsService creates a new relationships service
 func NewRelationshipsService(
 	relationshipsRepo repositories.RelationshipsRepository,
 	userRepo repositories.UserRepository,
+	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *RelationshipsService {
 	return &RelationshipsService{
-		relationshipsRepo: relationshipsRepo,
-		userRepo:          userRepo,
-		logger:            logger,
+		relationshipsRepo:   relationshipsRepo,
+		userRepo:            userRepo,
+		notificationService: notificationService,
+		logger:              logger,
 	}
 }
 
@@ -69,6 +72,32 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 		zap.String("follower_id", followerID),
 		zap.String("following_id", followingID),
 	)
+
+	if s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			actor, err := s.userRepo.GetProfileByUserID(ctxDetach, followerID)
+			if err != nil {
+				s.logger.Warn("Failed to get actor for follow notification", zap.Error(err))
+				return
+			}
+			actorName := actor.FullName()
+			title := actorName + " started following you"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":     followerID,
+				"actor_name":   actorName,
+				"actor_avatar": actor.Avatar,
+			}
+			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  followingID,
+				Type:    models.NotificationTypeFollow,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
+	}
 
 	return nil
 }

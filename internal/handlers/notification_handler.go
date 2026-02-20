@@ -55,6 +55,13 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 			offset = o
 		}
 	}
+	if offset == 0 && c.Query("offset") == "" {
+		if pageStr := c.Query("page"); pageStr != "" {
+			if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+				offset = p * limit
+			}
+		}
+	}
 
 	// Get notifications
 	notifications, err := h.notificationService.GetNotifications(c.Request.Context(), userID.(string), unreadOnly, limit, offset)

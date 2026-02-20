@@ -212,6 +212,12 @@ db-reset:
 	go run cmd/db-reset/main.go
 	@echo "Database reset complete"
 
+# Backfill notifications from existing post_likes and post_comments (one-time after notification fix)
+backfill-notifications:
+	@echo "Backfilling notifications from existing likes and comments..."
+	go run cmd/backfill-notifications/main.go
+	@echo "Backfill complete"
+
 # Seed sell_categories only (no data wipe). Use when categories are empty.
 seed-sell-categories:
 	@echo "Seeding sell categories..."

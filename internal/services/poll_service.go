@@ -13,21 +13,27 @@ import (
 
 // PollService handles poll operations
 type PollService struct {
-	pollRepo repositories.PollRepository
-	postRepo repositories.PostRepository
-	logger   *zap.Logger
+	pollRepo            repositories.PollRepository
+	postRepo            repositories.PostRepository
+	userRepo            repositories.UserRepository
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewPollService creates a new poll service
 func NewPollService(
 	pollRepo repositories.PollRepository,
 	postRepo repositories.PostRepository,
+	userRepo repositories.UserRepository,
+	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *PollService {
 	return &PollService{
-		pollRepo: pollRepo,
-		postRepo: postRepo,
-		logger:   logger,
+		pollRepo:            pollRepo,
+		postRepo:            postRepo,
+		userRepo:            userRepo,
+		notificationService: notificationService,
+		logger:              logger,
 	}
 }
 
@@ -176,6 +182,40 @@ func (s *PollService) VotePoll(ctx context.Context, pollID, userID, optionID str
 		zap.String("user_id", userID),
 		zap.String("option_id", optionID),
 	)
+
+	if s.notificationService != nil && s.userRepo != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			poll, err := s.pollRepo.GetByID(ctxDetach, pollID)
+			if err != nil {
+				return
+			}
+			post, err := s.postRepo.GetByID(ctxDetach, poll.PostID)
+			if err != nil || post.UserID == nil || *post.UserID == userID {
+				return
+			}
+			actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID)
+			if err != nil {
+				return
+			}
+			actorName := actor.FullName()
+			title := actorName + " voted on your poll"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":     userID,
+				"actor_name":   actorName,
+				"actor_avatar": actor.Avatar,
+				"post_id":      poll.PostID,
+			}
+			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  *post.UserID,
+				Type:    models.NotificationTypePollVote,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
+	}
 
 	// Return enriched poll
 	return s.GetPoll(ctx, pollID, &userID)
