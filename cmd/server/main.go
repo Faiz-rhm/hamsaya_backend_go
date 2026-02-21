@@ -152,7 +152,7 @@ func main() {
 	profileService := services.NewProfileService(userRepo, postRepo, relationshipsRepo, logger)
 	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, fcmClient, redisClient, logger)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
-	businessService := services.NewBusinessService(businessRepo, userRepo, logger)
+	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
 	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, categoryRepo, eventRepo, notificationService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, notificationService, logger)

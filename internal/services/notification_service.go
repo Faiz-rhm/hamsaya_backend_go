@@ -122,11 +122,12 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 	return notification.ToNotificationResponse(), nil
 }
 
-// GetNotifications retrieves notifications for a user
-func (s *NotificationService) GetNotifications(ctx context.Context, userID string, unreadOnly bool, limit, offset int) ([]*models.NotificationResponse, error) {
+// GetNotifications retrieves notifications for a user. businessID is optional; when set, only notifications with data.business_id equal to it are returned.
+func (s *NotificationService) GetNotifications(ctx context.Context, userID string, unreadOnly bool, limit, offset int, businessID *string) ([]*models.NotificationResponse, error) {
 	filter := &models.GetNotificationsFilter{
 		UserID:     userID,
 		UnreadOnly: unreadOnly,
+		BusinessID: businessID,
 		Limit:      limit,
 		Offset:     offset,
 	}

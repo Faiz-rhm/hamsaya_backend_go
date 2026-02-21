@@ -128,6 +128,16 @@ func (r *notificationRepository) List(ctx context.Context, filter *models.GetNot
 		queryBuilder.WriteString(" AND read = false")
 	}
 
+	// Business scope: when filter.BusinessID is set, only that business's notifications;
+	// when not set (user feed), exclude notifications that have data.business_id (show only user-level).
+	if filter.BusinessID != nil && *filter.BusinessID != "" {
+		queryBuilder.WriteString(fmt.Sprintf(" AND data->>'business_id' = $%d", argCount))
+		args = append(args, *filter.BusinessID)
+		argCount++
+	} else {
+		queryBuilder.WriteString(" AND (data->>'business_id' IS NULL OR data->>'business_id' = '')")
+	}
+
 	// Order by created_at DESC
 	queryBuilder.WriteString(" ORDER BY created_at DESC")
 

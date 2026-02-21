@@ -81,6 +81,7 @@ type GetNotificationsFilter struct {
 	UserID      string
 	Type        *NotificationType
 	UnreadOnly  bool
+	BusinessID  *string // when set, only notifications whose data.business_id matches (e.g. BUSINESS_FOLLOW)
 	Limit       int
 	Offset      int
 }

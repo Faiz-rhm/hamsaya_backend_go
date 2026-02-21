@@ -136,6 +136,9 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				"actor_avatar": actorAvatar,
 				"post_id":      postID,
 			}
+			if post.BusinessID != nil && *post.BusinessID != "" {
+				data["business_id"] = *post.BusinessID
+			}
 			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  *post.UserID,
 				Type:    models.NotificationTypeComment,

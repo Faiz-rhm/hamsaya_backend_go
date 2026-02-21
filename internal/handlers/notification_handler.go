@@ -42,6 +42,10 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 
 	// Parse query parameters
 	unreadOnly := c.Query("unread_only") == "true"
+	var businessID *string
+	if b := c.Query("business_id"); b != "" {
+		businessID = &b
+	}
 
 	limit := 20
 	offset := 0
@@ -64,7 +68,7 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 	}
 
 	// Get notifications
-	notifications, err := h.notificationService.GetNotifications(c.Request.Context(), userID.(string), unreadOnly, limit, offset)
+	notifications, err := h.notificationService.GetNotifications(c.Request.Context(), userID.(string), unreadOnly, limit, offset, businessID)
 	if err != nil {
 		h.handleError(c, err)
 		return

@@ -17,21 +17,24 @@ import (
 
 // BusinessService handles business profile operations
 type BusinessService struct {
-	businessRepo repositories.BusinessRepository
-	userRepo     repositories.UserRepository
-	logger       *zap.Logger
+	businessRepo        repositories.BusinessRepository
+	userRepo            repositories.UserRepository
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewBusinessService creates a new business service
 func NewBusinessService(
 	businessRepo repositories.BusinessRepository,
 	userRepo repositories.UserRepository,
+	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *BusinessService {
 	return &BusinessService{
-		businessRepo: businessRepo,
-		userRepo:     userRepo,
-		logger:       logger,
+		businessRepo:        businessRepo,
+		userRepo:            userRepo,
+		notificationService: notificationService,
+		logger:               logger,
 	}
 }
 
@@ -509,8 +512,9 @@ func (s *BusinessService) DeleteGalleryImage(ctx context.Context, businessID, us
 
 // FollowBusiness follows a business
 func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID string) error {
-	// Check if business exists
-	if _, err := s.businessRepo.GetByID(ctx, businessID); err != nil {
+	// Get business to know owner and avoid self-notify
+	business, err := s.businessRepo.GetByID(ctx, businessID)
+	if err != nil {
 		return utils.NewNotFoundError("Business not found", err)
 	}
 
@@ -518,6 +522,39 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 	if err := s.businessRepo.Follow(ctx, businessID, userID); err != nil {
 		s.logger.Error("Failed to follow business", zap.String("business_id", businessID), zap.Error(err))
 		return utils.NewInternalError("Failed to follow business", err)
+	}
+
+	// Notify business owner (skip if follower is the owner)
+	if business.UserID != userID {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			actor, _ := s.userRepo.GetProfileByUserID(ctxDetach, userID)
+			actorName := "Someone"
+			actorAvatar := ""
+			if actor != nil {
+				if n := actor.FullName(); n != "" {
+					actorName = n
+				}
+				if actor.Avatar != nil && actor.Avatar.URL != "" {
+					actorAvatar = actor.Avatar.URL
+				}
+			}
+			title := actorName + " started following your business"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":     userID,
+				"actor_name":   actorName,
+				"actor_avatar": actorAvatar,
+				"business_id":  businessID,
+			}
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  business.UserID,
+				Type:    models.NotificationTypeBusinessFollow,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
 	}
 
 	s.logger.Info("Business followed", zap.String("business_id", businessID), zap.String("user_id", userID))

@@ -949,6 +949,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 }
 
 // sendPostNotification fires a notification for the post owner when someone likes or shares the post.
+// If the post belongs to a business, data.business_id is set so it only appears in business notifications.
 func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, recipientUserID, postID string, notifType models.NotificationType, action string) {
 	actorName := "Someone"
 	var actorAvatar interface{}
@@ -965,6 +966,9 @@ func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, rec
 		"actor_name":   actorName,
 		"actor_avatar": actorAvatar,
 		"post_id":      postID,
+	}
+	if post, err := s.postRepo.GetByID(ctx, postID); err == nil && post.BusinessID != nil && *post.BusinessID != "" {
+		data["business_id"] = *post.BusinessID
 	}
 	s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
 		UserID:  recipientUserID,
