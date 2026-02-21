@@ -83,6 +83,9 @@ type TokenPair struct {
 type UserResponse struct {
 	ID            string    `json:"id"`
 	Email         string    `json:"email"`
+	Role          UserRole  `json:"role,omitempty"`
+	FirstName     *string   `json:"first_name,omitempty"`
+	LastName      *string   `json:"last_name,omitempty"`
 	EmailVerified bool      `json:"email_verified"`
 	PhoneVerified bool      `json:"phone_verified"`
 	MFAEnabled    bool      `json:"mfa_enabled"`

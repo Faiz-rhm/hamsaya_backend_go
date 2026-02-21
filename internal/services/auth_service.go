@@ -1119,6 +1119,9 @@ func (s *AuthService) generateAuthResponse(
 		User: &models.UserResponse{
 			ID:            user.ID,
 			Email:         user.Email,
+			Role:          user.Role,
+			FirstName:     profile.FirstName,
+			LastName:      profile.LastName,
 			EmailVerified: user.EmailVerified,
 			PhoneVerified: user.PhoneVerified,
 			MFAEnabled:    user.MFAEnabled,

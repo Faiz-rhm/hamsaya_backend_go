@@ -254,6 +254,22 @@ func Load() (*Config, error) {
 		},
 	}
 
+	// Default CORS in development so admin panel (e.g. localhost:3001) works without .env
+	if cfg.Server.Env == "development" || cfg.Server.Env == "" {
+		if len(cfg.CORS.AllowedOrigins) == 0 {
+			cfg.CORS.AllowedOrigins = []string{
+				"http://localhost:3000", "http://localhost:3001", "http://localhost:5173",
+				"http://127.0.0.1:3000", "http://127.0.0.1:3001", "http://127.0.0.1:5173",
+			}
+		}
+		if len(cfg.CORS.AllowedMethods) == 0 {
+			cfg.CORS.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
+		}
+		if len(cfg.CORS.AllowedHeaders) == 0 {
+			cfg.CORS.AllowedHeaders = []string{"Content-Type", "Authorization", "Accept", "Origin", "User-Agent"}
+		}
+	}
+
 	return cfg, nil
 }
 

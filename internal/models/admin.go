@@ -150,7 +150,7 @@ type AdminUpdateUserRequest struct {
 	FirstName     *string `json:"first_name"`
 	LastName      *string `json:"last_name"`
 	Email         *string `json:"email" validate:"omitempty,email"`
-	Role          *string `json:"role" validate:"omitempty,oneof=user admin"`
+	Role          *string `json:"role" validate:"omitempty,oneof=user admin moderator"`
 	EmailVerified *bool   `json:"email_verified"`
 	PhoneVerified *bool   `json:"phone_verified"`
 	IsActive      *bool   `json:"is_active"`
