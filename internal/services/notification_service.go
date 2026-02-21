@@ -213,9 +213,9 @@ func (s *NotificationService) DeleteNotification(ctx context.Context, userID, no
 	return nil
 }
 
-// GetUnreadCount gets the count of unread notifications
-func (s *NotificationService) GetUnreadCount(ctx context.Context, userID string) (int, error) {
-	count, err := s.notificationRepo.GetUnreadCount(ctx, userID)
+// GetUnreadCount gets the count of unread notifications. When businessID is set, counts only that business's notifications.
+func (s *NotificationService) GetUnreadCount(ctx context.Context, userID string, businessID *string) (int, error) {
+	count, err := s.notificationRepo.GetUnreadCount(ctx, userID, businessID)
 	if err != nil {
 		s.logger.Error("Failed to get unread count",
 			zap.Error(err),

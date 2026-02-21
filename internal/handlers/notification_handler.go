@@ -78,6 +78,7 @@ func (h *NotificationHandler) GetNotifications(c *gin.Context) {
 }
 
 // GetUnreadCount handles GET /api/v1/notifications/unread-count
+// Optional query: business_id to get unread count for that business only.
 func (h *NotificationHandler) GetUnreadCount(c *gin.Context) {
 	// Get authenticated user ID
 	userID, exists := c.Get("user_id")
@@ -86,8 +87,13 @@ func (h *NotificationHandler) GetUnreadCount(c *gin.Context) {
 		return
 	}
 
+	var businessID *string
+	if bid := c.Query("business_id"); bid != "" {
+		businessID = &bid
+	}
+
 	// Get unread count
-	count, err := h.notificationService.GetUnreadCount(c.Request.Context(), userID.(string))
+	count, err := h.notificationService.GetUnreadCount(c.Request.Context(), userID.(string), businessID)
 	if err != nil {
 		h.handleError(c, err)
 		return

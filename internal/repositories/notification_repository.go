@@ -21,8 +21,8 @@ type NotificationRepository interface {
 	MarkAllAsRead(ctx context.Context, userID string) error
 	Delete(ctx context.Context, notificationID string) error
 
-	// Unread count
-	GetUnreadCount(ctx context.Context, userID string) (int, error)
+	// Unread count. When businessID is set, count only notifications for that business.
+	GetUnreadCount(ctx context.Context, userID string, businessID *string) (int, error)
 }
 
 type notificationRepository struct {
@@ -240,17 +240,31 @@ func (r *notificationRepository) Delete(ctx context.Context, notificationID stri
 }
 
 // GetUnreadCount gets the count of unread notifications for a user.
-// Counts user-level and NEW_POST (so badge matches main list including "X posted").
-func (r *notificationRepository) GetUnreadCount(ctx context.Context, userID string) (int, error) {
-	query := `
-		SELECT COUNT(*)
-		FROM notifications
-		WHERE user_id = $1 AND read = false
-		  AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type = 'NEW_POST')
-	`
+// When businessID is set, counts only notifications for that business.
+// When businessID is nil, counts user-level and NEW_POST (so badge matches main list including "X posted").
+func (r *notificationRepository) GetUnreadCount(ctx context.Context, userID string, businessID *string) (int, error) {
+	var query string
+	var args []interface{}
+	if businessID != nil && *businessID != "" {
+		query = `
+			SELECT COUNT(*)
+			FROM notifications
+			WHERE user_id = $1 AND read = false
+			  AND data->>'business_id' = $2
+		`
+		args = []interface{}{userID, *businessID}
+	} else {
+		query = `
+			SELECT COUNT(*)
+			FROM notifications
+			WHERE user_id = $1 AND read = false
+			  AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type = 'NEW_POST')
+		`
+		args = []interface{}{userID}
+	}
 
 	var count int
-	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(&count)
+	err := r.db.Pool.QueryRow(ctx, query, args...).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get unread count: %w", err)
 	}
