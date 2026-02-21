@@ -20,6 +20,7 @@ type PostService struct {
 	pollRepo            repositories.PollRepository
 	userRepo            repositories.UserRepository
 	businessRepo        repositories.BusinessRepository
+	relationshipsRepo   repositories.RelationshipsRepository
 	categoryRepo        repositories.CategoryRepository
 	eventRepo           repositories.EventRepository
 	notificationService *NotificationService
@@ -33,6 +34,7 @@ func NewPostService(
 	pollRepo repositories.PollRepository,
 	userRepo repositories.UserRepository,
 	businessRepo repositories.BusinessRepository,
+	relationshipsRepo repositories.RelationshipsRepository,
 	categoryRepo repositories.CategoryRepository,
 	eventRepo repositories.EventRepository,
 	notificationService *NotificationService,
@@ -44,6 +46,7 @@ func NewPostService(
 		pollRepo:            pollRepo,
 		userRepo:            userRepo,
 		businessRepo:        businessRepo,
+		relationshipsRepo:   relationshipsRepo,
 		categoryRepo:        categoryRepo,
 		eventRepo:           eventRepo,
 		notificationService: notificationService,
@@ -233,6 +236,9 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		zap.String("user_id", userID),
 		zap.String("type", string(req.Type)),
 	)
+
+	// Notify followers of the new post (user followers or business followers)
+	go s.notifyFollowersOfNewPost(context.WithoutCancel(ctx), postID, userID, req.BusinessID)
 
 	// Return enriched post
 	return s.GetPost(ctx, postID, &userID)
@@ -977,6 +983,124 @@ func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, rec
 		Message: &msg,
 		Data:    data,
 	})
+}
+
+const _newPostNotifyBatchSize = 300
+
+// notifyFollowersOfNewPost notifies all followers of the user or business when a new post is created.
+func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, posterUserID string, businessID *string) {
+	defer func() {
+		if r := recover(); r != nil {
+			s.logger.Error("notifyFollowersOfNewPost panic", zap.Any("panic", r), zap.String("post_id", postID))
+		}
+	}()
+
+	businessIDVal := ""
+	if businessID != nil {
+		businessIDVal = *businessID
+	}
+	s.logger.Info("New post: notifying followers",
+		zap.String("post_id", postID),
+		zap.String("poster_user_id", posterUserID),
+		zap.String("business_id", businessIDVal))
+
+	if s.notificationService == nil {
+		s.logger.Warn("notificationService is nil, skipping new post notifications")
+		return
+	}
+
+	actorName := "Someone"
+	var actorAvatar interface{}
+	if actor, err := s.userRepo.GetProfileByUserID(ctx, posterUserID); err == nil {
+		actorName = actor.FullName()
+		actorAvatar = actor.Avatar
+	}
+
+	displayName := actorName
+	if businessID != nil && *businessID != "" {
+		if biz, err := s.businessRepo.GetByID(ctx, *businessID); err == nil && biz.Name != "" {
+			displayName = biz.Name
+		}
+	}
+
+	title := displayName + " posted"
+	msg := title
+	data := map[string]interface{}{
+		"actor_id":     posterUserID,
+		"actor_name":   displayName,
+		"actor_avatar": actorAvatar,
+		"post_id":      postID,
+	}
+	if businessID != nil && *businessID != "" {
+		data["business_id"] = *businessID
+	}
+
+	var followerIDs []string
+	if businessID != nil && *businessID != "" {
+		offset := 0
+		for {
+			ids, err := s.businessRepo.GetFollowers(ctx, *businessID, _newPostNotifyBatchSize, offset)
+			if err != nil {
+				s.logger.Warn("GetFollowers (business) failed", zap.String("business_id", *businessID), zap.Error(err))
+				break
+			}
+			if len(ids) == 0 {
+				break
+			}
+			followerIDs = append(followerIDs, ids...)
+			if len(ids) < _newPostNotifyBatchSize {
+				break
+			}
+			offset += _newPostNotifyBatchSize
+		}
+		s.logger.Info("New post: business followers loaded",
+			zap.String("post_id", postID),
+			zap.String("business_id", *businessID),
+			zap.Int("count", len(followerIDs)))
+	} else {
+		offset := 0
+		for {
+			follows, err := s.relationshipsRepo.GetFollowers(ctx, posterUserID, _newPostNotifyBatchSize, offset)
+			if err != nil {
+				s.logger.Warn("GetFollowers (user) failed", zap.String("user_id", posterUserID), zap.Error(err))
+				break
+			}
+			if len(follows) == 0 {
+				break
+			}
+			for _, f := range follows {
+				followerIDs = append(followerIDs, f.FollowerID)
+			}
+			if len(follows) < _newPostNotifyBatchSize {
+				break
+			}
+			offset += _newPostNotifyBatchSize
+		}
+		s.logger.Info("New post: user followers loaded",
+			zap.String("post_id", postID),
+			zap.String("poster_user_id", posterUserID),
+			zap.Int("count", len(followerIDs)))
+	}
+
+	sent := 0
+	for _, recipientID := range followerIDs {
+		if recipientID == posterUserID {
+			continue
+		}
+		_, err := s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
+			UserID:  recipientID,
+			Type:    models.NotificationTypeNewPost,
+			Title:   &title,
+			Message: &msg,
+			Data:    data,
+		})
+		if err != nil {
+			s.logger.Warn("CreateNotification (NEW_POST) failed", zap.String("recipient_id", recipientID), zap.Error(err))
+			continue
+		}
+		sent++
+	}
+	s.logger.Info("New post: notifications sent", zap.String("post_id", postID), zap.Int("sent", sent))
 }
 
 // validatePostRequest validates post creation request

@@ -50,7 +50,8 @@ func typeToCategory(t models.NotificationType) models.NotificationCategory {
 	switch t {
 	case models.NotificationTypeLike, models.NotificationTypeComment,
 		models.NotificationTypeMention, models.NotificationTypePostShare,
-		models.NotificationTypePollVote, models.NotificationTypeFollow:
+		models.NotificationTypePollVote, models.NotificationTypeFollow,
+		models.NotificationTypeNewPost:
 		return models.NotificationCategoryPosts
 	case models.NotificationTypeMessage:
 		return models.NotificationCategoryMessages

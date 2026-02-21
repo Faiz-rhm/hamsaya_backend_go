@@ -129,13 +129,13 @@ func (r *notificationRepository) List(ctx context.Context, filter *models.GetNot
 	}
 
 	// Business scope: when filter.BusinessID is set, only that business's notifications;
-	// when not set (user feed), exclude notifications that have data.business_id (show only user-level).
+	// when not set (user feed), show user-level notifications AND NEW_POST (so "Faiz store posted" appears in main list).
 	if filter.BusinessID != nil && *filter.BusinessID != "" {
 		queryBuilder.WriteString(fmt.Sprintf(" AND data->>'business_id' = $%d", argCount))
 		args = append(args, *filter.BusinessID)
 		argCount++
 	} else {
-		queryBuilder.WriteString(" AND (data->>'business_id' IS NULL OR data->>'business_id' = '')")
+		queryBuilder.WriteString(" AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type = 'NEW_POST')")
 	}
 
 	// Order by created_at DESC
@@ -239,12 +239,14 @@ func (r *notificationRepository) Delete(ctx context.Context, notificationID stri
 	return nil
 }
 
-// GetUnreadCount gets the count of unread notifications for a user
+// GetUnreadCount gets the count of unread notifications for a user.
+// Counts user-level and NEW_POST (so badge matches main list including "X posted").
 func (r *notificationRepository) GetUnreadCount(ctx context.Context, userID string) (int, error) {
 	query := `
 		SELECT COUNT(*)
 		FROM notifications
 		WHERE user_id = $1 AND read = false
+		  AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type = 'NEW_POST')
 	`
 
 	var count int

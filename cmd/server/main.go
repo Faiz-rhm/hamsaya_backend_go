@@ -154,7 +154,7 @@ func main() {
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
-	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, categoryRepo, eventRepo, notificationService, cfg.Storage.BucketName, logger)
+	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
