@@ -550,22 +550,24 @@ func (s *PostService) SharePost(ctx context.Context, userID, originalPostID stri
 		CreatedAt:      time.Now(),
 	}
 
-	// If user adds text, create a new post that references the original
+	// Always create a new post for the repost so it appears in the feed.
+	// Whatever the original type (FEED, PULL, EVENT, SELL), the repost is always a FEED post.
+	desc := "Shared a post"
 	if shareText != nil && *shareText != "" {
-		// Create a new post with the share
-		sharePostReq := &models.CreatePostRequest{
-			Type:           originalPost.Type,
-			Description:    shareText,
-			OriginalPostID: &originalPostID,
-		}
-
-		sharePost, err := s.CreatePost(ctx, userID, sharePostReq)
-		if err != nil {
-			return nil, err
-		}
-
-		share.SharedPostID = &sharePost.ID
+		desc = *shareText
 	}
+	sharePostReq := &models.CreatePostRequest{
+		Type:           models.PostTypeFeed,
+		Description:    &desc,
+		OriginalPostID: &originalPostID,
+	}
+
+	sharePost, err := s.CreatePost(ctx, userID, sharePostReq)
+	if err != nil {
+		return nil, err
+	}
+
+	share.SharedPostID = &sharePost.ID
 
 	// Save share record
 	if err := s.postRepo.SharePost(ctx, share); err != nil {
