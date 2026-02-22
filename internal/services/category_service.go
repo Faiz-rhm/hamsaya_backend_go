@@ -58,11 +58,11 @@ func (s *CategoryService) CreateCategory(ctx context.Context, req *models.Create
 		zap.String("name", req.Name),
 	)
 
-	return category.ToCategoryResponse(), nil
+	return category.ToCategoryResponse(models.LocaleEN), nil
 }
 
-// GetCategory retrieves a category by ID
-func (s *CategoryService) GetCategory(ctx context.Context, categoryID string) (*models.CategoryResponse, error) {
+// GetCategory retrieves a category by ID. locale (en, dari, pashto) controls the name in the response.
+func (s *CategoryService) GetCategory(ctx context.Context, categoryID string, locale string) (*models.CategoryResponse, error) {
 	category, err := s.categoryRepo.GetByID(ctx, categoryID)
 	if err != nil {
 		s.logger.Error("Failed to get category",
@@ -72,11 +72,11 @@ func (s *CategoryService) GetCategory(ctx context.Context, categoryID string) (*
 		return nil, utils.NewNotFoundError("Category not found", err)
 	}
 
-	return category.ToCategoryResponse(), nil
+	return category.ToCategoryResponse(locale), nil
 }
 
-// GetAllCategories retrieves all categories (admin operation)
-func (s *CategoryService) GetAllCategories(ctx context.Context) ([]*models.CategoryResponse, error) {
+// GetAllCategories retrieves all categories (admin operation). locale controls the name in the response.
+func (s *CategoryService) GetAllCategories(ctx context.Context, locale string) ([]*models.CategoryResponse, error) {
 	categories, err := s.categoryRepo.GetAll(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get all categories", zap.Error(err))
@@ -85,14 +85,14 @@ func (s *CategoryService) GetAllCategories(ctx context.Context) ([]*models.Categ
 
 	responses := make([]*models.CategoryResponse, len(categories))
 	for i, category := range categories {
-		responses[i] = category.ToCategoryResponse()
+		responses[i] = category.ToCategoryResponse(locale)
 	}
 
 	return responses, nil
 }
 
-// GetActiveCategories retrieves only active categories (public operation)
-func (s *CategoryService) GetActiveCategories(ctx context.Context) ([]*models.CategoryResponse, error) {
+// GetActiveCategories retrieves only active categories (public operation). locale controls the name in the response.
+func (s *CategoryService) GetActiveCategories(ctx context.Context, locale string) ([]*models.CategoryResponse, error) {
 	categories, err := s.categoryRepo.GetActiveCategories(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get active categories", zap.Error(err))
@@ -101,7 +101,7 @@ func (s *CategoryService) GetActiveCategories(ctx context.Context) ([]*models.Ca
 
 	responses := make([]*models.CategoryResponse, len(categories))
 	for i, category := range categories {
-		responses[i] = category.ToCategoryResponse()
+		responses[i] = category.ToCategoryResponse(locale)
 	}
 
 	return responses, nil
@@ -147,7 +147,7 @@ func (s *CategoryService) UpdateCategory(ctx context.Context, categoryID string,
 		zap.String("name", category.Name),
 	)
 
-	return category.ToCategoryResponse(), nil
+	return category.ToCategoryResponse(models.LocaleEN), nil
 }
 
 // DeleteCategory deletes a category (admin operation)
@@ -178,8 +178,8 @@ func (s *CategoryService) DeleteCategory(ctx context.Context, categoryID string)
 	return nil
 }
 
-// ListCategories retrieves categories with filters
-func (s *CategoryService) ListCategories(ctx context.Context, filter *models.CategoryListFilter) ([]*models.CategoryResponse, error) {
+// ListCategories retrieves categories with filters. locale controls the name in the response.
+func (s *CategoryService) ListCategories(ctx context.Context, filter *models.CategoryListFilter, locale string) ([]*models.CategoryResponse, error) {
 	categories, err := s.categoryRepo.List(ctx, filter)
 	if err != nil {
 		s.logger.Error("Failed to list categories",
@@ -191,14 +191,14 @@ func (s *CategoryService) ListCategories(ctx context.Context, filter *models.Cat
 
 	responses := make([]*models.CategoryResponse, len(categories))
 	for i, category := range categories {
-		responses[i] = category.ToCategoryResponse()
+		responses[i] = category.ToCategoryResponse(locale)
 	}
 
 	return responses, nil
 }
 
-// GetCategoriesByIDs retrieves multiple categories by their IDs
-func (s *CategoryService) GetCategoriesByIDs(ctx context.Context, categoryIDs []string) ([]*models.CategoryResponse, error) {
+// GetCategoriesByIDs retrieves multiple categories by their IDs. locale controls the name in the response.
+func (s *CategoryService) GetCategoriesByIDs(ctx context.Context, categoryIDs []string, locale string) ([]*models.CategoryResponse, error) {
 	if len(categoryIDs) == 0 {
 		return []*models.CategoryResponse{}, nil
 	}
@@ -214,7 +214,7 @@ func (s *CategoryService) GetCategoriesByIDs(ctx context.Context, categoryIDs []
 
 	responses := make([]*models.CategoryResponse, len(categories))
 	for i, category := range categories {
-		responses[i] = category.ToCategoryResponse()
+		responses[i] = category.ToCategoryResponse(locale)
 	}
 
 	return responses, nil

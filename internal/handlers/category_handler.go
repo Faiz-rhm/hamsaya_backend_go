@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/models"
@@ -9,6 +10,33 @@ import (
 	"github.com/hamsaya/backend/internal/utils"
 	"go.uber.org/zap"
 )
+
+// categoryLocale returns the requested locale for category names (en, dari, pashto). Default en.
+func categoryLocale(c *gin.Context) string {
+	if loc := c.Query("locale"); loc != "" {
+		loc = strings.ToLower(strings.TrimSpace(loc))
+		switch loc {
+		case models.LocaleEN, models.LocaleDari, models.LocalePashto:
+			return loc
+		}
+	}
+	if lang := c.GetHeader("Accept-Language"); lang != "" {
+		// e.g. "ps-AF,ps;q=0.9,en;q=0.8" or "fa-AF"
+		for _, part := range strings.Split(lang, ",") {
+			part = strings.ToLower(strings.TrimSpace(strings.Split(part, ";")[0]))
+			if part == "en" || strings.HasPrefix(part, "en-") {
+				return models.LocaleEN
+			}
+			if part == "fa" || part == "fa-af" || strings.HasPrefix(part, "fa") {
+				return models.LocaleDari
+			}
+			if part == "ps" || part == "pashto" || strings.HasPrefix(part, "ps") {
+				return models.LocalePashto
+			}
+		}
+	}
+	return models.LocaleEN
+}
 
 // CategoryHandler handles HTTP requests for marketplace categories
 type CategoryHandler struct {
@@ -56,7 +84,7 @@ func (h *CategoryHandler) CreateCategory(c *gin.Context) {
 }
 
 // GetCategory handles GET /api/v1/categories/:category_id
-// Retrieves a specific category by ID
+// Retrieves a specific category by ID. Use ?locale=en|dari|pashto or Accept-Language for name.
 func (h *CategoryHandler) GetCategory(c *gin.Context) {
 	categoryID := c.Param("category_id")
 
@@ -65,7 +93,8 @@ func (h *CategoryHandler) GetCategory(c *gin.Context) {
 		return
 	}
 
-	category, err := h.categoryService.GetCategory(c.Request.Context(), categoryID)
+	locale := categoryLocale(c)
+	category, err := h.categoryService.GetCategory(c.Request.Context(), categoryID, locale)
 	if err != nil {
 		h.logger.Error("Failed to get category",
 			zap.Error(err),
@@ -79,9 +108,10 @@ func (h *CategoryHandler) GetCategory(c *gin.Context) {
 }
 
 // GetAllCategories handles GET /api/v1/admin/categories
-// Admin operation to retrieve all categories (including inactive)
+// Admin operation to retrieve all categories (including inactive). Use ?locale=en|dari|pashto for name.
 func (h *CategoryHandler) GetAllCategories(c *gin.Context) {
-	categories, err := h.categoryService.GetAllCategories(c.Request.Context())
+	locale := categoryLocale(c)
+	categories, err := h.categoryService.GetAllCategories(c.Request.Context(), locale)
 	if err != nil {
 		h.logger.Error("Failed to get all categories", zap.Error(err))
 		h.handleError(c, err)
@@ -92,10 +122,10 @@ func (h *CategoryHandler) GetAllCategories(c *gin.Context) {
 }
 
 // ListCategories handles GET /api/v1/categories
-// Public endpoint to retrieve active categories for marketplace
+// Public endpoint to retrieve active categories for marketplace. Use ?locale=en|dari|pashto or Accept-Language for names.
 func (h *CategoryHandler) ListCategories(c *gin.Context) {
-	// For public users, only return active categories
-	categories, err := h.categoryService.GetActiveCategories(c.Request.Context())
+	locale := categoryLocale(c)
+	categories, err := h.categoryService.GetActiveCategories(c.Request.Context(), locale)
 	if err != nil {
 		h.logger.Error("Failed to list active categories", zap.Error(err))
 		h.handleError(c, err)

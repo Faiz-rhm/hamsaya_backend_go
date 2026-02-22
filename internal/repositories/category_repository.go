@@ -44,13 +44,15 @@ func (r *categoryRepository) Create(ctx context.Context, category *models.SellCa
 
 	query := `
 		INSERT INTO sell_categories (
-			id, name, icon, color, status, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6)
+			id, name, name_dari, name_pashto, icon, color, status, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
 	_, err = r.db.Pool.Exec(ctx, query,
 		category.ID,
 		category.Name,
+		category.NameDari,
+		category.NamePashto,
 		iconJSON,
 		category.Color,
 		category.Status,
@@ -67,7 +69,7 @@ func (r *categoryRepository) Create(ctx context.Context, category *models.SellCa
 // GetByID retrieves a category by its ID
 func (r *categoryRepository) GetByID(ctx context.Context, categoryID string) (*models.SellCategory, error) {
 	query := `
-		SELECT id, name, icon, color, status, created_at
+		SELECT id, name, name_dari, name_pashto, icon, color, status, created_at
 		FROM sell_categories
 		WHERE id = $1
 	`
@@ -78,6 +80,8 @@ func (r *categoryRepository) GetByID(ctx context.Context, categoryID string) (*m
 	err := r.db.Pool.QueryRow(ctx, query, categoryID).Scan(
 		&category.ID,
 		&category.Name,
+		&category.NameDari,
+		&category.NamePashto,
 		&iconJSON,
 		&category.Color,
 		&category.Status,
@@ -101,7 +105,7 @@ func (r *categoryRepository) GetByID(ctx context.Context, categoryID string) (*m
 // GetAll retrieves all categories
 func (r *categoryRepository) GetAll(ctx context.Context) ([]*models.SellCategory, error) {
 	query := `
-		SELECT id, name, icon, color, status, created_at
+		SELECT id, name, name_dari, name_pashto, icon, color, status, created_at
 		FROM sell_categories
 		ORDER BY name ASC
 	`
@@ -121,6 +125,8 @@ func (r *categoryRepository) GetAll(ctx context.Context) ([]*models.SellCategory
 		if err := rows.Scan(
 			&category.ID,
 			&category.Name,
+			&category.NameDari,
+			&category.NamePashto,
 			&iconJSON,
 			&category.Color,
 			&category.Status,
@@ -152,12 +158,14 @@ func (r *categoryRepository) Update(ctx context.Context, category *models.SellCa
 
 	query := `
 		UPDATE sell_categories
-		SET name = $1, icon = $2, color = $3, status = $4
-		WHERE id = $5
+		SET name = $1, name_dari = $2, name_pashto = $3, icon = $4, color = $5, status = $6
+		WHERE id = $7
 	`
 
 	result, err := r.db.Pool.Exec(ctx, query,
 		category.Name,
+		category.NameDari,
+		category.NamePashto,
 		iconJSON,
 		category.Color,
 		category.Status,
@@ -194,7 +202,7 @@ func (r *categoryRepository) Delete(ctx context.Context, categoryID string) erro
 // List retrieves categories with optional filters
 func (r *categoryRepository) List(ctx context.Context, filter *models.CategoryListFilter) ([]*models.SellCategory, error) {
 	query := `
-		SELECT id, name, icon, color, status, created_at
+		SELECT id, name, name_dari, name_pashto, icon, color, status, created_at
 		FROM sell_categories
 	`
 
@@ -244,6 +252,8 @@ func (r *categoryRepository) List(ctx context.Context, filter *models.CategoryLi
 		if err := rows.Scan(
 			&category.ID,
 			&category.Name,
+			&category.NameDari,
+			&category.NamePashto,
 			&iconJSON,
 			&category.Color,
 			&category.Status,
@@ -273,7 +283,7 @@ func (r *categoryRepository) GetByIDs(ctx context.Context, categoryIDs []string)
 	}
 
 	query := `
-		SELECT id, name, icon, color, status, created_at
+		SELECT id, name, name_dari, name_pashto, icon, color, status, created_at
 		FROM sell_categories
 		WHERE id = ANY($1)
 		ORDER BY name ASC
@@ -294,6 +304,8 @@ func (r *categoryRepository) GetByIDs(ctx context.Context, categoryIDs []string)
 		if err := rows.Scan(
 			&category.ID,
 			&category.Name,
+			&category.NameDari,
+			&category.NamePashto,
 			&iconJSON,
 			&category.Color,
 			&category.Status,

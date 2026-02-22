@@ -16,10 +16,19 @@ type CategoryIcon struct {
 	Library string `json:"library"`
 }
 
-// SellCategory represents a marketplace category
+// Supported category locales
+const (
+	LocaleEN    = "en"
+	LocaleDari  = "dari"
+	LocalePashto = "pashto"
+)
+
+// SellCategory represents a marketplace category (name = English; name_dari, name_pashto for i18n)
 type SellCategory struct {
 	ID        string         `json:"id"`
 	Name      string         `json:"name"`
+	NameDari  *string        `json:"name_dari,omitempty"`
+	NamePashto *string       `json:"name_pashto,omitempty"`
 	Icon      CategoryIcon   `json:"icon"`
 	Color     string         `json:"color"`
 	Status    CategoryStatus `json:"status"`
@@ -59,11 +68,26 @@ type CategoryListFilter struct {
 	Offset int
 }
 
-// ToCategoryResponse converts a SellCategory to CategoryResponse
-func (c *SellCategory) ToCategoryResponse() *CategoryResponse {
+// NameForLocale returns the category name for the given locale (en, dari, pashto). Falls back to Name (en) if translation is missing.
+func (c *SellCategory) NameForLocale(locale string) string {
+	switch locale {
+	case LocaleDari:
+		if c.NameDari != nil && *c.NameDari != "" {
+			return *c.NameDari
+		}
+	case LocalePashto:
+		if c.NamePashto != nil && *c.NamePashto != "" {
+			return *c.NamePashto
+		}
+	}
+	return c.Name
+}
+
+// ToCategoryResponse converts a SellCategory to CategoryResponse with name localized for the given locale.
+func (c *SellCategory) ToCategoryResponse(locale string) *CategoryResponse {
 	return &CategoryResponse{
 		ID:        c.ID,
-		Name:      c.Name,
+		Name:      c.NameForLocale(locale),
 		Icon:      c.Icon,
 		Color:     c.Color,
 		Status:    string(c.Status),
