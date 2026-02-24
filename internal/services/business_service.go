@@ -609,6 +609,35 @@ func (s *BusinessService) GetAllCategories(ctx context.Context, search *string) 
 	return categories, nil
 }
 
+// GetBusinessHours returns operating hours for a business (public, no auth required).
+func (s *BusinessService) GetBusinessHours(ctx context.Context, businessID string) ([]models.BusinessHoursResponse, error) {
+	hours, err := s.businessRepo.GetHoursByBusinessID(ctx, businessID)
+	if err != nil {
+		s.logger.Error("Failed to get business hours", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get hours", err)
+	}
+	if len(hours) == 0 {
+		return []models.BusinessHoursResponse{}, nil
+	}
+	out := make([]models.BusinessHoursResponse, 0, len(hours))
+	for _, h := range hours {
+		hourResp := models.BusinessHoursResponse{
+			Day:      h.Day,
+			IsClosed: h.IsClosed,
+		}
+		if h.OpenTime != nil {
+			timeStr := fmt.Sprintf("%02d:%02d", h.OpenTime.Hour(), h.OpenTime.Minute())
+			hourResp.OpenTime = &timeStr
+		}
+		if h.CloseTime != nil {
+			timeStr := fmt.Sprintf("%02d:%02d", h.CloseTime.Hour(), h.CloseTime.Minute())
+			hourResp.CloseTime = &timeStr
+		}
+		out = append(out, hourResp)
+	}
+	return out, nil
+}
+
 // GetBusinessGallery returns all gallery attachments for a business (separate from profile).
 func (s *BusinessService) GetBusinessGallery(ctx context.Context, businessID string) ([]*models.GalleryItem, error) {
 	attachments, err := s.businessRepo.GetAttachmentsByBusinessID(ctx, businessID)

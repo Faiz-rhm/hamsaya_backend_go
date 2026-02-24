@@ -3879,6 +3879,28 @@ paths:
       tags:
       - businesses
   /businesses/{business_id}/hours:
+    get:
+      description: Get operating hours for a business (public)
+      parameters:
+      - description: Business ID
+        in: path
+        name: business_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/utils.Response'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/utils.Response'
+      summary: Get business hours
+      tags:
+      - businesses
     post:
       consumes:
       - application/json

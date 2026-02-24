@@ -1,0 +1,2 @@
+ALTER TABLE business_hours
+DROP CONSTRAINT IF EXISTS business_hours_business_profile_id_day_key;

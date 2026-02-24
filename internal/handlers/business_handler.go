@@ -361,6 +361,25 @@ func (h *BusinessHandler) DeleteBusiness(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Business deleted successfully", nil)
 }
 
+// GetBusinessHours godoc
+// @Summary Get business hours
+// @Description Get operating hours for a business (public)
+// @Tags businesses
+// @Produce json
+// @Param business_id path string true "Business ID"
+// @Success 200 {object} utils.Response{data=[]models.BusinessHoursResponse}
+// @Failure 404 {object} utils.Response
+// @Router /businesses/{business_id}/hours [get]
+func (h *BusinessHandler) GetBusinessHours(c *gin.Context) {
+	businessID := c.Param("business_id")
+	hours, err := h.businessService.GetBusinessHours(c.Request.Context(), businessID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Business hours retrieved successfully", hours)
+}
+
 // SetBusinessHours godoc
 // @Summary Set business hours
 // @Description Set operating hours for a business
