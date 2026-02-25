@@ -66,13 +66,13 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 		query := `
 			INSERT INTO business_profiles (
 				id, user_id, name, license_no, description, address, phone_number,
-				email, website, avatar, cover, status, additional_info,
+				email, website, avatar, avatar_color, cover, status, additional_info,
 				address_location, country, province, district, neighborhood,
 				show_location, created_at, updated_at
 			)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13,
-				ST_SetSRID(ST_MakePoint($14, $15), 4326)::geography,
-				$16, $17, $18, $19, $20, $21, $22)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+				ST_SetSRID(ST_MakePoint($15, $16), 4326)::geography,
+				$17, $18, $19, $20, $21, $22, $23)
 		`
 		_, err := r.db.Pool.Exec(ctx, query,
 			business.ID,
@@ -85,6 +85,7 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 			business.Email,
 			business.Website,
 			business.Avatar,
+			business.AvatarColor,
 			business.Cover,
 			business.Status,
 			business.AdditionalInfo,
@@ -104,11 +105,11 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 	query := `
 		INSERT INTO business_profiles (
 			id, user_id, name, license_no, description, address, phone_number,
-			email, website, avatar, cover, status, additional_info,
+			email, website, avatar, avatar_color, cover, status, additional_info,
 			address_location, country, province, district, neighborhood,
 			show_location, created_at, updated_at
 		)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NULL, $14, $15, $16, $17, $18, $19, $20)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NULL, $15, $16, $17, $18, $19, $20, $21)
 	`
 	_, err := r.db.Pool.Exec(ctx, query,
 		business.ID,
@@ -121,6 +122,7 @@ func (r *businessRepository) Create(ctx context.Context, business *models.Busine
 		business.Email,
 		business.Website,
 		business.Avatar,
+		business.AvatarColor,
 		business.Cover,
 		business.Status,
 		business.AdditionalInfo,
@@ -151,7 +153,7 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 	query := `
 		SELECT
 			id, user_id, name, license_no, description, address, phone_number,
-			email, website, avatar, cover, status, additional_info,
+			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
 			show_location, total_views, total_follow, created_at, updated_at
@@ -172,6 +174,7 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 		&business.Email,
 		&business.Website,
 		&business.Avatar,
+		&business.AvatarColor,
 		&business.Cover,
 		&business.Status,
 		&business.AdditionalInfo,
@@ -203,7 +206,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 	query := `
 		SELECT
 			id, user_id, name, license_no, description, address, phone_number,
-			email, website, avatar, cover, status, additional_info,
+			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
 			show_location, total_views, total_follow, created_at, updated_at
@@ -234,6 +237,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 			&business.Email,
 			&business.Website,
 			&business.Avatar,
+			&business.AvatarColor,
 			&business.Cover,
 			&business.Status,
 			&business.AdditionalInfo,
@@ -274,16 +278,17 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 				email = $7,
 				website = $8,
 				avatar = $9,
-				cover = $10,
-				status = $11,
-				additional_info = $12,
-				address_location = ST_SetSRID(ST_MakePoint($13, $14), 4326)::geography,
-				country = $15,
-				province = $16,
-				district = $17,
-				neighborhood = $18,
-				show_location = $19,
-				updated_at = $20
+				avatar_color = $10,
+				cover = $11,
+				status = $12,
+				additional_info = $13,
+				address_location = ST_SetSRID(ST_MakePoint($14, $15), 4326)::geography,
+				country = $16,
+				province = $17,
+				district = $18,
+				neighborhood = $19,
+				show_location = $20,
+				updated_at = $21
 			WHERE id = $1 AND deleted_at IS NULL
 		`
 		_, err := r.db.Pool.Exec(ctx, query,
@@ -296,6 +301,7 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 			business.Email,
 			business.Website,
 			business.Avatar,
+			business.AvatarColor,
 			business.Cover,
 			business.Status,
 			business.AdditionalInfo,
@@ -322,16 +328,17 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 			email = $7,
 			website = $8,
 			avatar = $9,
-			cover = $10,
-			status = $11,
-			additional_info = $12,
+			avatar_color = $10,
+			cover = $11,
+			status = $12,
+			additional_info = $13,
 			address_location = NULL,
-			country = $13,
-			province = $14,
-			district = $15,
-			neighborhood = $16,
-			show_location = $17,
-			updated_at = $18
+			country = $14,
+			province = $15,
+			district = $16,
+			neighborhood = $17,
+			show_location = $18,
+			updated_at = $19
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	_, err := r.db.Pool.Exec(ctx, query,
@@ -344,6 +351,7 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 		business.Email,
 		business.Website,
 		business.Avatar,
+		business.AvatarColor,
 		business.Cover,
 		business.Status,
 		business.AdditionalInfo,
@@ -375,7 +383,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 	query := `
 		SELECT DISTINCT
 			bp.id, bp.user_id, bp.name, bp.license_no, bp.description, bp.address,
-			bp.phone_number, bp.email, bp.website, bp.avatar, bp.cover, bp.status,
+			bp.phone_number, bp.email, bp.website, bp.avatar, bp.avatar_color, bp.cover, bp.status,
 			bp.additional_info, ST_X(bp.address_location::geometry), ST_Y(bp.address_location::geometry),
 			bp.country, bp.province,
 			bp.district, bp.neighborhood, bp.show_location, bp.total_views,
@@ -456,6 +464,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 			&business.Email,
 			&business.Website,
 			&business.Avatar,
+			&business.AvatarColor,
 			&business.Cover,
 			&business.Status,
 			&business.AdditionalInfo,

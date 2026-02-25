@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -56,6 +57,7 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, userID string, req
 		Website:        req.Website,
 		Status:         true,
 		AdditionalInfo: req.AdditionalInfo,
+		AvatarColor:    req.AvatarColor,
 		Country:        req.Country,
 		Province:       req.Province,
 		District:       req.District,
@@ -124,8 +126,15 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, userID string, req
 		zap.String("user_id", userID),
 	)
 
-	// Return enriched business
-	return s.GetBusiness(ctx, businessID, &userID)
+	// Return enriched business (ensure avatar_color is in response when we sent it)
+	resp, err := s.GetBusiness(ctx, businessID, &userID)
+	if err != nil {
+		return nil, err
+	}
+	if resp.AvatarColor == nil && req.AvatarColor != nil {
+		resp.AvatarColor = req.AvatarColor
+	}
+	return resp, nil
 }
 
 // GetBusiness gets a business profile by ID.
@@ -228,6 +237,9 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID, userID
 	}
 	if req.ShowLocation != nil {
 		business.ShowLocation = *req.ShowLocation
+	}
+	if req.AvatarColor != nil {
+		business.AvatarColor = req.AvatarColor
 	}
 
 	// Handle location update
@@ -655,8 +667,24 @@ func (s *BusinessService) GetBusinessGallery(ctx context.Context, businessID str
 	return out, nil
 }
 
+// defaultAvatarColorForBusiness returns a deterministic hex color for businessID when DB has no avatar_color (e.g. old rows).
+var defaultBusinessAvatarColors = []string{
+	"#7C6274", "#6B8E9F", "#8B9A6B", "#9B7B8E", "#6A8B7C", "#8B756B", "#7B8B9E", "#9A7B6C",
+}
+
+func defaultAvatarColorForBusiness(businessID string) string {
+	h := fnv.New32a()
+	h.Write([]byte(businessID))
+	return defaultBusinessAvatarColors[int(h.Sum32())%len(defaultBusinessAvatarColors)]
+}
+
 // enrichBusiness enriches a business with categories, hours, and following status (gallery is separate endpoint).
 func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.BusinessProfile, viewerID *string) (*models.BusinessResponse, error) {
+	avatarColor := business.AvatarColor
+	if avatarColor == nil || *avatarColor == "" {
+		c := defaultAvatarColorForBusiness(business.ID)
+		avatarColor = &c
+	}
 	response := &models.BusinessResponse{
 		ID:             business.ID,
 		UserID:         business.UserID,
@@ -668,6 +696,7 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 		Email:          business.Email,
 		Website:        business.Website,
 		Avatar:         business.Avatar,
+		AvatarColor:    avatarColor,
 		Cover:          business.Cover,
 		Status:         business.Status,
 		AdditionalInfo: business.AdditionalInfo,

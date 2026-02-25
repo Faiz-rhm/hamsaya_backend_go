@@ -18,6 +18,7 @@ type BusinessProfile struct {
 	Email           *string       `json:"email,omitempty"`
 	Website         *string       `json:"website,omitempty"`
 	Avatar          *Photo        `json:"avatar,omitempty"`
+	AvatarColor     *string       `json:"avatar_color,omitempty"`
 	Cover           *Photo        `json:"cover,omitempty"`
 	Status          bool          `json:"status"`
 	AdditionalInfo  *string       `json:"additional_info,omitempty"`
@@ -105,6 +106,7 @@ type CreateBusinessRequest struct {
 	District       *string  `json:"district,omitempty" validate:"omitempty,max=100"`
 	Neighborhood   *string  `json:"neighborhood,omitempty" validate:"omitempty,max=100"`
 	ShowLocation   *bool    `json:"show_location,omitempty"`
+	AvatarColor    *string  `json:"avatar_color,omitempty" validate:"omitempty,len=7"`
 	CategoryIDs    []string `json:"category_ids,omitempty" validate:"omitempty,dive,uuid"`
 	// CategoryNames are created if they don't exist, then linked (with category_ids).
 	CategoryNames []string `json:"category_names,omitempty" validate:"omitempty,dive,max=100"`
@@ -128,6 +130,7 @@ type UpdateBusinessRequest struct {
 	District       *string  `json:"district,omitempty" validate:"omitempty,max=100"`
 	Neighborhood   *string  `json:"neighborhood,omitempty" validate:"omitempty,max=100"`
 	ShowLocation   *bool    `json:"show_location,omitempty"`
+	AvatarColor    *string  `json:"avatar_color,omitempty" validate:"omitempty,len=7"`
 	CategoryIDs    []string `json:"category_ids,omitempty" validate:"omitempty,dive,uuid"`
 	// CategoryNames are created if they don't exist, then linked (with category_ids).
 	CategoryNames []string `json:"category_names,omitempty" validate:"omitempty,dive,max=100"`
@@ -158,6 +161,7 @@ type BusinessResponse struct {
 	Email            *string                   `json:"email,omitempty"`
 	Website          *string                   `json:"website,omitempty"`
 	Avatar           *Photo                    `json:"avatar,omitempty"`
+	AvatarColor      *string                   `json:"avatar_color,omitempty"`
 	Cover            *Photo                    `json:"cover,omitempty"`
 	Status           bool                      `json:"status"`
 	AdditionalInfo   *string                   `json:"additional_info,omitempty"`

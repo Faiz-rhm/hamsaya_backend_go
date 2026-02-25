@@ -106,6 +106,11 @@ func (h *BusinessHandler) CreateBusiness(c *gin.Context) {
 			req.ShowLocation = &b
 		}
 	}
+	if v, ok := raw["avatar_color"]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			req.AvatarColor = &s
+		}
+	}
 	// Support both "lat"/"lng" and "latitude"/"longitude"
 	if v, ok := raw["lat"]; ok && v != nil {
 		if f, ok := v.(float64); ok {
