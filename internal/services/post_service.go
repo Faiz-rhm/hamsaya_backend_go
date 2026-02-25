@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -53,6 +54,17 @@ func NewPostService(
 		storageBucketName:   storageBucketName,
 		logger:              logger,
 	}
+}
+
+// defaultAvatarColorForBusiness returns a deterministic hex color for business ID when DB has no avatar_color.
+var postDefaultBusinessAvatarColors = []string{
+	"#7C6274", "#6B8E9F", "#8B9A6B", "#9B7B8E", "#6A8B7C", "#8B756B", "#7B8B9E", "#9A7B6C",
+}
+
+func defaultAvatarColorForBusinessID(businessID string) string {
+	h := fnv.New32a()
+	h.Write([]byte(businessID))
+	return postDefaultBusinessAvatarColors[int(h.Sum32())%len(postDefaultBusinessAvatarColors)]
 }
 
 // CreatePost creates a new post
@@ -691,6 +703,11 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		business, err := s.businessRepo.GetByID(ctx, *post.BusinessID)
 		if err == nil {
 			fetchedBusiness = business
+			avatarColor := business.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := defaultAvatarColorForBusinessID(business.ID)
+				avatarColor = &c
+			}
 			response.Business = &models.BusinessInfo{
 				BusinessID:   business.ID,
 				Name:         business.Name,
@@ -699,6 +716,7 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 				Email:        business.Email,
 				Website:      business.Website,
 				Avatar:       business.Avatar,
+				AvatarColor:  avatarColor,
 				Cover:        business.Cover,
 				Province:     business.Province,
 				District:     business.District,
@@ -858,6 +876,11 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 		business, err := s.businessRepo.GetByID(ctx, *post.BusinessID)
 		if err == nil {
 			fetchedBusinessSimple = business
+			avatarColor := business.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := defaultAvatarColorForBusinessID(business.ID)
+				avatarColor = &c
+			}
 			response.Business = &models.BusinessInfo{
 				BusinessID:   business.ID,
 				Name:         business.Name,
@@ -866,6 +889,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 				Email:        business.Email,
 				Website:      business.Website,
 				Avatar:       business.Avatar,
+				AvatarColor:  avatarColor,
 				Cover:        business.Cover,
 				Province:     business.Province,
 				District:     business.District,

@@ -305,6 +305,7 @@ type BusinessInfo struct {
 	Email        *string `json:"email,omitempty"`
 	Website      *string `json:"website,omitempty"`
 	Avatar       *Photo  `json:"avatar,omitempty"`
+	AvatarColor  *string `json:"avatar_color,omitempty"`
 	Cover        *Photo  `json:"cover,omitempty"`
 	Province     *string `json:"province,omitempty"`
 	District     *string `json:"district,omitempty"`
