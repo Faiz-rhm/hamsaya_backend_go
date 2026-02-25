@@ -185,12 +185,18 @@ func (s *SearchService) enrichPosts(ctx context.Context, posts []*models.Post, u
 		var author *models.AuthorInfo
 		if post.UserID != nil && *post.UserID != "" {
 			if profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID); err == nil {
+				avatarColor := profile.AvatarColor
+				if avatarColor == nil || *avatarColor == "" {
+					c := models.DefaultAvatarColorForProfile(profile.ID)
+					avatarColor = &c
+				}
 				author = &models.AuthorInfo{
 					UserID:       *post.UserID,
 					FirstName:    profile.FirstName,
 					LastName:     profile.LastName,
 					FullName:     profile.FullName(),
 					Avatar:       profile.Avatar,
+					AvatarColor:  avatarColor,
 					Province:     profile.Province,
 					District:     profile.District,
 					Neighborhood: profile.Neighborhood,

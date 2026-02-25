@@ -4,6 +4,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -38,12 +39,26 @@ type User struct {
 	DeletedAt            *time.Time         `json:"-"`
 }
 
+// AvatarColors are predefined hex colors for avatar placeholders (no photo).
+var AvatarColors = []string{
+	"#E57373", "#F06292", "#BA68C8", "#9575CD", "#7986CB",
+	"#64B5F6", "#4FC3F7", "#4DD0E1", "#4DB6AC", "#81C784",
+	"#AED581", "#DCE775", "#FFF176", "#FFD54F", "#FFB74D",
+	"#FF8A65", "#A1887F",
+}
+
+// RandomAvatarColor returns a random hex color from AvatarColors for new profiles.
+func RandomAvatarColor() string {
+	return AvatarColors[rand.Intn(len(AvatarColors))]
+}
+
 // Profile represents extended user profile information
 type Profile struct {
 	ID           string                 `json:"id"`
 	FirstName    *string                `json:"first_name,omitempty"`
 	LastName     *string                `json:"last_name,omitempty"`
 	Avatar       *Photo                 `json:"avatar,omitempty"`
+	AvatarColor  *string                `json:"avatar_color,omitempty"` // Hex for placeholder when no avatar
 	Cover        *Photo                 `json:"cover,omitempty"`
 	About        *string                `json:"about,omitempty"`
 	Gender       *string                `json:"gender,omitempty"`

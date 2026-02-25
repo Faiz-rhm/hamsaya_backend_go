@@ -95,14 +95,16 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			UpdatedAt:           now,
 		}
 
-		// Create complete profile with location
+		// Create complete profile with location and random avatar color
+		avatarColor := models.RandomAvatarColor()
 		profile := &models.Profile{
-			ID:         userID,
-			FirstName:  &req.FirstName,
-			LastName:   &req.LastName,
-			IsComplete: true, // Profile is complete with all required fields
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			ID:          userID,
+			FirstName:   &req.FirstName,
+			LastName:    &req.LastName,
+			AvatarColor: &avatarColor,
+			IsComplete:  true, // Profile is complete with all required fields
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 
 		// Set location from request
@@ -282,14 +284,16 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 		UpdatedAt:           now,
 	}
 
-	// Create profile with location
+	// Create profile with location and random avatar color
+	avatarColor := models.RandomAvatarColor()
 	profile := &models.Profile{
-		ID:         userID,
-		FirstName:  req.FirstName,
-		LastName:   req.LastName,
-		IsComplete: false,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:          userID,
+		FirstName:   req.FirstName,
+		LastName:    req.LastName,
+		AvatarColor: &avatarColor,
+		IsComplete:  false,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	// Set location if provided
@@ -353,6 +357,7 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 			ID:           profile.ID,
 			FirstName:    profile.FirstName,
 			LastName:     profile.LastName,
+			AvatarColor:  profile.AvatarColor,
 			Province:     profile.Province,
 			District:     profile.District,
 			Neighborhood: profile.Neighborhood,
@@ -421,12 +426,14 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 			UpdatedAt:           now,
 		}
 
-		// Create empty profile
+		// Create empty profile with random avatar color
+		avatarColor := models.RandomAvatarColor()
 		profile := &models.Profile{
-			ID:         userID,
-			IsComplete: false,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			ID:          userID,
+			AvatarColor: &avatarColor,
+			IsComplete:  false,
+			CreatedAt:   now,
+			UpdatedAt:   now,
 		}
 
 		// Create user and profile atomically in a transaction
@@ -1073,6 +1080,13 @@ func (s *AuthService) generateAuthResponse(
 		return nil, utils.NewInternalError("Failed to complete login", err)
 	}
 
+	// Ensure profile has an avatar color for the app (e.g. existing users before the field existed)
+	avatarColor := profile.AvatarColor
+	if avatarColor == nil || *avatarColor == "" {
+		c := models.DefaultAvatarColorForProfile(profile.ID)
+		avatarColor = &c
+	}
+
 	// Generate token pair
 	sessionID := uuid.New().String()
 	tokenPair, err := s.jwtService.GenerateTokenPair(user.ID, user.Email, aal, sessionID)
@@ -1132,6 +1146,7 @@ func (s *AuthService) generateAuthResponse(
 			FirstName:    profile.FirstName,
 			LastName:     profile.LastName,
 			Avatar:       profile.Avatar,
+			AvatarColor:  avatarColor,
 			Province:     profile.Province,
 			District:     profile.District,
 			Neighborhood: profile.Neighborhood,

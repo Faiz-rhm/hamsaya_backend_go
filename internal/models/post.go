@@ -290,6 +290,7 @@ type AuthorInfo struct {
 	LastName     *string `json:"last_name,omitempty"`
 	FullName     string  `json:"full_name"`
 	Avatar       *Photo  `json:"avatar"`
+	AvatarColor  *string `json:"avatar_color,omitempty"`
 	Province     *string `json:"province"`
 	District     *string `json:"district"`
 	Neighborhood *string `json:"neighborhood"`

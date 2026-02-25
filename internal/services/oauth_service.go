@@ -282,14 +282,16 @@ func (s *OAuthService) AuthenticateWithOAuth(ctx context.Context, oauthInfo *OAu
 		return nil, nil, false, utils.NewInternalError("Failed to create user", err)
 	}
 
-	// Create profile
+	// Create profile with random avatar color
+	avatarColor := models.RandomAvatarColor()
 	profile := &models.Profile{
-		ID:         userID,
-		FirstName:  &oauthInfo.FirstName,
-		LastName:   &oauthInfo.LastName,
-		IsComplete: false,
-		CreatedAt:  now,
-		UpdatedAt:  now,
+		ID:          userID,
+		FirstName:   &oauthInfo.FirstName,
+		LastName:    &oauthInfo.LastName,
+		AvatarColor: &avatarColor,
+		IsComplete:  false,
+		CreatedAt:   now,
+		UpdatedAt:   now,
 	}
 
 	// Set avatar from OAuth provider picture

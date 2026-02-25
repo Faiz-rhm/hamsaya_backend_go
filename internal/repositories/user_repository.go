@@ -318,8 +318,8 @@ func (r *userRepository) CreateProfile(ctx context.Context, profile *models.Prof
 	if profile.Location != nil && profile.Location.Valid {
 		// Use PostGIS function to create GEOGRAPHY point
 		query = `
-			INSERT INTO profiles (id, first_name, last_name, location, is_complete, created_at, updated_at)
-			VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8)
+			INSERT INTO profiles (id, first_name, last_name, location, avatar_color, is_complete, created_at, updated_at)
+			VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9)
 		`
 		args = []interface{}{
 			profile.ID,
@@ -327,19 +327,21 @@ func (r *userRepository) CreateProfile(ctx context.Context, profile *models.Prof
 			profile.LastName,
 			profile.Location.P.X, // Longitude
 			profile.Location.P.Y, // Latitude
+			profile.AvatarColor,
 			profile.IsComplete,
 			profile.CreatedAt,
 			profile.UpdatedAt,
 		}
 	} else {
 		query = `
-			INSERT INTO profiles (id, first_name, last_name, is_complete, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6)
+			INSERT INTO profiles (id, first_name, last_name, avatar_color, is_complete, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7)
 		`
 		args = []interface{}{
 			profile.ID,
 			profile.FirstName,
 			profile.LastName,
+			profile.AvatarColor,
 			profile.IsComplete,
 			profile.CreatedAt,
 			profile.UpdatedAt,
@@ -357,7 +359,7 @@ func (r *userRepository) CreateProfile(ctx context.Context, profile *models.Prof
 // GetProfileByUserID retrieves a profile by user ID
 func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error) {
 	query := `
-		SELECT id, first_name, last_name, avatar, cover, about, gender, dob, website,
+		SELECT id, first_name, last_name, avatar, avatar_color, cover, about, gender, dob, website,
 			ST_X(location::geometry) as longitude,
 			ST_Y(location::geometry) as latitude,
 			country, province, district, neighborhood, is_complete,
@@ -373,6 +375,7 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 		&profile.FirstName,
 		&profile.LastName,
 		&profile.Avatar,
+		&profile.AvatarColor,
 		&profile.Cover,
 		&profile.About,
 		&profile.Gender,
@@ -411,7 +414,7 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 // GetProfileByUserIDIncludingDeleted retrieves a profile by user ID, including soft-deleted
 func (r *userRepository) GetProfileByUserIDIncludingDeleted(ctx context.Context, userID string) (*models.Profile, error) {
 	query := `
-		SELECT id, first_name, last_name, avatar, cover, about, gender, dob, website,
+		SELECT id, first_name, last_name, avatar, avatar_color, cover, about, gender, dob, website,
 			ST_X(location::geometry) as longitude,
 			ST_Y(location::geometry) as latitude,
 			country, province, district, neighborhood, is_complete,
@@ -427,6 +430,7 @@ func (r *userRepository) GetProfileByUserIDIncludingDeleted(ctx context.Context,
 		&profile.FirstName,
 		&profile.LastName,
 		&profile.Avatar,
+		&profile.AvatarColor,
 		&profile.Cover,
 		&profile.About,
 		&profile.Gender,
@@ -474,8 +478,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			SET first_name = $2, last_name = $3,
 				location = ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography,
 				about = $6, gender = $7, dob = $8, website = $9, country = $10,
-				province = $11, district = $12, neighborhood = $13, avatar = $14, cover = $15,
-				is_complete = $16, updated_at = $17
+				province = $11, district = $12, neighborhood = $13, avatar = $14, avatar_color = $15, cover = $16,
+				is_complete = $17, updated_at = $18
 			WHERE id = $1 AND deleted_at IS NULL
 		`
 		args = []interface{}{
@@ -493,6 +497,7 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			profile.District,
 			profile.Neighborhood,
 			profile.Avatar,
+			profile.AvatarColor,
 			profile.Cover,
 			profile.IsComplete,
 			time.Now(),
@@ -502,8 +507,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			UPDATE profiles
 			SET first_name = $2, last_name = $3, about = $4, gender = $5,
 				dob = $6, website = $7, country = $8, province = $9,
-				district = $10, neighborhood = $11, avatar = $12, cover = $13,
-				is_complete = $14, updated_at = $15
+				district = $10, neighborhood = $11, avatar = $12, avatar_color = $13, cover = $14,
+				is_complete = $15, updated_at = $16
 			WHERE id = $1 AND deleted_at IS NULL
 		`
 		args = []interface{}{
@@ -519,6 +524,7 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 			profile.District,
 			profile.Neighborhood,
 			profile.Avatar,
+			profile.AvatarColor,
 			profile.Cover,
 			profile.IsComplete,
 			time.Now(),
@@ -806,21 +812,23 @@ func (r *userRepository) CreateUserWithProfile(ctx context.Context, user *models
 		// Create profile
 		if profile.Location != nil && profile.Location.Valid {
 			profileQuery := `
-				INSERT INTO profiles (id, first_name, last_name, location, is_complete, created_at, updated_at)
-				VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8)
+				INSERT INTO profiles (id, first_name, last_name, location, avatar_color, is_complete, created_at, updated_at)
+				VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9)
 			`
 			_, err = tx.Exec(ctx, profileQuery,
 				profile.ID, profile.FirstName, profile.LastName,
 				profile.Location.P.X, profile.Location.P.Y,
+				profile.AvatarColor,
 				profile.IsComplete, profile.CreatedAt, profile.UpdatedAt,
 			)
 		} else {
 			profileQuery := `
-				INSERT INTO profiles (id, first_name, last_name, is_complete, created_at, updated_at)
-				VALUES ($1, $2, $3, $4, $5, $6)
+				INSERT INTO profiles (id, first_name, last_name, avatar_color, is_complete, created_at, updated_at)
+				VALUES ($1, $2, $3, $4, $5, $6, $7)
 			`
 			_, err = tx.Exec(ctx, profileQuery,
 				profile.ID, profile.FirstName, profile.LastName,
+				profile.AvatarColor,
 				profile.IsComplete, profile.CreatedAt, profile.UpdatedAt,
 			)
 		}

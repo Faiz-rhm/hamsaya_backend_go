@@ -98,6 +98,7 @@ type ProfileResponse struct {
 	FirstName    *string `json:"first_name,omitempty"`
 	LastName     *string `json:"last_name,omitempty"`
 	Avatar       *Photo  `json:"avatar,omitempty"`
+	AvatarColor  *string `json:"avatar_color,omitempty"`
 	Province     *string `json:"province,omitempty"`
 	District     *string `json:"district,omitempty"`
 	Neighborhood *string `json:"neighborhood,omitempty"`

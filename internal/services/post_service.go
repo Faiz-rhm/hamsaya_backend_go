@@ -666,12 +666,18 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 	if post.UserID != nil {
 		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
 		if err == nil {
+			avatarColor := profile.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := models.DefaultAvatarColorForProfile(profile.ID)
+				avatarColor = &c
+			}
 			response.Author = &models.AuthorInfo{
 				UserID:       *post.UserID,
 				FirstName:    profile.FirstName,
 				LastName:     profile.LastName,
 				FullName:     profile.FullName(),
 				Avatar:       profile.Avatar,
+				AvatarColor:  avatarColor,
 				Province:     profile.Province,
 				District:     profile.District,
 				Neighborhood: profile.Neighborhood,
@@ -827,12 +833,18 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 	if post.UserID != nil {
 		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
 		if err == nil {
+			avatarColor := profile.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := models.DefaultAvatarColorForProfile(profile.ID)
+				avatarColor = &c
+			}
 			response.Author = &models.AuthorInfo{
 				UserID:       *post.UserID,
 				FirstName:    profile.FirstName,
 				LastName:     profile.LastName,
 				FullName:     profile.FullName(),
 				Avatar:       profile.Avatar,
+				AvatarColor:  avatarColor,
 				Province:     profile.Province,
 				District:     profile.District,
 				Neighborhood: profile.Neighborhood,

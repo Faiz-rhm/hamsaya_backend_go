@@ -12,6 +12,7 @@ type LocationCoordinates struct {
 type UpdateProfileRequest struct {
 	FirstName    *string              `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
 	LastName     *string              `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
+	AvatarColor  *string              `json:"avatar_color,omitempty" validate:"omitempty,len=7"` // e.g. #RRGGBB
 	About        *string              `json:"about,omitempty" validate:"omitempty,max=500"`
 	Gender       *string              `json:"gender,omitempty" validate:"omitempty,oneof=male female other prefer_not_to_say"`
 	DOB          *time.Time           `json:"dob,omitempty"`
@@ -34,6 +35,7 @@ type FullProfileResponse struct {
 	LastName     *string    `json:"last_name,omitempty"`
 	FullName     string     `json:"full_name"`
 	Avatar       *Photo     `json:"avatar,omitempty"`
+	AvatarColor  *string    `json:"avatar_color,omitempty"`
 	Cover        *Photo     `json:"cover,omitempty"`
 	About        *string    `json:"about,omitempty"`
 	Gender       *string    `json:"gender,omitempty"`
@@ -96,14 +98,36 @@ type UploadImageResponse struct {
 	Photo *Photo `json:"photo"`
 }
 
-// ToFullProfileResponse converts Profile and User to FullProfileResponse
+// DefaultAvatarColorForProfile returns a deterministic color for profileID when DB has no avatar_color (e.g. existing users).
+func DefaultAvatarColorForProfile(profileID string) string {
+	if len(AvatarColors) == 0 {
+		return "#64B5F6"
+	}
+	var n int
+	for _, r := range profileID {
+		n += int(r)
+	}
+	if n < 0 {
+		n = -n
+	}
+	return AvatarColors[n%len(AvatarColors)]
+}
+
+// ToFullProfileResponse converts Profile and User to FullProfileResponse.
+// If profile.AvatarColor is nil (e.g. existing users before the field existed), a default is set so the app always receives a color.
 func ToFullProfileResponse(user *User, profile *Profile) *FullProfileResponse {
+	avatarColor := profile.AvatarColor
+	if avatarColor == nil || *avatarColor == "" {
+		c := DefaultAvatarColorForProfile(profile.ID)
+		avatarColor = &c
+	}
 	resp := &FullProfileResponse{
 		ID:            profile.ID,
 		FirstName:     profile.FirstName,
 		LastName:      profile.LastName,
 		FullName:      profile.FullName(),
 		Avatar:        profile.Avatar,
+		AvatarColor:   avatarColor,
 		Cover:         profile.Cover,
 		About:         profile.About,
 		Gender:        profile.Gender,

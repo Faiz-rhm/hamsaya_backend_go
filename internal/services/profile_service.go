@@ -144,6 +144,9 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 	if req.Neighborhood != nil {
 		profile.Neighborhood = req.Neighborhood
 	}
+	if req.AvatarColor != nil {
+		profile.AvatarColor = req.AvatarColor
+	}
 
 	// Handle location update (Latitude/Longitude -> pgtype.Point)
 	// Support both nested location object and flat latitude/longitude fields

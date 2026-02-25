@@ -247,6 +247,11 @@ func (s *EventService) enrichEventInterests(ctx context.Context, interests []*mo
 			continue
 		}
 
+		avatarColor := profile.AvatarColor
+		if avatarColor == nil || *avatarColor == "" {
+			c := models.DefaultAvatarColorForProfile(profile.ID)
+			avatarColor = &c
+		}
 		enrichedUser := &models.EventInterestedUser{
 			User: &models.AuthorInfo{
 				UserID:       interest.UserID,
@@ -254,6 +259,7 @@ func (s *EventService) enrichEventInterests(ctx context.Context, interests []*mo
 				LastName:     profile.LastName,
 				FullName:     profile.FullName(),
 				Avatar:       profile.Avatar,
+				AvatarColor:  avatarColor,
 				Province:     profile.Province,
 				District:     profile.District,
 				Neighborhood: profile.Neighborhood,

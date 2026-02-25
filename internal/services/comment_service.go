@@ -344,12 +344,18 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 	// Get author info
 	profile, err := s.userRepo.GetProfileByUserID(ctx, comment.UserID)
 	if err == nil {
+		avatarColor := profile.AvatarColor
+		if avatarColor == nil || *avatarColor == "" {
+			c := models.DefaultAvatarColorForProfile(profile.ID)
+			avatarColor = &c
+		}
 		response.Author = &models.AuthorInfo{
 			UserID:       comment.UserID,
 			FirstName:    profile.FirstName,
 			LastName:     profile.LastName,
 			FullName:     profile.FullName(),
 			Avatar:       profile.Avatar,
+			AvatarColor:  avatarColor,
 			Province:     profile.Province,
 			District:     profile.District,
 			Neighborhood: profile.Neighborhood,
