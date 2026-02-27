@@ -173,6 +173,71 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 	return photo, nil
 }
 
+// maxPostImageSize is the max size for post image uploads (10MB).
+const maxPostImageSize = 10 * 1024 * 1024
+
+// maxPostVideoSize is the max size for post video uploads (50MB).
+const maxPostVideoSize = 50 * 1024 * 1024
+
+// isVideoContentType returns true if contentType is a video type (e.g. "video/mp4").
+func isVideoContentType(contentType string) bool {
+	base := strings.TrimSpace(strings.Split(contentType, ";")[0])
+	return strings.HasPrefix(base, "video/")
+}
+
+// UploadPostAttachment uploads an image or video for a post. Images are limited to 10MB and processed;
+// videos are limited to 50MB and stored as-is.
+func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipart.File, header *multipart.FileHeader) (*models.Photo, error) {
+	contentType := header.Header.Get("Content-Type")
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	if isVideoContentType(contentType) {
+		// Video: larger limit, no image processing, upload raw file.
+		if header.Size > maxPostVideoSize {
+			return nil, utils.NewBadRequestError("Video file size exceeds 50MB limit", nil)
+		}
+		data, err := io.ReadAll(file)
+		if err != nil {
+			return nil, utils.NewBadRequestError("Failed to read file", err)
+		}
+		size := int64(len(data))
+		if size > maxPostVideoSize {
+			return nil, utils.NewBadRequestError("Video file size exceeds 50MB limit", nil)
+		}
+		var result *storage.UploadResult
+		if s.client != nil {
+			result, err = s.client.UploadFile(ctx, bytes.NewReader(data), size, contentType, string(ImageTypePost), header.Filename)
+			if err != nil {
+				s.logger.Error("Failed to upload video to storage", zap.Error(err))
+				return nil, utils.NewInternalError("Failed to upload video", err)
+			}
+		} else {
+			// Mock: no dimensions for video
+			result = &storage.UploadResult{
+				URL:      fmt.Sprintf("https://storage.hamsaya.local/uploads/post/%s", header.Filename),
+				Key:      "post/" + header.Filename,
+				Size:     size,
+				MimeType: contentType,
+				Width:    0,
+				Height:   0,
+			}
+		}
+		return &models.Photo{
+			URL:      result.URL,
+			Name:     header.Filename,
+			Size:     result.Size,
+			Width:    result.Width,
+			Height:   result.Height,
+			MimeType: result.MimeType,
+		}, nil
+	}
+
+	// Image: use existing 10MB limit and image processing.
+	return s.UploadImage(ctx, file, header, ImageTypePost)
+}
+
 // DeleteImage deletes an image from storage
 func (s *StorageService) DeleteImage(ctx context.Context, url string) error {
 	if url == "" {

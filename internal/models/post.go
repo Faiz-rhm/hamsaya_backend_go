@@ -21,9 +21,10 @@ const (
 type PostVisibility string
 
 const (
-	VisibilityPublic  PostVisibility = "PUBLIC"
-	VisibilityFriends PostVisibility = "FRIENDS"
-	VisibilityPrivate PostVisibility = "PRIVATE"
+	VisibilityPublic   PostVisibility = "PUBLIC"
+	VisibilityFriends  PostVisibility = "FRIENDS"
+	VisibilityPrivate  PostVisibility = "PRIVATE"
+	VisibilityViewOnly PostVisibility = "VIEW_ONLY" // FEED only: post is view-only (no likes/comments)
 )
 
 // EventState represents the state of an event
@@ -119,7 +120,7 @@ type CreatePostRequest struct {
 	Title       *string        `json:"title,omitempty" validate:"omitempty,max=255"`
 	Description *string        `json:"description,omitempty" validate:"omitempty,max=5000"`
 	Type        PostType       `json:"type" validate:"required,oneof=FEED EVENT SELL PULL"`
-	Visibility  PostVisibility `json:"visibility,omitempty" validate:"omitempty,oneof=PUBLIC FRIENDS PRIVATE"`
+	Visibility  PostVisibility `json:"visibility,omitempty" validate:"omitempty,oneof=PUBLIC FRIENDS PRIVATE VIEW_ONLY"`
 
 	// Sell-specific
 	Currency    *string  `json:"currency,omitempty" validate:"omitempty,len=3"`
@@ -188,7 +189,7 @@ func ParseAttachmentPhoto(data json.RawMessage) (Photo, error) {
 type UpdatePostRequest struct {
 	Title       *string        `json:"title,omitempty" validate:"omitempty,max=255"`
 	Description *string        `json:"description,omitempty" validate:"omitempty,max=5000"`
-	Visibility  *PostVisibility `json:"visibility,omitempty" validate:"omitempty,oneof=PUBLIC FRIENDS PRIVATE"`
+	Visibility  *PostVisibility `json:"visibility,omitempty" validate:"omitempty,oneof=PUBLIC FRIENDS PRIVATE VIEW_ONLY"`
 
 	// Sell-specific
 	Price       *float64 `json:"price,omitempty" validate:"omitempty,min=0"`

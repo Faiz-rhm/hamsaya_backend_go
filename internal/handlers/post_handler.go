@@ -727,14 +727,14 @@ func (h *PostHandler) UploadPostImage(c *gin.Context) {
 	}
 	defer file.Close()
 
-	// Upload image to storage
-	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)
+	// Upload image or video to storage (images 10MB, videos 50MB)
+	photo, err := h.storageService.UploadPostAttachment(c.Request.Context(), file, header)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
-	h.logger.Info("Post image uploaded successfully",
+	h.logger.Info("Post attachment uploaded successfully",
 		zap.String("user_id", userID.(string)),
 		zap.String("url", photo.URL),
 	)

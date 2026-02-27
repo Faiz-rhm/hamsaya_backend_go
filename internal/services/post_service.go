@@ -281,6 +281,10 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 	if post.UserID == nil || *post.UserID != userID {
 		return nil, utils.NewUnauthorizedError("You don't have permission to update this post", nil)
 	}
+	// VIEW_ONLY visibility is only allowed for FEED posts
+	if req.Visibility != nil && *req.Visibility == models.VisibilityViewOnly && post.Type != models.PostTypeFeed {
+		return nil, utils.NewBadRequestError("View only visibility is only allowed for feed posts", nil)
+	}
 
 	// Update fields
 	if req.Title != nil {
@@ -1143,6 +1147,10 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 
 // validatePostRequest validates post creation request
 func (s *PostService) validatePostRequest(req *models.CreatePostRequest) error {
+	// VIEW_ONLY visibility is only allowed for FEED posts
+	if req.Visibility == models.VisibilityViewOnly && req.Type != models.PostTypeFeed {
+		return utils.NewBadRequestError("View only visibility is only allowed for feed posts", nil)
+	}
 	switch req.Type {
 	case models.PostTypeSell:
 		if req.Title == nil || *req.Title == "" {
