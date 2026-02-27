@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"hash/fnv"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,11 +13,22 @@ import (
 	"go.uber.org/zap"
 )
 
+var commentBusinessAvatarColors = []string{
+	"#7C6274", "#6B8E9F", "#8B9A6B", "#9B7B8E", "#6A8B7C", "#8B756B", "#7B8B9E", "#9A7B6C",
+}
+
+func commentBusinessAvatarColor(businessID string) string {
+	h := fnv.New32a()
+	h.Write([]byte(businessID))
+	return commentBusinessAvatarColors[int(h.Sum32())%len(commentBusinessAvatarColors)]
+}
+
 // CommentService handles comment operations
 type CommentService struct {
 	commentRepo         repositories.CommentRepository
 	postRepo            repositories.PostRepository
 	userRepo            repositories.UserRepository
+	businessRepo        repositories.BusinessRepository
 	notificationService *NotificationService
 	logger              *zap.Logger
 }
@@ -26,6 +38,7 @@ func NewCommentService(
 	commentRepo repositories.CommentRepository,
 	postRepo repositories.PostRepository,
 	userRepo repositories.UserRepository,
+	businessRepo repositories.BusinessRepository,
 	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *CommentService {
@@ -33,6 +46,7 @@ func NewCommentService(
 		commentRepo:         commentRepo,
 		postRepo:            postRepo,
 		userRepo:            userRepo,
+		businessRepo:        businessRepo,
 		notificationService: notificationService,
 		logger:              logger,
 	}
@@ -65,6 +79,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		ID:              commentID,
 		PostID:          postID,
 		UserID:          userID,
+		BusinessID:      req.BusinessID,
 		ParentCommentID: req.ParentCommentID,
 		Text:            req.Text,
 		TotalLikes:      0,
@@ -389,6 +404,33 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 		}
 		// Check if comment belongs to the viewer
 		response.IsMine = comment.UserID == *viewerID
+	}
+
+	// If comment was posted as a business, attach business_id and business_profile
+		if comment.BusinessID != nil && *comment.BusinessID != "" {
+		response.BusinessID = comment.BusinessID
+		business, err := s.businessRepo.GetByID(ctx, *comment.BusinessID)
+		if err == nil {
+			avatarColor := business.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := commentBusinessAvatarColor(business.ID)
+				avatarColor = &c
+			}
+			response.BusinessProfile = &models.BusinessInfo{
+				BusinessID:   business.ID,
+				Name:         business.Name,
+				Description:  business.Description,
+				PhoneNumber:  business.PhoneNumber,
+				Email:        business.Email,
+				Website:      business.Website,
+				Avatar:       business.Avatar,
+				AvatarColor:  avatarColor,
+				Cover:        business.Cover,
+				Province:     business.Province,
+				District:     business.District,
+				Neighborhood: business.Neighborhood,
+			}
+		}
 	}
 
 	// Get first few replies if requested
