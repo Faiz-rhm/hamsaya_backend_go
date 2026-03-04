@@ -698,6 +698,77 @@ func (h *PostHandler) GetMyBookmarks(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Bookmarks retrieved successfully", posts)
 }
 
+// GetMyEvents godoc
+// @Summary Get events the user is going to or interested in
+// @Description Get EVENT posts where the authenticated user has set interest (going or interested)
+// @Tags posts
+// @Produce json
+// @Security BearerAuth
+// @Param event_state query string true "Event state: going or interested"
+// @Param page query int false "Page" default(1)
+// @Param limit query int false "Limit" default(20)
+// @Success 200 {object} utils.Response{data=[]models.PostResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /users/me/events [get]
+func (h *PostHandler) GetMyEvents(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	eventStateStr := c.Query("event_state")
+	if eventStateStr == "" {
+		utils.SendError(c, http.StatusBadRequest, "event_state is required (going or interested)", utils.ErrValidation)
+		return
+	}
+	var eventState models.EventInterestState
+	switch eventStateStr {
+	case "going":
+		eventState = models.EventInterestGoing
+	case "interested":
+		eventState = models.EventInterestInterested
+	default:
+		utils.SendError(c, http.StatusBadRequest, "event_state must be going or interested", utils.ErrValidation)
+		return
+	}
+
+	limit := 20
+	offset := 0
+	page := 1
+	if limitStr := c.Query("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+			limit = l
+		}
+	}
+	if pageStr := c.Query("page"); pageStr != "" {
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			if p == 0 {
+				page, offset = 1, 0
+			} else {
+				page = p
+				offset = (p - 1) * limit
+			}
+		}
+	} else if offsetStr := c.Query("offset"); offsetStr != "" {
+		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
+			offset = o
+			page = (offset / limit) + 1
+		}
+	}
+	_ = page // reserved for future pagination metadata
+
+	posts, err := h.postService.GetUserEventPosts(c.Request.Context(), userID.(string), eventState, limit, offset)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Events retrieved successfully", posts)
+}
+
 // UploadPostImage godoc
 // @Summary Upload a post image
 // @Description Upload an image for a post before creating the post

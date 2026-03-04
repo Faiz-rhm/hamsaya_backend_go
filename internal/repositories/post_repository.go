@@ -38,6 +38,7 @@ type PostRepository interface {
 	UnbookmarkPost(ctx context.Context, userID, postID string) error
 	IsBookmarkedByUser(ctx context.Context, userID, postID string) (bool, error)
 	GetUserBookmarks(ctx context.Context, userID string, limit, offset int) ([]*models.Post, error)
+	GetUserEventPosts(ctx context.Context, userID string, eventState models.EventInterestState, limit, offset int) ([]*models.Post, error)
 
 	// Shares
 	SharePost(ctx context.Context, share *models.PostShare) error
@@ -436,6 +437,27 @@ func (r *postRepository) GetUserBookmarks(ctx context.Context, userID string, li
 	`
 
 	return r.queryPosts(ctx, query, userID, limit, offset)
+}
+
+// GetUserEventPosts gets EVENT posts that the user is going to or interested in
+func (r *postRepository) GetUserEventPosts(ctx context.Context, userID string, eventState models.EventInterestState, limit, offset int) ([]*models.Post, error) {
+	query := `
+		SELECT
+			p.id, p.user_id, p.business_id, p.original_post_id, p.category_id,
+			p.title, p.description, p.type, p.status, p.visibility,
+			p.currency, p.price, p.discount, p.free, p.sold, p.is_promoted, p.country_code, p.contact_no, p.is_location,
+			p.start_date, p.start_time, p.end_date, p.end_time, p.event_state, p.interested_count, p.going_count, p.expired_at,
+			ST_X(p.address_location::geometry)::double precision, ST_Y(p.address_location::geometry)::double precision, ST_X(p.user_location::geometry)::double precision, ST_Y(p.user_location::geometry)::double precision,
+			p.country, p.province, p.district, p.neighborhood,
+			p.total_comments, p.total_likes, p.total_shares,
+			p.created_at, p.updated_at, p.deleted_at
+		FROM posts p
+		INNER JOIN event_interests ei ON p.id = ei.post_id
+		WHERE ei.user_id = $1 AND ei.event_state = $2 AND p.deleted_at IS NULL AND p.type = $3
+		ORDER BY ei.updated_at DESC
+		LIMIT $4 OFFSET $5
+	`
+	return r.queryPosts(ctx, query, userID, string(eventState), string(models.PostTypeEvent), limit, offset)
 }
 
 // SharePost creates a share record

@@ -290,6 +290,14 @@ func (m *MockPostRepository) GetUserBookmarks(ctx context.Context, userID string
 	return args.Get(0).([]*models.Post), args.Error(1)
 }
 
+func (m *MockPostRepository) GetUserEventPosts(ctx context.Context, userID string, eventState models.EventInterestState, limit, offset int) ([]*models.Post, error) {
+	args := m.Called(ctx, userID, eventState, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Post), args.Error(1)
+}
+
 func (m *MockPostRepository) GetBusinessPosts(ctx context.Context, businessID string, limit, offset int) ([]*models.Post, error) {
 	args := m.Called(ctx, businessID, limit, offset)
 	if args.Get(0) == nil {

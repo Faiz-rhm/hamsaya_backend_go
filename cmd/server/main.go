@@ -223,6 +223,11 @@ func main() {
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		// Explicit /users/me/* routes first so they always match (avoid 404 from param route)
+		v1.GET("/users/me/posts", authMiddleware.RequireAuth(), postHandler.GetMyPosts)
+		v1.GET("/users/me/bookmarks", authMiddleware.RequireAuth(), postHandler.GetMyBookmarks)
+		v1.GET("/users/me/events", authMiddleware.RequireAuth(), postHandler.GetMyEvents)
+
 		// Public auth routes (with rate limiting)
 		auth := v1.Group("/auth")
 		{
@@ -258,6 +263,8 @@ func main() {
 		// Profile routes
 		users := v1.Group("/users")
 		{
+			// /me/posts, /me/bookmarks, /me/events are registered above on v1
+
 			// Protected routes (require authentication)
 			users.GET("/me", authMiddleware.RequireAuth(), profileHandler.GetMyProfile)
 			users.PUT("/me", authMiddleware.RequireAuth(), profileHandler.UpdateProfile)
@@ -343,10 +350,6 @@ func main() {
 			events.GET("/:post_id/interested", authMiddleware.RequireAuth(), eventHandler.GetInterestedUsers)
 			events.GET("/:post_id/going", authMiddleware.RequireAuth(), eventHandler.GetGoingUsers)
 		}
-
-		// User posts and bookmarks (already defined in users group above)
-		users.GET("/me/posts", authMiddleware.RequireAuth(), postHandler.GetMyPosts)
-		users.GET("/me/bookmarks", authMiddleware.RequireAuth(), postHandler.GetMyBookmarks)
 
 		// Business routes
 		businesses := v1.Group("/businesses")

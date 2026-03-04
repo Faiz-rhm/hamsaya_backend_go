@@ -287,6 +287,13 @@ All API endpoints are prefixed with `/api/v1`
 - `POST /api/v1/auth/mfa/enroll` - Enroll in MFA
 - `POST /api/v1/auth/mfa/verify` - Verify MFA code
 
+#### User (authenticated)
+
+- `GET /api/v1/users/me` - Get my profile
+- `GET /api/v1/users/me/posts` - Get my posts (query: `type`, `page`, `limit`)
+- `GET /api/v1/users/me/bookmarks` - Get my bookmarked posts
+- `GET /api/v1/users/me/events` - Get events I'm going to or interested in (query: `event_state=going|interested`, `page`, `limit`)
+
 _More endpoints to be added in subsequent phases_
 
 ## Configuration

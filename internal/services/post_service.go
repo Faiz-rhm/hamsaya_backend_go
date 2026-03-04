@@ -661,6 +661,27 @@ func (s *PostService) GetUserBookmarks(ctx context.Context, userID string, limit
 	return enrichedPosts, nil
 }
 
+// GetUserEventPosts gets EVENT posts that the user is going to or interested in
+func (s *PostService) GetUserEventPosts(ctx context.Context, userID string, eventState models.EventInterestState, limit, offset int) ([]*models.PostResponse, error) {
+	posts, err := s.postRepo.GetUserEventPosts(ctx, userID, eventState, limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to get user event posts", zap.String("user_id", userID), zap.String("event_state", string(eventState)), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get event posts", err)
+	}
+
+	var enrichedPosts []*models.PostResponse
+	for _, post := range posts {
+		enrichedPost, err := s.enrichPost(ctx, post, &userID)
+		if err != nil {
+			s.logger.Warn("Failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
+			continue
+		}
+		enrichedPosts = append(enrichedPosts, enrichedPost)
+	}
+
+	return enrichedPosts, nil
+}
+
 // enrichPost enriches a post with author, attachments, and engagement status
 func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerID *string) (*models.PostResponse, error) {
 	response := &models.PostResponse{
