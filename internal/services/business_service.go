@@ -543,6 +543,7 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 			actor, _ := s.userRepo.GetProfileByUserID(ctxDetach, userID)
 			actorName := "Someone"
 			actorAvatar := ""
+			actorAvatarColor := ""
 			if actor != nil {
 				if n := actor.FullName(); n != "" {
 					actorName = n
@@ -550,14 +551,18 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 				if actor.Avatar != nil && actor.Avatar.URL != "" {
 					actorAvatar = actor.Avatar.URL
 				}
+				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+					actorAvatarColor = *actor.AvatarColor
+				}
 			}
 			title := actorName + " started following your business"
 			msg := title
 			data := map[string]interface{}{
-				"actor_id":     userID,
-				"actor_name":   actorName,
-				"actor_avatar": actorAvatar,
-				"business_id":  businessID,
+				"actor_id":           userID,
+				"actor_name":         actorName,
+				"actor_avatar":       actorAvatar,
+				"actor_avatar_color": actorAvatarColor,
+				"business_id":        businessID,
 			}
 			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  business.UserID,

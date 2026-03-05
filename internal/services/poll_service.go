@@ -199,13 +199,18 @@ func (s *PollService) VotePoll(ctx context.Context, pollID, userID, optionID str
 				return
 			}
 			actorName := actor.FullName()
+			actorAvatarColor := ""
+			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+				actorAvatarColor = *actor.AvatarColor
+			}
 			title := actorName + " voted on your poll"
 			msg := title
 			data := map[string]interface{}{
-				"actor_id":     userID,
-				"actor_name":   actorName,
-				"actor_avatar": actor.Avatar,
-				"post_id":      poll.PostID,
+				"actor_id":           userID,
+				"actor_name":         actorName,
+				"actor_avatar":       actor.Avatar,
+				"actor_avatar_color": actorAvatarColor,
+				"post_id":            poll.PostID,
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID

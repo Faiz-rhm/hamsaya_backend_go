@@ -137,19 +137,24 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			ctxDetach := context.WithoutCancel(ctx)
 			actorName := "Someone"
 			var actorAvatar interface{}
+			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
 				actorName = actor.FullName()
 				actorAvatar = actor.Avatar
+				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+					actorAvatarColor = *actor.AvatarColor
+				}
 			} else {
 				s.logger.Warn("Failed to get actor for comment notification, using fallback", zap.Error(err))
 			}
 			title := actorName + " commented on your post"
 			msg := title
 			data := map[string]interface{}{
-				"actor_id":     userID,
-				"actor_name":   actorName,
-				"actor_avatar": actorAvatar,
-				"post_id":      postID,
+				"actor_id":           userID,
+				"actor_name":         actorName,
+				"actor_avatar":       actorAvatar,
+				"actor_avatar_color": actorAvatarColor,
+				"post_id":            postID,
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID

@@ -82,12 +82,17 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 				return
 			}
 			actorName := actor.FullName()
+			actorAvatarColor := ""
+			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+				actorAvatarColor = *actor.AvatarColor
+			}
 			title := actorName + " started following you"
 			msg := title
 			data := map[string]interface{}{
-				"actor_id":     followerID,
-				"actor_name":   actorName,
-				"actor_avatar": actor.Avatar,
+				"actor_id":           followerID,
+				"actor_name":         actorName,
+				"actor_avatar":       actor.Avatar,
+				"actor_avatar_color": actorAvatarColor,
 			}
 			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  followingID,

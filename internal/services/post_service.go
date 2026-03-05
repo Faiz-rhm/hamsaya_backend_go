@@ -1022,19 +1022,24 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, recipientUserID, postID string, notifType models.NotificationType, action string) {
 	actorName := "Someone"
 	var actorAvatar interface{}
+	var actorAvatarColor string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, actorUserID); err == nil {
 		actorName = actor.FullName()
 		actorAvatar = actor.Avatar
+		if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+			actorAvatarColor = *actor.AvatarColor
+		}
 	} else {
 		s.logger.Warn("Failed to get actor profile for notification, using fallback", zap.Error(err), zap.String("actor_user_id", actorUserID))
 	}
 	title := actorName + " " + action
 	msg := title
 	data := map[string]interface{}{
-		"actor_id":     actorUserID,
-		"actor_name":   actorName,
-		"actor_avatar": actorAvatar,
-		"post_id":      postID,
+		"actor_id":           actorUserID,
+		"actor_name":         actorName,
+		"actor_avatar":       actorAvatar,
+		"actor_avatar_color": actorAvatarColor,
+		"post_id":            postID,
 	}
 	if post, err := s.postRepo.GetByID(ctx, postID); err == nil && post.BusinessID != nil && *post.BusinessID != "" {
 		data["business_id"] = *post.BusinessID
@@ -1074,9 +1079,13 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 
 	actorName := "Someone"
 	var actorAvatar interface{}
+	var actorAvatarColor string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, posterUserID); err == nil {
 		actorName = actor.FullName()
 		actorAvatar = actor.Avatar
+		if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+			actorAvatarColor = *actor.AvatarColor
+		}
 	}
 
 	displayName := actorName
@@ -1089,10 +1098,11 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 	title := displayName + " posted"
 	msg := title
 	data := map[string]interface{}{
-		"actor_id":     posterUserID,
-		"actor_name":   displayName,
-		"actor_avatar": actorAvatar,
-		"post_id":      postID,
+		"actor_id":           posterUserID,
+		"actor_name":         displayName,
+		"actor_avatar":       actorAvatar,
+		"actor_avatar_color": actorAvatarColor,
+		"post_id":            postID,
 	}
 	if businessID != nil && *businessID != "" {
 		data["business_id"] = *businessID

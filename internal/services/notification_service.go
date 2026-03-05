@@ -23,6 +23,7 @@ const (
 type NotificationService struct {
 	notificationRepo repositories.NotificationRepository
 	settingsRepo     repositories.NotificationSettingsRepository
+	userRepo         repositories.UserRepository
 	fcmClient        *fcmclient.FCMClient
 	redisClient      *redis.Client
 	logger           *zap.Logger
@@ -32,6 +33,7 @@ type NotificationService struct {
 func NewNotificationService(
 	notificationRepo repositories.NotificationRepository,
 	settingsRepo repositories.NotificationSettingsRepository,
+	userRepo repositories.UserRepository,
 	fcmClient *fcmclient.FCMClient,
 	redisClient *redis.Client,
 	logger *zap.Logger,
@@ -39,6 +41,7 @@ func NewNotificationService(
 	return &NotificationService{
 		notificationRepo: notificationRepo,
 		settingsRepo:     settingsRepo,
+		userRepo:         userRepo,
 		fcmClient:        fcmClient,
 		redisClient:      redisClient,
 		logger:           logger,
@@ -124,6 +127,7 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 }
 
 // GetNotifications retrieves notifications for a user. businessID is optional; when set, only notifications with data.business_id equal to it are returned.
+// Enriches each notification's data with actor_avatar_color from the actor's profile when missing (e.g. for notifications created before the field existed).
 func (s *NotificationService) GetNotifications(ctx context.Context, userID string, unreadOnly bool, limit, offset int, businessID *string) ([]*models.NotificationResponse, error) {
 	filter := &models.GetNotificationsFilter{
 		UserID:     userID,
@@ -144,7 +148,27 @@ func (s *NotificationService) GetNotifications(ctx context.Context, userID strin
 
 	responses := make([]*models.NotificationResponse, 0, len(notifications))
 	for _, notification := range notifications {
-		responses = append(responses, notification.ToNotificationResponse())
+		resp := notification.ToNotificationResponse()
+		// Enrich with actor_avatar_color when missing (e.g. old notifications)
+		if s.userRepo != nil && resp.Data != nil {
+			if actorID, ok := resp.Data["actor_id"]; ok {
+				if actorStr, ok := actorID.(string); ok && actorStr != "" {
+					existing := resp.Data["actor_avatar_color"]
+					if existing == nil || existing == "" {
+						if profile, err := s.userRepo.GetProfileByUserID(ctx, actorStr); err == nil && profile.AvatarColor != nil && *profile.AvatarColor != "" {
+							// Clone data so we don't mutate the stored notification
+							newData := make(map[string]interface{}, len(resp.Data)+1)
+							for k, v := range resp.Data {
+								newData[k] = v
+							}
+							newData["actor_avatar_color"] = *profile.AvatarColor
+							resp.Data = newData
+						}
+					}
+				}
+			}
+		}
+		responses = append(responses, resp)
 	}
 
 	return responses, nil

@@ -98,13 +98,18 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 				return
 			}
 			actorName := actor.FullName()
+			actorAvatarColor := ""
+			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+				actorAvatarColor = *actor.AvatarColor
+			}
 			title := actorName + " is interested in your event"
 			msg := title
 			data := map[string]interface{}{
-				"actor_id":     userID,
-				"actor_name":   actorName,
-				"actor_avatar": actor.Avatar,
-				"post_id":      postID,
+				"actor_id":           userID,
+				"actor_name":         actorName,
+				"actor_avatar":       actor.Avatar,
+				"actor_avatar_color": actorAvatarColor,
+				"post_id":            postID,
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
