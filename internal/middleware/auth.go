@@ -159,6 +159,95 @@ func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 	}
 }
 
+// RequireAdmin requires admin or moderator role for access
+func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, err := m.extractAndValidateToken(c)
+		if err != nil {
+			m.logger.Warn("Authentication failed", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Authentication required", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		user, err := m.userRepo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			m.logger.Error("Failed to get user for admin check", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Invalid user", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		if !user.IsAdminOrModerator() {
+			m.logger.Warn("Admin access denied",
+				zap.String("user_id", user.ID),
+				zap.String("role", string(user.Role)),
+			)
+			utils.SendError(c, http.StatusForbidden, "Admin access required", utils.ErrForbidden)
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("email", claims.Email)
+		c.Set("session_id", claims.SessionID)
+		c.Set("aal", claims.AAL)
+		c.Set("user", user)
+		c.Set("admin_user", user)
+
+		c.Next()
+	}
+}
+
+// RequireAdminOnly requires strictly admin role (not moderator)
+func (m *AuthMiddleware) RequireAdminOnly() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, err := m.extractAndValidateToken(c)
+		if err != nil {
+			m.logger.Warn("Authentication failed", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Authentication required", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		user, err := m.userRepo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			m.logger.Error("Failed to get user for admin check", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Invalid user", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		if !user.IsAdmin() {
+			m.logger.Warn("Admin-only access denied",
+				zap.String("user_id", user.ID),
+				zap.String("role", string(user.Role)),
+			)
+			utils.SendError(c, http.StatusForbidden, "Admin access required", utils.ErrForbidden)
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("email", claims.Email)
+		c.Set("session_id", claims.SessionID)
+		c.Set("aal", claims.AAL)
+		c.Set("user", user)
+		c.Set("admin_user", user)
+
+		c.Next()
+	}
+}
+
+// GetAdminUser returns the admin user from context (set by RequireAdmin middleware)
+func GetAdminUser(c *gin.Context) (*models.User, bool) {
+	user, exists := c.Get("admin_user")
+	if !exists {
+		return nil, false
+	}
+	return user.(*models.User), true
+}
+
 // extractAndValidateToken extracts and validates JWT from Authorization header
 func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTClaims, error) {
 	// Get Authorization header

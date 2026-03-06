@@ -139,6 +139,7 @@ func main() {
 	searchRepo := repositories.NewSearchRepository(db)
 	reportRepo := repositories.NewReportRepository(db)
 	feedbackRepo := repositories.NewFeedbackRepository(db)
+	adminRepo := repositories.NewAdminRepository(db)
 
 	// Initialize services
 	sugaredLogger.Info("Initializing services...")
@@ -163,6 +164,7 @@ func main() {
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
+	adminService := services.NewAdminService(adminRepo, fcmClient, logger)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")
@@ -205,6 +207,7 @@ func main() {
 	searchHandler := handlers.NewSearchHandler(searchService, validator, logger)
 	reportHandler := handlers.NewReportHandler(reportService)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
+	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
 
 	// Health check routes (no versioning)
 	router.GET("/health", healthHandler.Health)
@@ -440,6 +443,60 @@ func main() {
 		{
 			feedback.POST("", feedbackHandler.SubmitFeedback)
 			feedback.GET("/status", feedbackHandler.GetFeedbackStatus)
+		}
+
+		// Admin routes (require admin role)
+		admin := v1.Group("/admin")
+		admin.Use(authMiddleware.RequireAdmin())
+		{
+			// Dashboard & Analytics
+			admin.GET("/stats", adminHandler.GetDashboardStats)
+			admin.GET("/analytics/users", adminHandler.GetUserAnalytics)
+			admin.GET("/analytics/posts", adminHandler.GetPostAnalytics)
+			admin.GET("/analytics/engagement", adminHandler.GetEngagementAnalytics)
+
+			// User Management
+			admin.GET("/users", adminHandler.ListUsers)
+			admin.GET("/users/:user_id", adminHandler.GetUser)
+			admin.POST("/users/:user_id/suspend", adminHandler.SuspendUser)
+			admin.POST("/users/:user_id/unsuspend", adminHandler.UnsuspendUser)
+			admin.DELETE("/users/:user_id", adminHandler.DeleteUser)
+			admin.PUT("/users/:user_id/role", adminHandler.UpdateUserRole)
+
+			// Content Moderation
+			admin.GET("/posts", adminHandler.ListAllPosts)
+			admin.GET("/posts/:post_id", adminHandler.GetPostDetail)
+			admin.DELETE("/posts/:post_id", adminHandler.DeletePost)
+			admin.PUT("/posts/:post_id/status", adminHandler.UpdatePostStatus)
+			admin.GET("/comments", adminHandler.ListAllComments)
+			admin.DELETE("/comments/:comment_id", adminHandler.DeleteComment)
+
+			// Reports
+			admin.GET("/reports/posts", adminHandler.ListPostReports)
+			admin.GET("/reports/posts/:report_id", adminHandler.GetPostReport)
+			admin.GET("/reports/comments", adminHandler.ListCommentReports)
+			admin.GET("/reports/comments/:report_id", adminHandler.GetCommentReport)
+			admin.GET("/reports/users", adminHandler.ListUserReports)
+			admin.GET("/reports/users/:report_id", adminHandler.GetUserReport)
+			admin.GET("/reports/businesses", adminHandler.ListBusinessReports)
+			admin.GET("/reports/businesses/:report_id", adminHandler.GetBusinessReport)
+			admin.PUT("/reports/:report_type/:report_id/status", adminHandler.UpdateReportStatus)
+
+			// Business Management
+			admin.GET("/businesses", adminHandler.ListAllBusinesses)
+			admin.GET("/businesses/:business_id", adminHandler.GetBusinessDetail)
+			admin.PUT("/businesses/:business_id/status", adminHandler.UpdateBusinessStatus)
+			admin.DELETE("/businesses/:business_id", adminHandler.DeleteBusiness)
+
+			// Categories (wire existing handlers)
+			admin.GET("/categories", categoryHandler.GetAllCategories)
+			admin.POST("/categories", categoryHandler.CreateCategory)
+			admin.PUT("/categories/:category_id", categoryHandler.UpdateCategory)
+			admin.DELETE("/categories/:category_id", categoryHandler.DeleteCategory)
+
+			// Push Notifications
+			admin.POST("/notifications/broadcast", adminHandler.BroadcastNotification)
+			admin.POST("/notifications/send", adminHandler.SendTargetedNotification)
 		}
 
 		// Placeholder for future routes
