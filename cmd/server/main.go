@@ -139,6 +139,7 @@ func main() {
 	searchRepo := repositories.NewSearchRepository(db)
 	reportRepo := repositories.NewReportRepository(db)
 	adminRepo := repositories.NewAdminRepository(db)
+	feedbackRepo := repositories.NewFeedbackRepository(db)
 
 	// Initialize services
 	sugaredLogger.Info("Initializing services...")
@@ -163,6 +164,7 @@ func main() {
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	adminService := services.NewAdminService(adminRepo, logger)
+	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")
@@ -205,6 +207,7 @@ func main() {
 	searchHandler := handlers.NewSearchHandler(searchService, validator, logger)
 	reportHandler := handlers.NewReportHandler(reportService)
 	adminHandler := handlers.NewAdminHandler(adminService, logger)
+	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
 
 	// Health check routes (no versioning)
 	router.GET("/health", healthHandler.Health)
@@ -493,6 +496,14 @@ func main() {
 		v1.GET("/search/users", authMiddleware.RequireAuth(), searchHandler.SearchUsers)
 		v1.GET("/search/businesses", authMiddleware.RequireAuth(), searchHandler.SearchBusinesses)
 		v1.GET("/discover", authMiddleware.RequireAuth(), searchHandler.Discover)
+
+		// Feedback routes (require auth)
+		feedback := v1.Group("/feedback")
+		feedback.Use(authMiddleware.RequireAuth())
+		{
+			feedback.POST("", feedbackHandler.SubmitFeedback)
+			feedback.GET("/status", feedbackHandler.GetFeedbackStatus)
+		}
 
 		// Placeholder for future routes
 		v1.GET("/ping", func(c *gin.Context) {
