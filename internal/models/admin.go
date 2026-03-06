@@ -337,6 +337,7 @@ type AdminCommentReportResponse struct {
 	CommentContent     string    `json:"comment_content"`
 	CommentAuthorID    string    `json:"comment_author_id"`
 	CommentAuthorEmail string    `json:"comment_author_email"`
+	CommentHidden      bool      `json:"comment_hidden"` // true if comment is soft-deleted
 	ReporterID         string    `json:"reporter_id"`
 	ReporterEmail      string    `json:"reporter_email"`
 	Reason             string    `json:"reason"`

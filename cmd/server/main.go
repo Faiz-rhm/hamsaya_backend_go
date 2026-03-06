@@ -469,6 +469,7 @@ func main() {
 			admin.DELETE("/posts/:post_id", adminHandler.DeletePost)
 			admin.PUT("/posts/:post_id/status", adminHandler.UpdatePostStatus)
 			admin.GET("/comments", adminHandler.ListAllComments)
+			admin.PUT("/comments/:comment_id/restore", adminHandler.RestoreComment)
 			admin.DELETE("/comments/:comment_id", adminHandler.DeleteComment)
 
 			// Reports

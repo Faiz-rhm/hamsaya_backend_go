@@ -469,6 +469,30 @@ func (h *AdminHandler) DeleteComment(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Comment deleted successfully", nil)
 }
 
+// RestoreComment godoc
+// @Summary Restore (unhide) a comment
+// @Description Clears soft-delete on a comment so it is visible again
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param comment_id path string true "Comment ID"
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Failure 403 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /admin/comments/{comment_id}/restore [put]
+func (h *AdminHandler) RestoreComment(c *gin.Context) {
+	commentID := c.Param("comment_id")
+	adminID, _ := middleware.GetUserID(c)
+
+	err := h.adminService.RestoreComment(c.Request.Context(), commentID, adminID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Comment restored successfully", nil)
+}
+
 // ListPostReports godoc
 // @Summary List post reports
 // @Description List post reports with filtering and pagination

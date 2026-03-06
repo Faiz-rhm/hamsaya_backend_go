@@ -354,6 +354,20 @@ func (s *AdminService) DeleteComment(ctx context.Context, commentID, adminID str
 	return nil
 }
 
+// RestoreComment unhides a soft-deleted comment (clears deleted_at)
+func (s *AdminService) RestoreComment(ctx context.Context, commentID, adminID string) error {
+	err := s.adminRepo.RestoreComment(ctx, commentID)
+	if err != nil {
+		s.logger.Error("Failed to restore comment", zap.String("comment_id", commentID), zap.Error(err))
+		return utils.NewInternalError("Failed to restore comment", err)
+	}
+	s.logger.Info("Comment restored",
+		zap.String("comment_id", commentID),
+		zap.String("admin_id", adminID),
+	)
+	return nil
+}
+
 // ListBusinesses lists businesses with filtering and pagination
 func (s *AdminService) ListBusinesses(ctx context.Context, filter *models.AdminBusinessFilter) (*models.PaginatedResponse, error) {
 	businesses, total, err := s.adminRepo.ListBusinesses(ctx, filter)

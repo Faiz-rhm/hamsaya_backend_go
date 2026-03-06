@@ -37,6 +37,7 @@ type AdminRepository interface {
 	
 	ListComments(ctx context.Context, filter *models.AdminCommentFilter) ([]*models.AdminCommentResponse, int64, error)
 	DeleteComment(ctx context.Context, commentID string) error
+	RestoreComment(ctx context.Context, commentID string) error
 	ResolveCommentReportsByCommentID(ctx context.Context, commentID string) error
 	
 	ListBusinesses(ctx context.Context, filter *models.AdminBusinessFilter) ([]*models.AdminBusinessResponse, int64, error)
@@ -956,6 +957,19 @@ func (r *adminRepository) DeleteComment(ctx context.Context, commentID string) e
 	return err
 }
 
+// RestoreComment clears deleted_at for a soft-deleted comment (unhide)
+func (r *adminRepository) RestoreComment(ctx context.Context, commentID string) error {
+	query := `UPDATE post_comments SET deleted_at = NULL, updated_at = NOW() WHERE id = $1`
+	result, err := r.db.Pool.Exec(ctx, query, commentID)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("comment not found or not deleted")
+	}
+	return nil
+}
+
 // ResolveCommentReportsByCommentID sets report_status = 'RESOLVED' for all reports targeting this comment
 func (r *adminRepository) ResolveCommentReportsByCommentID(ctx context.Context, commentID string) error {
 	query := `UPDATE comment_reports SET report_status = 'RESOLVED', updated_at = NOW() WHERE comment_id = $1`
@@ -1451,6 +1465,7 @@ func (r *adminRepository) GetCommentReportByID(ctx context.Context, reportID str
 			COALESCE(c.text, ''),
 			COALESCE(c.user_id::text, ''),
 			COALESCE(cu.email, ''),
+			COALESCE((c.deleted_at IS NOT NULL), false),
 			r.user_id::text,
 			COALESCE(ru.email, ''),
 			r.reason, r.additional_comments, r.report_status, r.created_at
@@ -1463,7 +1478,7 @@ func (r *adminRepository) GetCommentReportByID(ctx context.Context, reportID str
 	report := &models.AdminCommentReportResponse{}
 	err := r.db.Pool.QueryRow(ctx, query, reportID).Scan(
 		&report.ID, &report.CommentID, &report.PostID, &report.CommentContent,
-		&report.CommentAuthorID, &report.CommentAuthorEmail,
+		&report.CommentAuthorID, &report.CommentAuthorEmail, &report.CommentHidden,
 		&report.ReporterID, &report.ReporterEmail,
 		&report.Reason, &report.AdditionalComments, &report.Status, &report.CreatedAt,
 	)
