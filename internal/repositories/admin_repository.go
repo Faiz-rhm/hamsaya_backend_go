@@ -1312,7 +1312,7 @@ func (r *adminRepository) ListPostReports(ctx context.Context, filter *models.Ad
 	}
 	defer rows.Close()
 	
-	var reports []*models.AdminPostReportResponse
+	reports := []*models.AdminPostReportResponse{}
 	for rows.Next() {
 		report := &models.AdminPostReportResponse{}
 		err := rows.Scan(
@@ -1425,7 +1425,7 @@ func (r *adminRepository) ListCommentReports(ctx context.Context, filter *models
 	}
 	defer rows.Close()
 	
-	var reports []*models.AdminCommentReportResponse
+	reports := []*models.AdminCommentReportResponse{}
 	for rows.Next() {
 		report := &models.AdminCommentReportResponse{}
 		err := rows.Scan(
@@ -1533,7 +1533,7 @@ func (r *adminRepository) ListUserReports(ctx context.Context, filter *models.Ad
 	}
 	defer rows.Close()
 	
-	var reports []*models.AdminUserReportResponse
+	reports := []*models.AdminUserReportResponse{}
 	for rows.Next() {
 		report := &models.AdminUserReportResponse{}
 		err := rows.Scan(
@@ -1638,7 +1638,7 @@ func (r *adminRepository) ListBusinessReports(ctx context.Context, filter *model
 	}
 	defer rows.Close()
 	
-	var reports []*models.AdminBusinessReportResponse
+	reports := []*models.AdminBusinessReportResponse{}
 	for rows.Next() {
 		report := &models.AdminBusinessReportResponse{}
 		err := rows.Scan(

@@ -48,6 +48,25 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 			return
 		}
 
+		// Check if user is suspended
+		user, err := m.userRepo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			m.logger.Error("Failed to get user", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Invalid user", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		if user.IsLocked() {
+			m.logger.Warn("Suspended user attempted access",
+				zap.String("user_id", user.ID),
+				zap.Time("locked_until", *user.LockedUntil),
+			)
+			utils.SendError(c, http.StatusForbidden, "Your account has been suspended", utils.ErrForbidden)
+			c.Abort()
+			return
+		}
+
 		// Add claims to context
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)
