@@ -62,12 +62,22 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 	// Normalize email
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Check if user already exists
+	// Check if user already exists (including soft-deleted users to prevent email reuse)
 	existingUser, err := s.userRepo.GetByEmail(ctx, email)
+	if err == nil && existingUser != nil {
+		return nil, utils.NewConflictError("A user with this email already exists", nil)
+	}
+	
+	// Also check soft-deleted users - prevent email reuse
+	deletedUser, _ := s.userRepo.GetByEmailIncludingDeleted(ctx, email)
+	if deletedUser != nil {
+		return nil, utils.NewConflictError("This email address is no longer available for registration", nil)
+	}
+	
 	now := time.Now()
 
 	// USER DOESN'T EXIST - Create new user with complete profile
-	if err != nil || existingUser == nil {
+	if true {
 		// Validate password strength
 		if err := s.passwordService.ValidatePasswordStrength(req.Password); err != nil {
 			return nil, utils.NewBadRequestError(err.Error(), err)
@@ -242,6 +252,12 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 	}
 
 	// USER DOESN'T EXIST - Registration flow
+	// Check if email was used by a soft-deleted user (prevent email reuse)
+	deletedUser, _ := s.userRepo.GetByEmailIncludingDeleted(ctx, email)
+	if deletedUser != nil {
+		return nil, utils.NewConflictError("This email address is no longer available for registration", nil)
+	}
+	
 	// Validate that required fields are provided for registration
 	if req.FirstName == nil || *req.FirstName == "" {
 		return nil, utils.NewBadRequestError("first_name is required for new users", nil)
