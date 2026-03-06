@@ -138,7 +138,6 @@ func main() {
 	notificationSettingsRepo := repositories.NewNotificationSettingsRepository(db)
 	searchRepo := repositories.NewSearchRepository(db)
 	reportRepo := repositories.NewReportRepository(db)
-	adminRepo := repositories.NewAdminRepository(db)
 	feedbackRepo := repositories.NewFeedbackRepository(db)
 
 	// Initialize services
@@ -163,7 +162,6 @@ func main() {
 	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, wsHub, logger)
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
-	adminService := services.NewAdminService(adminRepo, logger)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
 
 	// Initialize middleware
@@ -206,7 +204,6 @@ func main() {
 	notificationHandler := handlers.NewNotificationHandler(notificationService, validator, logger)
 	searchHandler := handlers.NewSearchHandler(searchService, validator, logger)
 	reportHandler := handlers.NewReportHandler(reportService)
-	adminHandler := handlers.NewAdminHandler(adminService, logger)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
 
 	// Health check routes (no versioning)
@@ -393,66 +390,6 @@ func main() {
 		{
 			categories.GET("", authMiddleware.RequireAuth(), categoryHandler.ListCategories)
 			categories.GET("/:category_id", authMiddleware.RequireAuth(), categoryHandler.GetCategory)
-		}
-
-		// Admin category routes (require admin role)
-		adminCategories := v1.Group("/admin/categories")
-		adminCategories.Use(authMiddleware.RequireAdmin())
-		{
-			adminCategories.GET("", categoryHandler.GetAllCategories)
-			adminCategories.POST("", categoryHandler.CreateCategory)
-			adminCategories.PUT("/:category_id", categoryHandler.UpdateCategory)
-			adminCategories.DELETE("/:category_id", categoryHandler.DeleteCategory)
-		}
-
-		// Admin report management routes (require admin role)
-		adminReports := v1.Group("/admin/reports")
-		adminReports.Use(authMiddleware.RequireAdmin())
-		{
-			// Post reports
-			adminReports.GET("/posts", reportHandler.ListPostReports)
-			adminReports.GET("/posts/:id", reportHandler.GetPostReport)
-			adminReports.PUT("/posts/:id/status", reportHandler.UpdatePostReportStatus)
-
-			// Comment reports
-			adminReports.GET("/comments", reportHandler.ListCommentReports)
-			adminReports.GET("/comments/:id", reportHandler.GetCommentReport)
-			adminReports.PUT("/comments/:id/status", reportHandler.UpdateCommentReportStatus)
-
-			// User reports
-			adminReports.GET("/users", reportHandler.ListUserReports)
-			adminReports.GET("/users/:id", reportHandler.GetUserReport)
-			adminReports.PUT("/users/:id/status", reportHandler.UpdateUserReportStatus)
-
-			// Business reports
-			adminReports.GET("/businesses", reportHandler.ListBusinessReports)
-			adminReports.GET("/businesses/:id", reportHandler.GetBusinessReport)
-			adminReports.PUT("/businesses/:id/status", reportHandler.UpdateBusinessReportStatus)
-		}
-
-		// Admin auth routes (public, no auth middleware)
-		adminAuth := v1.Group("/admin/auth")
-		{
-			adminAuth.POST("/login", authHandler.AdminLogin)
-		}
-
-		// Admin dashboard routes (require admin role)
-		admin := v1.Group("/admin")
-		admin.Use(authMiddleware.RequireAdmin())
-		{
-			admin.GET("/statistics", adminHandler.GetStatistics)
-			admin.GET("/users", adminHandler.ListUsers)
-			admin.PUT("/users/:id/status", adminHandler.UpdateUserStatus)
-			admin.PUT("/users/:id", adminHandler.UpdateUser)
-			admin.GET("/posts", adminHandler.ListPosts)
-			admin.GET("/posts/sell/statistics", adminHandler.GetSellPostStatistics)
-			admin.PUT("/posts/:id/status", adminHandler.UpdatePostStatus)
-			admin.PUT("/posts/:id", adminHandler.UpdatePost)
-			admin.GET("/reports", adminHandler.ListReports)
-			admin.PUT("/reports/:type/:id/status", adminHandler.UpdateReportStatus)
-			admin.GET("/businesses", adminHandler.ListBusinesses)
-			admin.PUT("/businesses/:id/status", adminHandler.UpdateBusinessStatus)
-			admin.PUT("/businesses/:id", adminHandler.UpdateBusiness)
 		}
 
 		// Chat routes (require authentication)

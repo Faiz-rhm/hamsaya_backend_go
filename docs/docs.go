@@ -30,1938 +30,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/admin/auth/login": {
-            "post": {
-                "description": "Authenticate admin user with email and password. Only allows users with admin role to login.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Admin login",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Device information (preferred over body)",
-                        "name": "X-Device-Info",
-                        "in": "header"
-                    },
-                    {
-                        "description": "Admin login credentials (email and password only)",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.LoginRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Admin login successful",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.AuthResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Invalid credentials or account locked",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/businesses": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve a paginated list of businesses with optional filtering by status and search term",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "List businesses",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Search term (name, license_no, email, phone_number, province, district)",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Filter by status (true=active, false=inactive)",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number (default: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default: 20, max: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Businesses retrieved successfully",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/models.AdminBusinessListItem"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameters",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/businesses/{id}": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update business information including name, license, contact info, and location (admin operation)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update business information",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Business ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Business update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.AdminUpdateBusinessRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Business updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Business not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/businesses/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Activate or deactivate a business",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update business status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Business ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateBusinessStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Business status updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Business not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/posts": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve a paginated list of posts with optional filtering by type and search term",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "List posts",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Filter by post type (FEED, EVENT, SELL, PULL, or 'all')",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Search term (title, description, user email, business name)",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number (default: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default: 20, max: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Posts retrieved successfully",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/models.AdminPostListItem"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameters",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/posts/sell/statistics": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve comprehensive statistics for SELL type posts including total, sold, active, expired, revenue, and average price",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Get sell post statistics",
-                "responses": {
-                    "200": {
-                        "description": "Sell statistics retrieved successfully",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.SellStatistics"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/posts/{id}": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update post information including title, description, visibility, and type (admin operation)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update post information",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Post ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Post update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.AdminUpdatePostRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Post updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Post not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/posts/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Activate or deactivate a post",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update post status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Post ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdatePostStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Post status updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Post not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve a paginated list of reports with optional filtering by type, status, and search term",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "List reports",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Filter by report type (POST, COMMENT, USER, BUSINESS, or 'all')",
-                        "name": "type",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Filter by status (PENDING, REVIEWING, RESOLVED, REJECTED, or 'all')",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "Search term (reporter email/name, reported item, reason)",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number (default: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default: 20, max: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Reports retrieved successfully",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/models.AdminReportListItem"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameters",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/businesses": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get a paginated list of all business reports",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "List all business reports (Admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Items per page",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.ReportListResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/businesses/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get details of a specific business report by ID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Get a specific business report (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.BusinessReport"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/businesses/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update the status of a business report",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Update business report status (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateReportStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/comments": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get a paginated list of all comment reports",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "List all comment reports (Admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Items per page",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.ReportListResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/comments/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get details of a specific comment report by ID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Get a specific comment report (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.CommentReport"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/comments/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update the status of a comment report",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Update comment report status (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateReportStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/posts": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get a paginated list of all post reports",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "List all post reports (Admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Items per page",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.ReportListResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/posts/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get details of a specific post report by ID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Get a specific post report (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.PostReport"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/posts/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update the status of a post report",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Update post report status (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateReportStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/users": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get a paginated list of all user reports",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "List all user reports (Admin only)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "default": 1,
-                        "description": "Page number",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "default": 20,
-                        "description": "Items per page",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.ReportListResponse"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/users/{id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get details of a specific user report by ID",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Get a specific user report (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.UserReport"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/users/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update the resolved status of a user report",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin",
-                    "reports"
-                ],
-                "summary": "Update user report status (Admin only)",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Resolved status",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "boolean"
-                            }
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "403": {
-                        "description": "Forbidden",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/reports/{type}/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update the status of a report (PENDING, REVIEWING, RESOLVED, REJECTED)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update report status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Report type (POST, COMMENT, USER, BUSINESS)",
-                        "name": "type",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Report ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateReportStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Report status updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body or parameters",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "Report not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/statistics": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve comprehensive statistics for the admin dashboard including user counts, post counts by type, business counts, and pending reports",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Get admin dashboard statistics",
-                "responses": {
-                    "200": {
-                        "description": "Admin statistics retrieved successfully",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "$ref": "#/definitions/models.AdminStatistics"
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/users": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Retrieve a paginated list of users with optional filtering by active status and search term",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "List users",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Search term (email, first name, last name)",
-                        "name": "search",
-                        "in": "query"
-                    },
-                    {
-                        "type": "boolean",
-                        "description": "Filter by active status (true/false)",
-                        "name": "is_active",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Page number (default: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Items per page (default: 20, max: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Users retrieved successfully",
-                        "schema": {
-                            "allOf": [
-                                {
-                                    "$ref": "#/definitions/utils.Response"
-                                },
-                                {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/definitions/models.AdminUserListItem"
-                                            }
-                                        }
-                                    }
-                                }
-                            ]
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid query parameters",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/users/{id}": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update user information including email, role, names, and verification status (admin operation)",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update user information",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "User update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.AdminUpdateUserRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "User updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
-        "/admin/users/{id}/status": {
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Activate or deactivate a user account",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "admin"
-                ],
-                "summary": "Update user status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "User ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Status update request",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/models.UpdateUserStatusRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "User status updated successfully",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "400": {
-                        "description": "Invalid request body",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized - admin access required",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "404": {
-                        "description": "User not found",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/utils.Response"
-                        }
-                    }
-                }
-            }
-        },
         "/auth/change-password": {
             "post": {
                 "security": [
@@ -2884,7 +952,7 @@ const docTemplate = `{
         },
         "/businesses/categories": {
             "get": {
-                "description": "Get all active business categories",
+                "description": "Get all active business categories, optionally filtered by search query",
                 "produces": [
                     "application/json"
                 ],
@@ -2892,6 +960,14 @@ const docTemplate = `{
                     "businesses"
                 ],
                 "summary": "Get business categories",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Search by category name",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -3188,15 +1264,69 @@ const docTemplate = `{
             }
         },
         "/businesses/{business_id}/attachments": {
+            "get": {
+                "description": "Get all gallery images for a business (id + photo per item)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "businesses"
+                ],
+                "summary": "Get business gallery",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Business ID",
+                        "name": "business_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.GalleryItem"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Add an image to business gallery",
+                "description": "Add an image to business gallery (multipart file upload)",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -3214,13 +1344,11 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Photo URL (already uploaded)",
-                        "name": "photo_url",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
+                        "type": "file",
+                        "description": "Gallery image file (JPEG/PNG/WebP, max 10MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -3311,9 +1439,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload an avatar for a business",
+                "description": "Upload an avatar image for a business (multipart file upload)",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -3331,13 +1459,11 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Photo URL (already uploaded)",
-                        "name": "photo_url",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
+                        "type": "file",
+                        "description": "Avatar image file (JPEG/PNG/WebP, max 10MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -3375,9 +1501,9 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Upload a cover photo for a business",
+                "description": "Upload a cover photo for a business (multipart file upload)",
                 "consumes": [
-                    "application/json"
+                    "multipart/form-data"
                 ],
                 "produces": [
                     "application/json"
@@ -3395,13 +1521,11 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Photo URL (already uploaded)",
-                        "name": "photo_url",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "type": "string"
-                        }
+                        "type": "file",
+                        "description": "Cover image file (JPEG/PNG/WebP, max 10MB)",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -3517,6 +1641,54 @@ const docTemplate = `{
             }
         },
         "/businesses/{business_id}/hours": {
+            "get": {
+                "description": "Get operating hours for a business (public)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "businesses"
+                ],
+                "summary": "Get business hours",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Business ID",
+                        "name": "business_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.BusinessHoursResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            },
             "post": {
                 "security": [
                     {
@@ -4075,6 +2247,12 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "Filter: all (default), business, event, sell",
+                        "name": "filter",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "Post type filter: FEED, EVENT, SELL, PULL",
                         "name": "type",
                         "in": "query"
@@ -4406,6 +2584,124 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/feedback": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Submit feedback about the app",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "feedback"
+                ],
+                "summary": "Submit user feedback",
+                "parameters": [
+                    {
+                        "description": "Feedback details",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/models.CreateFeedbackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.FeedbackResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/feedback/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Check if user has submitted recent feedback",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "feedback"
+                ],
+                "summary": "Get user feedback status",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.FeedbackStatusResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/utils.Response"
                         }
@@ -5214,6 +3510,73 @@ const docTemplate = `{
                                     "properties": {
                                         "data": {
                                             "$ref": "#/definitions/models.PostResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/posts/upload-image": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Upload an image for a post before creating the post",
+                "consumes": [
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "summary": "Upload a post image",
+                "parameters": [
+                    {
+                        "type": "file",
+                        "description": "Image file to upload",
+                        "name": "file",
+                        "in": "formData",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/models.UploadImageResponse"
                                         }
                                     }
                                 }
@@ -6527,6 +4890,41 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Soft-deletes the authenticated user's account and revokes all sessions",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Deactivate (soft delete) account",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
             }
         },
         "/users/me/avatar": {
@@ -6782,6 +5180,87 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/utils.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/events": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get EVENT posts where the authenticated user has set interest (going or interested)",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "posts"
+                ],
+                "summary": "Get events the user is going to or interested in",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Event state: going or interested",
+                        "name": "event_state",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 1,
+                        "description": "Page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "Limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/utils.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "array",
+                                            "items": {
+                                                "$ref": "#/definitions/models.PostResponse"
+                                            }
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
                         "schema": {
                             "$ref": "#/definitions/utils.Response"
                         }
@@ -7458,380 +5937,14 @@ const docTemplate = `{
                 }
             }
         },
-        "models.AdminBusinessListItem": {
+        "models.AttachmentResponse": {
             "type": "object",
             "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "district": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
                 "id": {
                     "type": "string"
                 },
-                "license_no": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "owner_email": {
-                    "type": "string"
-                },
-                "owner_name": {
-                    "type": "string"
-                },
-                "phone_number": {
-                    "type": "string"
-                },
-                "province": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "boolean"
-                },
-                "total_follow": {
-                    "type": "integer"
-                },
-                "total_posts": {
-                    "type": "integer"
-                },
-                "total_views": {
-                    "type": "integer"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.AdminPostListItem": {
-            "type": "object",
-            "properties": {
-                "attachments": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/models.Photo"
-                    }
-                },
-                "business_id": {
-                    "type": "string"
-                },
-                "business_name": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "end_date": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "start_date": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "boolean"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "total_comments": {
-                    "type": "integer"
-                },
-                "total_likes": {
-                    "type": "integer"
-                },
-                "total_shares": {
-                    "type": "integer"
-                },
-                "type": {
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                },
-                "user_email": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "string"
-                },
-                "user_name": {
-                    "type": "string"
-                },
-                "visibility": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.AdminReportListItem": {
-            "type": "object",
-            "properties": {
-                "additional_comments": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "report_type": {
-                    "description": "POST, COMMENT, USER, BUSINESS",
-                    "type": "string"
-                },
-                "reported_item_id": {
-                    "type": "string"
-                },
-                "reported_item_info": {
-                    "description": "Title/Name of reported item",
-                    "type": "string"
-                },
-                "reporter_email": {
-                    "type": "string"
-                },
-                "reporter_id": {
-                    "type": "string"
-                },
-                "reporter_name": {
-                    "type": "string"
-                },
-                "status": {
-                    "description": "PENDING, REVIEWING, RESOLVED, REJECTED",
-                    "type": "string"
-                },
-                "updated_at": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.AdminStatistics": {
-            "type": "object",
-            "properties": {
-                "active_businesses": {
-                    "type": "integer"
-                },
-                "deactivated_accounts": {
-                    "description": "Accounts with is_active = false",
-                    "type": "integer"
-                },
-                "dormant_users": {
-                    "description": "No login in 30+ days AND is_active = true",
-                    "type": "integer"
-                },
-                "new_businesses_this_month": {
-                    "type": "integer"
-                },
-                "new_posts_this_month": {
-                    "type": "integer"
-                },
-                "new_users_this_month": {
-                    "type": "integer"
-                },
-                "pending_reports": {
-                    "description": "Content Moderation",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.PendingReports"
-                        }
-                    ]
-                },
-                "posts_by_type": {
-                    "$ref": "#/definitions/models.PostTypeStats"
-                },
-                "recently_active_users": {
-                    "description": "User Statistics - Login Activity (for active accounts only)",
-                    "type": "integer"
-                },
-                "resolved_reports": {
-                    "type": "integer"
-                },
-                "total_active_accounts": {
-                    "description": "User Statistics - Account Status",
-                    "type": "integer"
-                },
-                "total_bookmarks": {
-                    "type": "integer"
-                },
-                "total_businesses": {
-                    "description": "Business Statistics",
-                    "type": "integer"
-                },
-                "total_categories": {
-                    "description": "Activity Statistics",
-                    "type": "integer"
-                },
-                "total_comments": {
-                    "description": "Engagement Statistics",
-                    "type": "integer"
-                },
-                "total_event_interests": {
-                    "type": "integer"
-                },
-                "total_follows": {
-                    "type": "integer"
-                },
-                "total_likes": {
-                    "type": "integer"
-                },
-                "total_poll_votes": {
-                    "type": "integer"
-                },
-                "total_posts": {
-                    "description": "Post Statistics",
-                    "type": "integer"
-                },
-                "total_reports": {
-                    "type": "integer"
-                },
-                "total_shares": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.AdminUpdateBusinessRequest": {
-            "type": "object",
-            "properties": {
-                "district": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "license_no": {
-                    "type": "string"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "phone_number": {
-                    "type": "string"
-                },
-                "province": {
-                    "type": "string"
-                }
-            }
-        },
-        "models.AdminUpdatePostRequest": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "end_date": {
-                    "type": "string"
-                },
-                "start_date": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "boolean"
-                },
-                "title": {
-                    "type": "string"
-                },
-                "type": {
-                    "type": "string",
-                    "enum": [
-                        "FEED",
-                        "EVENT",
-                        "SELL",
-                        "PULL"
-                    ]
-                },
-                "visibility": {
-                    "type": "string",
-                    "enum": [
-                        "PUBLIC",
-                        "FRIENDS",
-                        "PRIVATE"
-                    ]
-                }
-            }
-        },
-        "models.AdminUpdateUserRequest": {
-            "type": "object",
-            "properties": {
-                "email": {
-                    "type": "string"
-                },
-                "email_verified": {
-                    "type": "boolean"
-                },
-                "first_name": {
-                    "type": "string"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "last_name": {
-                    "type": "string"
-                },
-                "mfa_enabled": {
-                    "type": "boolean"
-                },
-                "phone_verified": {
-                    "type": "boolean"
-                },
-                "role": {
-                    "type": "string",
-                    "enum": [
-                        "user",
-                        "admin"
-                    ]
-                }
-            }
-        },
-        "models.AdminUserListItem": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "email": {
-                    "type": "string"
-                },
-                "email_verified": {
-                    "type": "boolean"
-                },
-                "first_name": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "string"
-                },
-                "is_active": {
-                    "type": "boolean"
-                },
-                "last_login_at": {
-                    "type": "string"
-                },
-                "last_name": {
-                    "type": "string"
-                },
-                "mfa_enabled": {
-                    "type": "boolean"
-                },
-                "phone_verified": {
-                    "type": "boolean"
-                },
-                "role": {
-                    "type": "string"
+                "photo": {
+                    "$ref": "#/definitions/models.Photo"
                 }
             }
         },
@@ -7861,6 +5974,12 @@ const docTemplate = `{
                 "avatar": {
                     "$ref": "#/definitions/models.Photo"
                 },
+                "avatar_color": {
+                    "type": "string"
+                },
+                "district": {
+                    "type": "string"
+                },
                 "first_name": {
                     "type": "string"
                 },
@@ -7868,6 +5987,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "last_name": {
+                    "type": "string"
+                },
+                "neighborhood": {
+                    "type": "string"
+                },
+                "province": {
                     "type": "string"
                 },
                 "user_id": {
@@ -7970,10 +6095,37 @@ const docTemplate = `{
                 "avatar": {
                     "$ref": "#/definitions/models.Photo"
                 },
-                "business_id": {
+                "avatar_color": {
+                    "type": "string"
+                },
+                "cover": {
+                    "$ref": "#/definitions/models.Photo"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "district": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
                     "type": "string"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "neighborhood": {
+                    "type": "string"
+                },
+                "phone_number": {
+                    "type": "string"
+                },
+                "province": {
+                    "type": "string"
+                },
+                "website": {
                     "type": "string"
                 }
             }
@@ -8016,14 +6168,24 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "address_location": {
+                    "description": "\"(lat,lng)\" for mobile; null if not set",
+                    "type": "string"
+                },
                 "avatar": {
                     "$ref": "#/definitions/models.Photo"
+                },
+                "avatar_color": {
+                    "type": "string"
                 },
                 "categories": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.BusinessCategory"
                     }
+                },
+                "country": {
+                    "type": "string"
                 },
                 "cover": {
                     "$ref": "#/definitions/models.Photo"
@@ -8034,13 +6196,16 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "district": {
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
                 "gallery": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Photo"
+                        "$ref": "#/definitions/models.GalleryItem"
                     }
                 },
                 "hours": {
@@ -8059,12 +6224,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "location": {
-                    "$ref": "#/definitions/models.LocationInfo"
+                    "description": "always present (null if no coordinates)",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.LocationInfo"
+                        }
+                    ]
                 },
                 "name": {
                     "type": "string"
                 },
+                "neighborhood": {
+                    "type": "string"
+                },
                 "phone_number": {
+                    "type": "string"
+                },
+                "province": {
                     "type": "string"
                 },
                 "show_location": {
@@ -8174,6 +6350,17 @@ const docTemplate = `{
                 }
             }
         },
+        "models.CommentAttachmentResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "photo": {
+                    "$ref": "#/definitions/models.Photo"
+                }
+            }
+        },
         "models.CommentReport": {
             "type": "object",
             "properties": {
@@ -8209,17 +6396,26 @@ const docTemplate = `{
                 "attachments": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Photo"
+                        "$ref": "#/definitions/models.CommentAttachmentResponse"
                     }
                 },
                 "author": {
                     "$ref": "#/definitions/models.AuthorInfo"
+                },
+                "business_id": {
+                    "type": "string"
+                },
+                "business_profile": {
+                    "$ref": "#/definitions/models.BusinessInfo"
                 },
                 "created_at": {
                     "type": "string"
                 },
                 "id": {
                     "type": "string"
+                },
+                "is_mine": {
+                    "type": "boolean"
                 },
                 "liked_by_me": {
                     "type": "boolean"
@@ -8282,7 +6478,17 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 500
                 },
+                "avatar_color": {
+                    "type": "string"
+                },
                 "category_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "category_names": {
+                    "description": "CategoryNames are created if they don't exist, then linked (with category_ids).",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -8367,6 +6573,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "business_id": {
+                    "type": "string"
+                },
                 "latitude": {
                     "type": "number"
                 },
@@ -8383,6 +6592,49 @@ const docTemplate = `{
                 }
             }
         },
+        "models.CreateFeedbackRequest": {
+            "type": "object",
+            "required": [
+                "message",
+                "rating",
+                "type"
+            ],
+            "properties": {
+                "app_version": {
+                    "type": "string"
+                },
+                "device_info": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "maxLength": 2000,
+                    "minLength": 1
+                },
+                "rating": {
+                    "maximum": 5,
+                    "minimum": 1,
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.FeedbackRating"
+                        }
+                    ]
+                },
+                "type": {
+                    "enum": [
+                        "GENERAL",
+                        "BUG",
+                        "FEATURE",
+                        "IMPROVEMENT"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.FeedbackType"
+                        }
+                    ]
+                }
+            }
+        },
         "models.CreatePollRequest": {
             "type": "object",
             "required": [
@@ -8396,6 +6648,17 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "models.CreatePostLocation": {
+            "type": "object",
+            "properties": {
+                "latitude": {
+                    "type": "number"
+                },
+                "longitude": {
+                    "type": "number"
                 }
             }
         },
@@ -8416,118 +6679,7 @@ const docTemplate = `{
             }
         },
         "models.CreatePostRequest": {
-            "type": "object",
-            "required": [
-                "type"
-            ],
-            "properties": {
-                "attachments": {
-                    "description": "Attachments (photo URLs - already uploaded)",
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "category_id": {
-                    "type": "string"
-                },
-                "contact_no": {
-                    "type": "string"
-                },
-                "country": {
-                    "type": "string",
-                    "maxLength": 100
-                },
-                "country_code": {
-                    "type": "string"
-                },
-                "currency": {
-                    "description": "Sell-specific",
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string",
-                    "maxLength": 5000
-                },
-                "discount": {
-                    "type": "number",
-                    "maximum": 100,
-                    "minimum": 0
-                },
-                "district": {
-                    "type": "string",
-                    "maxLength": 100
-                },
-                "end_date": {
-                    "type": "string"
-                },
-                "end_time": {
-                    "type": "string"
-                },
-                "free": {
-                    "type": "boolean"
-                },
-                "latitude": {
-                    "description": "Location",
-                    "type": "number"
-                },
-                "longitude": {
-                    "type": "number"
-                },
-                "neighborhood": {
-                    "type": "string",
-                    "maxLength": 100
-                },
-                "original_post_id": {
-                    "description": "For shared posts",
-                    "type": "string"
-                },
-                "price": {
-                    "type": "number",
-                    "minimum": 0
-                },
-                "province": {
-                    "type": "string",
-                    "maxLength": 100
-                },
-                "start_date": {
-                    "description": "Event-specific",
-                    "type": "string"
-                },
-                "start_time": {
-                    "type": "string"
-                },
-                "title": {
-                    "description": "Content",
-                    "type": "string",
-                    "maxLength": 255
-                },
-                "type": {
-                    "enum": [
-                        "FEED",
-                        "EVENT",
-                        "SELL",
-                        "PULL"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.PostType"
-                        }
-                    ]
-                },
-                "visibility": {
-                    "enum": [
-                        "PUBLIC",
-                        "FRIENDS",
-                        "PRIVATE"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.PostVisibility"
-                        }
-                    ]
-                }
-            }
+            "type": "object"
         },
         "models.CreateUserReportRequest": {
             "type": "object",
@@ -8720,6 +6872,63 @@ const docTemplate = `{
                 "EventStateEnded"
             ]
         },
+        "models.FeedbackRating": {
+            "type": "integer",
+            "enum": [
+                1,
+                2,
+                3,
+                4,
+                5
+            ],
+            "x-enum-varnames": [
+                "FeedbackRatingVeryBad",
+                "FeedbackRatingBad",
+                "FeedbackRatingNeutral",
+                "FeedbackRatingGood",
+                "FeedbackRatingExcellent"
+            ]
+        },
+        "models.FeedbackResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.FeedbackStatusResponse": {
+            "type": "object",
+            "properties": {
+                "has_submitted": {
+                    "type": "boolean"
+                },
+                "last_feedback": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.FeedbackType": {
+            "type": "string",
+            "enum": [
+                "GENERAL",
+                "BUG",
+                "FEATURE",
+                "IMPROVEMENT"
+            ],
+            "x-enum-varnames": [
+                "FeedbackTypeGeneral",
+                "FeedbackTypeBug",
+                "FeedbackTypeFeature",
+                "FeedbackTypeImprovement"
+            ]
+        },
         "models.FollowerResponse": {
             "type": "object",
             "properties": {
@@ -8806,6 +7015,9 @@ const docTemplate = `{
                 "avatar": {
                     "$ref": "#/definitions/models.Photo"
                 },
+                "avatar_color": {
+                    "type": "string"
+                },
                 "country": {
                     "type": "string"
                 },
@@ -8814,6 +7026,10 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "deactivated": {
+                    "description": "Deactivated is true when the account has been soft-deleted",
+                    "type": "boolean"
                 },
                 "district": {
                     "type": "string"
@@ -8860,11 +7076,17 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "is_following": {
-                    "description": "Relationship status (relative to authenticated user)",
+                    "description": "Relationship status (relative to authenticated user)\nNo omitempty so client always receives block status for Block/Unblock UI",
                     "type": "boolean"
                 },
                 "last_name": {
                     "type": "string"
+                },
+                "latitude": {
+                    "type": "number"
+                },
+                "longitude": {
+                    "type": "number"
                 },
                 "mfa_enabled": {
                     "type": "boolean"
@@ -8886,6 +7108,17 @@ const docTemplate = `{
                 },
                 "website": {
                     "type": "string"
+                }
+            }
+        },
+        "models.GalleryItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "photo": {
+                    "$ref": "#/definitions/models.Photo"
                 }
             }
         },
@@ -9073,26 +7306,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.PendingReports": {
-            "type": "object",
-            "properties": {
-                "businesses": {
-                    "type": "integer"
-                },
-                "comments": {
-                    "type": "integer"
-                },
-                "posts": {
-                    "type": "integer"
-                },
-                "total": {
-                    "type": "integer"
-                },
-                "users": {
-                    "type": "integer"
-                }
-            }
-        },
         "models.Photo": {
             "type": "object",
             "properties": {
@@ -9130,6 +7343,25 @@ const docTemplate = `{
                 },
                 "vote_count": {
                     "type": "integer"
+                }
+            }
+        },
+        "models.PollRequestData": {
+            "type": "object",
+            "required": [
+                "options"
+            ],
+            "properties": {
+                "options": {
+                    "type": "array",
+                    "maxItems": 10,
+                    "minItems": 2,
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "question": {
+                    "type": "string"
                 }
             }
         },
@@ -9199,10 +7431,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "attachments": {
-                    "description": "Attachments",
+                    "description": "Attachments (full objects with id so the client can reference them for deletion)",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Photo"
+                        "$ref": "#/definitions/models.AttachmentResponse"
                     }
                 },
                 "author": {
@@ -9216,11 +7448,18 @@ const docTemplate = `{
                 "bookmarked_by_me": {
                     "type": "boolean"
                 },
-                "business": {
+                "business_id": {
+                    "type": "string"
+                },
+                "business_profile": {
                     "$ref": "#/definitions/models.BusinessInfo"
                 },
                 "category": {
                     "$ref": "#/definitions/models.CategoryInfo"
+                },
+                "category_id": {
+                    "description": "so clients get ID for edit without parsing category.id",
+                    "type": "string"
                 },
                 "contact_no": {
                     "type": "string"
@@ -9246,7 +7485,15 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "event_state": {
-                    "$ref": "#/definitions/models.EventState"
+                    "description": "event lifecycle: upcoming/ongoing/ended",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.EventState"
+                        }
+                    ]
+                },
+                "expired_at": {
+                    "type": "string"
                 },
                 "free": {
                     "type": "boolean"
@@ -9259,6 +7506,13 @@ const docTemplate = `{
                 },
                 "interested_count": {
                     "type": "integer"
+                },
+                "is_location": {
+                    "description": "when true, show item on map (SELL)",
+                    "type": "boolean"
+                },
+                "is_mine": {
+                    "type": "boolean"
                 },
                 "is_promoted": {
                     "type": "boolean"
@@ -9317,6 +7571,14 @@ const docTemplate = `{
                 "updated_at": {
                     "type": "string"
                 },
+                "user_event_state": {
+                    "description": "current user's interest: interested/going/not_interested",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.EventInterestState"
+                        }
+                    ]
+                },
                 "visibility": {
                     "$ref": "#/definitions/models.PostVisibility"
                 }
@@ -9337,34 +7599,28 @@ const docTemplate = `{
                 "PostTypePull"
             ]
         },
-        "models.PostTypeStats": {
-            "type": "object",
-            "properties": {
-                "event": {
-                    "type": "integer"
-                },
-                "feed": {
-                    "type": "integer"
-                },
-                "pull": {
-                    "type": "integer"
-                },
-                "sell": {
-                    "type": "integer"
-                }
-            }
-        },
         "models.PostVisibility": {
             "type": "string",
             "enum": [
                 "PUBLIC",
                 "FRIENDS",
-                "PRIVATE"
+                "PRIVATE",
+                "VIEW_ONLY"
+            ],
+            "x-enum-comments": {
+                "VisibilityViewOnly": "FEED only: post is view-only (no likes/comments)"
+            },
+            "x-enum-descriptions": [
+                "",
+                "",
+                "",
+                "FEED only: post is view-only (no likes/comments)"
             ],
             "x-enum-varnames": [
                 "VisibilityPublic",
                 "VisibilityFriends",
-                "VisibilityPrivate"
+                "VisibilityPrivate",
+                "VisibilityViewOnly"
             ]
         },
         "models.ProfileResponse": {
@@ -9372,6 +7628,15 @@ const docTemplate = `{
             "properties": {
                 "avatar": {
                     "$ref": "#/definitions/models.Photo"
+                },
+                "avatar_color": {
+                    "type": "string"
+                },
+                "country": {
+                    "type": "string"
+                },
+                "district": {
+                    "type": "string"
                 },
                 "first_name": {
                     "type": "string"
@@ -9383,6 +7648,12 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "last_name": {
+                    "type": "string"
+                },
+                "neighborhood": {
+                    "type": "string"
+                },
+                "province": {
                     "type": "string"
                 }
             }
@@ -9526,35 +7797,6 @@ const docTemplate = `{
                 }
             }
         },
-        "models.SellStatistics": {
-            "type": "object",
-            "properties": {
-                "average_price": {
-                    "description": "Average price of all SELL posts",
-                    "type": "number"
-                },
-                "total_active": {
-                    "description": "Number of active (not sold, not expired) items",
-                    "type": "integer"
-                },
-                "total_expired": {
-                    "description": "Number of expired items",
-                    "type": "integer"
-                },
-                "total_revenue": {
-                    "description": "Sum of prices for sold items",
-                    "type": "number"
-                },
-                "total_sell_posts": {
-                    "description": "Total number of SELL posts",
-                    "type": "integer"
-                },
-                "total_sold": {
-                    "description": "Number of sold items",
-                    "type": "integer"
-                }
-            }
-        },
         "models.SetBusinessHoursRequest": {
             "type": "object",
             "required": [
@@ -9633,7 +7875,17 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 500
                 },
+                "avatar_color": {
+                    "type": "string"
+                },
                 "category_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "category_names": {
+                    "description": "CategoryNames are created if they don't exist, then linked (with category_ids).",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -9692,20 +7944,26 @@ const docTemplate = `{
                 }
             }
         },
-        "models.UpdateBusinessStatusRequest": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "boolean"
-                }
-            }
-        },
         "models.UpdateCommentRequest": {
             "type": "object",
             "required": [
                 "text"
             ],
             "properties": {
+                "attachments": {
+                    "description": "New photo URLs to add",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deleted_attachment_ids": {
+                    "description": "Attachment IDs to remove",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "text": {
                     "type": "string",
                     "maxLength": 1000,
@@ -9714,63 +7972,7 @@ const docTemplate = `{
             }
         },
         "models.UpdatePostRequest": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string",
-                    "maxLength": 5000
-                },
-                "discount": {
-                    "type": "number",
-                    "maximum": 100,
-                    "minimum": 0
-                },
-                "end_date": {
-                    "type": "string"
-                },
-                "end_time": {
-                    "type": "string"
-                },
-                "price": {
-                    "description": "Sell-specific",
-                    "type": "number",
-                    "minimum": 0
-                },
-                "sold": {
-                    "type": "boolean"
-                },
-                "start_date": {
-                    "description": "Event-specific",
-                    "type": "string"
-                },
-                "start_time": {
-                    "type": "string"
-                },
-                "title": {
-                    "type": "string",
-                    "maxLength": 255
-                },
-                "visibility": {
-                    "enum": [
-                        "PUBLIC",
-                        "FRIENDS",
-                        "PRIVATE"
-                    ],
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/models.PostVisibility"
-                        }
-                    ]
-                }
-            }
-        },
-        "models.UpdatePostStatusRequest": {
-            "type": "object",
-            "properties": {
-                "status": {
-                    "type": "boolean"
-                }
-            }
+            "type": "object"
         },
         "models.UpdateProfileRequest": {
             "type": "object",
@@ -9778,6 +7980,10 @@ const docTemplate = `{
                 "about": {
                     "type": "string",
                     "maxLength": 500
+                },
+                "avatar_color": {
+                    "description": "e.g. #RRGGBB",
+                    "type": "string"
                 },
                 "country": {
                     "type": "string",
@@ -9803,6 +8009,9 @@ const docTemplate = `{
                         "other",
                         "prefer_not_to_say"
                     ]
+                },
+                "is_complete": {
+                    "type": "boolean"
                 },
                 "last_name": {
                     "type": "string",
@@ -9850,14 +8059,6 @@ const docTemplate = `{
                             "$ref": "#/definitions/models.ReportStatus"
                         }
                     ]
-                }
-            }
-        },
-        "models.UpdateUserStatusRequest": {
-            "type": "object",
-            "properties": {
-                "is_active": {
-                    "type": "boolean"
                 }
             }
         },
@@ -9910,7 +8111,13 @@ const docTemplate = `{
                 "email_verified": {
                     "type": "boolean"
                 },
+                "first_name": {
+                    "type": "string"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "last_name": {
                     "type": "string"
                 },
                 "mfa_enabled": {
@@ -9918,8 +8125,24 @@ const docTemplate = `{
                 },
                 "phone_verified": {
                     "type": "boolean"
+                },
+                "role": {
+                    "$ref": "#/definitions/models.UserRole"
                 }
             }
+        },
+        "models.UserRole": {
+            "type": "string",
+            "enum": [
+                "user",
+                "admin",
+                "moderator"
+            ],
+            "x-enum-varnames": [
+                "RoleUser",
+                "RoleAdmin",
+                "RoleModerator"
+            ]
         },
         "models.UserSearchResult": {
             "type": "object",
