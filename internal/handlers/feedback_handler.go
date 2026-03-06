@@ -63,7 +63,7 @@ func (h *FeedbackHandler) SubmitFeedback(c *gin.Context) {
 	}
 
 	h.logger.Infow("Feedback submitted", "user_id", userID, "feedback_id", response.ID)
-	utils.SendResponse(c, http.StatusCreated, "Feedback submitted successfully", response)
+	utils.SendSuccess(c, http.StatusCreated, "Feedback submitted successfully", response)
 }
 
 // GetFeedbackStatus godoc
@@ -89,5 +89,5 @@ func (h *FeedbackHandler) GetFeedbackStatus(c *gin.Context) {
 		return
 	}
 
-	utils.SendSuccess(c, "Feedback status retrieved", response)
+	utils.SendSuccess(c, http.StatusOK, "Feedback status retrieved", response)
 }
