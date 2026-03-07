@@ -8,14 +8,18 @@ type NotificationType string
 const (
 	NotificationTypeLike            NotificationType = "LIKE"
 	NotificationTypeComment         NotificationType = "COMMENT"
+	NotificationTypeCommentReply    NotificationType = "COMMENT_REPLY"
+	NotificationTypeCommentLike     NotificationType = "COMMENT_LIKE"
 	NotificationTypeFollow          NotificationType = "FOLLOW"
 	NotificationTypeMessage         NotificationType = "MESSAGE"
 	NotificationTypeMention         NotificationType = "MENTION"
 	NotificationTypeEventInterest   NotificationType = "EVENT_INTEREST"
+	NotificationTypeEventGoing      NotificationType = "EVENT_GOING"
 	NotificationTypeBusinessFollow  NotificationType = "BUSINESS_FOLLOW"
 	NotificationTypePostShare       NotificationType = "POST_SHARE"
 	NotificationTypePollVote        NotificationType = "POLL_VOTE"
 	NotificationTypeNewPost         NotificationType = "NEW_POST"
+	NotificationTypeAdmin           NotificationType = "ADMIN"
 )
 
 // NotificationCategory represents notification category for settings

@@ -151,7 +151,7 @@ func main() {
 	oauthService := services.NewOAuthService(cfg, userRepo, logger)
 	storageService := services.NewStorageService(cfg, logger)
 	profileService := services.NewProfileService(userRepo, postRepo, relationshipsRepo, logger)
-	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, logger)
+	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
@@ -164,7 +164,7 @@ func main() {
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
-	adminService := services.NewAdminService(adminRepo, fcmClient, logger)
+	adminService := services.NewAdminService(adminRepo, fcmClient, notificationService, logger)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")

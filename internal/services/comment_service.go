@@ -169,6 +169,54 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		}()
 	}
 
+	// Notify parent comment author when replying (skip if same as post owner or self)
+	if req.ParentCommentID != nil && s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			parentComment, err := s.commentRepo.GetByID(ctxDetach, *req.ParentCommentID)
+			if err != nil {
+				s.logger.Warn("Failed to get parent comment for reply notification", zap.Error(err))
+				return
+			}
+			if parentComment.UserID == userID {
+				return
+			}
+			if post.UserID != nil && parentComment.UserID == *post.UserID {
+				return
+			}
+			actorName := "Someone"
+			var actorAvatar interface{}
+			var actorAvatarColor string
+			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
+				actorName = actor.FullName()
+				actorAvatar = actor.Avatar
+				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+					actorAvatarColor = *actor.AvatarColor
+				}
+			}
+			title := actorName + " replied to your comment"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":           userID,
+				"actor_name":         actorName,
+				"actor_avatar":       actorAvatar,
+				"actor_avatar_color": actorAvatarColor,
+				"post_id":            postID,
+				"comment_id":         *req.ParentCommentID,
+			}
+			if post.BusinessID != nil && *post.BusinessID != "" {
+				data["business_id"] = *post.BusinessID
+			}
+			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  parentComment.UserID,
+				Type:    models.NotificationTypeCommentReply,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
+	}
+
 	// Return enriched comment
 	return s.GetComment(ctx, commentID, &userID)
 }
@@ -321,18 +369,51 @@ func (s *CommentService) DeleteComment(ctx context.Context, commentID, userID st
 
 // LikeComment likes a comment
 func (s *CommentService) LikeComment(ctx context.Context, userID, commentID string) error {
-	// Check if comment exists
-	if _, err := s.commentRepo.GetByID(ctx, commentID); err != nil {
+	comment, err := s.commentRepo.GetByID(ctx, commentID)
+	if err != nil {
 		return utils.NewNotFoundError("Comment not found", err)
 	}
 
-	// Like comment (idempotent)
 	if err := s.commentRepo.LikeComment(ctx, userID, commentID); err != nil {
 		s.logger.Error("Failed to like comment", zap.String("comment_id", commentID), zap.Error(err))
 		return utils.NewInternalError("Failed to like comment", err)
 	}
 
 	s.logger.Info("Comment liked", zap.String("comment_id", commentID), zap.String("user_id", userID))
+
+	if comment.UserID != userID && s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			actorName := "Someone"
+			var actorAvatar interface{}
+			var actorAvatarColor string
+			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
+				actorName = actor.FullName()
+				actorAvatar = actor.Avatar
+				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+					actorAvatarColor = *actor.AvatarColor
+				}
+			}
+			title := actorName + " liked your comment"
+			msg := title
+			data := map[string]interface{}{
+				"actor_id":           userID,
+				"actor_name":         actorName,
+				"actor_avatar":       actorAvatar,
+				"actor_avatar_color": actorAvatarColor,
+				"post_id":            comment.PostID,
+				"comment_id":         commentID,
+			}
+			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  comment.UserID,
+				Type:    models.NotificationTypeCommentLike,
+				Title:   &title,
+				Message: &msg,
+				Data:    data,
+			})
+		}()
+	}
+
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
 	fcmclient "github.com/hamsaya/backend/pkg/notification"
+	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -26,6 +27,7 @@ type NotificationService struct {
 	userRepo         repositories.UserRepository
 	fcmClient        *fcmclient.FCMClient
 	redisClient      *redis.Client
+	wsHub            *websocket.Hub
 	logger           *zap.Logger
 }
 
@@ -36,6 +38,7 @@ func NewNotificationService(
 	userRepo repositories.UserRepository,
 	fcmClient *fcmclient.FCMClient,
 	redisClient *redis.Client,
+	wsHub *websocket.Hub,
 	logger *zap.Logger,
 ) *NotificationService {
 	return &NotificationService{
@@ -44,6 +47,7 @@ func NewNotificationService(
 		userRepo:         userRepo,
 		fcmClient:        fcmClient,
 		redisClient:      redisClient,
+		wsHub:            wsHub,
 		logger:           logger,
 	}
 }
@@ -52,13 +56,14 @@ func NewNotificationService(
 func typeToCategory(t models.NotificationType) models.NotificationCategory {
 	switch t {
 	case models.NotificationTypeLike, models.NotificationTypeComment,
+		models.NotificationTypeCommentReply, models.NotificationTypeCommentLike,
 		models.NotificationTypeMention, models.NotificationTypePostShare,
 		models.NotificationTypePollVote, models.NotificationTypeFollow,
-		models.NotificationTypeNewPost:
+		models.NotificationTypeNewPost, models.NotificationTypeAdmin:
 		return models.NotificationCategoryPosts
 	case models.NotificationTypeMessage:
 		return models.NotificationCategoryMessages
-	case models.NotificationTypeEventInterest:
+	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing:
 		return models.NotificationCategoryEvents
 	case models.NotificationTypeBusinessFollow:
 		return models.NotificationCategoryBusiness
@@ -105,6 +110,22 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 		zap.String("user_id", req.UserID),
 		zap.String("type", string(req.Type)),
 	)
+
+	// Send real-time notification via WebSocket
+	if s.wsHub != nil {
+		go func() {
+			wsPayload := map[string]interface{}{
+				"type":    "notification",
+				"payload": notification.ToNotificationResponse(),
+			}
+			if err := s.wsHub.SendToUser(req.UserID, wsPayload); err != nil {
+				s.logger.Debug("Failed to send WebSocket notification",
+					zap.Error(err),
+					zap.String("user_id", req.UserID),
+				)
+			}
+		}()
+	}
 
 	// Check user push preference before sending push
 	sendPush := true

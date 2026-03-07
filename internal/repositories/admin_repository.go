@@ -63,9 +63,8 @@ type AdminRepository interface {
 	UpdateUserReportResolved(ctx context.Context, reportID string, resolved bool) error
 	UpdateBusinessReportStatus(ctx context.Context, reportID, status string) error
 	
-	GetAllFCMTokens(ctx context.Context) ([]string, error)
-	GetFCMTokensByProvince(ctx context.Context, province string) ([]string, error)
-	GetFCMTokensByUserIDs(ctx context.Context, userIDs []string) ([]string, error)
+	GetAllUserIDs(ctx context.Context) ([]string, error)
+	GetUserIDsByProvince(ctx context.Context, province string) ([]string, error)
 
 	ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error)
 }
@@ -1840,70 +1839,47 @@ func (r *adminRepository) UpdateBusinessReportStatus(ctx context.Context, report
 	return err
 }
 
-func (r *adminRepository) GetAllFCMTokens(ctx context.Context) ([]string, error) {
-	query := `SELECT token FROM fcm_tokens`
+func (r *adminRepository) GetAllUserIDs(ctx context.Context) ([]string, error) {
+	query := `SELECT id FROM users WHERE deleted_at IS NULL`
 	rows, err := r.db.Pool.Query(ctx, query)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
-	var tokens []string
+
+	var ids []string
 	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		tokens = append(tokens, token)
+		ids = append(ids, id)
 	}
-	return tokens, nil
+	return ids, nil
 }
 
-func (r *adminRepository) GetFCMTokensByProvince(ctx context.Context, province string) ([]string, error) {
+func (r *adminRepository) GetUserIDsByProvince(ctx context.Context, province string) ([]string, error) {
 	query := `
-		SELECT ft.token 
-		FROM fcm_tokens ft
-		JOIN profiles p ON ft.user_id = p.id
-		WHERE p.province = $1
+		SELECT u.id
+		FROM users u
+		JOIN profiles p ON u.id = p.user_id
+		WHERE p.province = $1 AND u.deleted_at IS NULL
 	`
 	rows, err := r.db.Pool.Query(ctx, query, province)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	
-	var tokens []string
-	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
-			return nil, err
-		}
-		tokens = append(tokens, token)
-	}
-	return tokens, nil
-}
 
-func (r *adminRepository) GetFCMTokensByUserIDs(ctx context.Context, userIDs []string) ([]string, error) {
-	if len(userIDs) == 0 {
-		return nil, nil
-	}
-	
-	query := `SELECT token FROM fcm_tokens WHERE user_id = ANY($1)`
-	rows, err := r.db.Pool.Query(ctx, query, userIDs)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	
-	var tokens []string
+	var ids []string
 	for rows.Next() {
-		var token string
-		if err := rows.Scan(&token); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		tokens = append(tokens, token)
+		ids = append(ids, id)
 	}
-	return tokens, nil
+	return ids, nil
 }
 
 func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error) {

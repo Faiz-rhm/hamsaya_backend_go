@@ -13,21 +13,24 @@ import (
 
 // AdminService handles admin business logic
 type AdminService struct {
-	adminRepo   repositories.AdminRepository
-	fcmClient   *notification.FCMClient
-	logger      *zap.Logger
+	adminRepo           repositories.AdminRepository
+	fcmClient           *notification.FCMClient
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewAdminService creates a new admin service
 func NewAdminService(
 	adminRepo repositories.AdminRepository,
 	fcmClient *notification.FCMClient,
+	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *AdminService {
 	return &AdminService{
-		adminRepo:   adminRepo,
-		fcmClient:   fcmClient,
-		logger:      logger,
+		adminRepo:           adminRepo,
+		fcmClient:           fcmClient,
+		notificationService: notificationService,
+		logger:              logger,
 	}
 }
 
@@ -670,62 +673,78 @@ func (s *AdminService) UpdateReportStatus(ctx context.Context, reportType, repor
 	return nil
 }
 
-// BroadcastNotification sends a notification to multiple users
+// BroadcastNotification sends a notification to multiple users, persisting each
+// notification and delivering via push/WebSocket through NotificationService.
 func (s *AdminService) BroadcastNotification(ctx context.Context, req *models.BroadcastNotificationRequest, adminID string) error {
-	if s.fcmClient == nil {
-		return utils.NewInternalError("Push notifications are not configured", nil)
+	if s.notificationService == nil {
+		return utils.NewInternalError("Notification service is not configured", nil)
 	}
-	
-	var tokens []string
+
+	var userIDs []string
 	var err error
-	
+
 	if len(req.UserIDs) > 0 {
-		tokens, err = s.adminRepo.GetFCMTokensByUserIDs(ctx, req.UserIDs)
+		userIDs = req.UserIDs
 	} else if req.Province != nil && *req.Province != "" {
-		tokens, err = s.adminRepo.GetFCMTokensByProvince(ctx, *req.Province)
+		userIDs, err = s.adminRepo.GetUserIDsByProvince(ctx, *req.Province)
 	} else {
-		tokens, err = s.adminRepo.GetAllFCMTokens(ctx)
+		userIDs, err = s.adminRepo.GetAllUserIDs(ctx)
 	}
-	
+
 	if err != nil {
-		s.logger.Error("Failed to get FCM tokens", zap.Error(err))
+		s.logger.Error("Failed to get user IDs for broadcast", zap.Error(err))
 		return utils.NewInternalError("Failed to get notification targets", err)
 	}
-	
-	if len(tokens) == 0 {
-		s.logger.Warn("No FCM tokens found for broadcast")
+
+	if len(userIDs) == 0 {
+		s.logger.Warn("No users found for broadcast")
 		return nil
 	}
-	
+
+	title := req.Title
+	msg := req.Message
+
+	const batchSize = 300
 	successCount := 0
 	failCount := 0
-	
-	payload := &notification.PushPayload{
-		Title: req.Title,
-		Body:  req.Message,
-	}
-	
-	for _, token := range tokens {
-		err := s.fcmClient.SendNotification(ctx, token, payload)
-		if err != nil {
-			failCount++
-			s.logger.Warn("Failed to send notification",
-				zap.String("token", token[:10]+"..."),
-				zap.Error(err),
-			)
-		} else {
-			successCount++
+
+	for i := 0; i < len(userIDs); i += batchSize {
+		end := i + batchSize
+		if end > len(userIDs) {
+			end = len(userIDs)
+		}
+		batch := userIDs[i:end]
+
+		for _, uid := range batch {
+			_, createErr := s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
+				UserID:  uid,
+				Type:    models.NotificationTypeAdmin,
+				Title:   &title,
+				Message: &msg,
+				Data: map[string]interface{}{
+					"admin_id": adminID,
+				},
+			})
+			if createErr != nil {
+				failCount++
+				s.logger.Warn("Failed to create broadcast notification for user",
+					zap.String("user_id", uid),
+					zap.Error(createErr),
+				)
+			} else {
+				successCount++
+			}
 		}
 	}
-	
+
 	s.logger.Info("Broadcast notification sent",
 		zap.String("admin_id", adminID),
 		zap.String("title", req.Title),
 		zap.Int("success_count", successCount),
 		zap.Int("fail_count", failCount),
-		zap.Int("total_tokens", len(tokens)),
+		zap.Int("total_users", len(userIDs)),
 	)
-	
+
 	return nil
 }
 

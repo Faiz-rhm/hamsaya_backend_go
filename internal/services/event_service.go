@@ -102,7 +102,15 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor
 			}
-			title := actorName + " is interested in your event"
+
+			notifType := models.NotificationTypeEventInterest
+			suffix := " is interested in your event"
+			if req.EventState == models.EventInterestGoing {
+				notifType = models.NotificationTypeEventGoing
+				suffix = " is going to your event"
+			}
+
+			title := actorName + suffix
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,
@@ -116,7 +124,7 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 			}
 			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  *post.UserID,
-				Type:    models.NotificationTypeEventInterest,
+				Type:    notifType,
 				Title:   &title,
 				Message: &msg,
 				Data:    data,
