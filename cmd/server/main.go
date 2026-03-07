@@ -483,6 +483,8 @@ func main() {
 			admin.GET("/reports/businesses/:report_id", adminHandler.GetBusinessReport)
 			admin.PUT("/reports/:report_type/:report_id/status", adminHandler.UpdateReportStatus)
 
+			admin.GET("/feedback", adminHandler.ListFeedback)
+
 			// Business Management
 			admin.GET("/businesses", adminHandler.ListAllBusinesses)
 			admin.GET("/businesses/:business_id", adminHandler.GetBusinessDetail)

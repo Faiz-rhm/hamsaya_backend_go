@@ -65,6 +65,8 @@ type AdminRepository interface {
 	GetAllFCMTokens(ctx context.Context) ([]string, error)
 	GetFCMTokensByProvince(ctx context.Context, province string) ([]string, error)
 	GetFCMTokensByUserIDs(ctx context.Context, userIDs []string) ([]string, error)
+
+	ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error)
 }
 
 type adminRepository struct {
@@ -1198,7 +1200,7 @@ func (r *adminRepository) GetBusinessCategories(ctx context.Context, businessID 
 	query := `
 		SELECT bc.name
 		FROM business_profile_categories bpc
-		JOIN business_categories bc ON bpc.category_id = bc.id
+		JOIN business_categories bc ON bpc.business_category_id = bc.id
 		WHERE bpc.business_profile_id = $1
 		ORDER BY bc.name
 	`
@@ -1800,6 +1802,68 @@ func (r *adminRepository) GetFCMTokensByUserIDs(ctx context.Context, userIDs []s
 		tokens = append(tokens, token)
 	}
 	return tokens, nil
+}
+
+func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error) {
+	limit := 20
+	if filter.Limit > 0 && filter.Limit <= 100 {
+		limit = filter.Limit
+	}
+	page := 1
+	if filter.Page > 0 {
+		page = filter.Page
+	}
+	offset := (page - 1) * limit
+
+	var countArgs []interface{}
+	countConditions := "1=1"
+	argIdx := 1
+	if filter.Type != "" {
+		countConditions = fmt.Sprintf("f.type = $%d", argIdx)
+		countArgs = append(countArgs, filter.Type)
+		argIdx++
+	}
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM user_feedback f WHERE %s`, countConditions)
+	var totalCount int64
+	err := r.db.Pool.QueryRow(ctx, countQuery, countArgs...).Scan(&totalCount)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	args := make([]interface{}, 0, 4)
+	whereClause := "1=1"
+	argIndex := 1
+	if filter.Type != "" {
+		whereClause = fmt.Sprintf("f.type = $%d", argIndex)
+		args = append(args, filter.Type)
+		argIndex++
+	}
+	args = append(args, limit, offset)
+	query := fmt.Sprintf(`
+		SELECT f.id, f.user_id, COALESCE(u.email, ''), f.rating, f.type, f.message, f.app_version, f.device_info, f.created_at
+		FROM user_feedback f
+		LEFT JOIN users u ON f.user_id = u.id
+		WHERE %s
+		ORDER BY f.created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, whereClause, argIndex, argIndex+1)
+
+	rows, err := r.db.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []*models.AdminFeedbackResponse
+	for rows.Next() {
+		var f models.AdminFeedbackResponse
+		err := rows.Scan(&f.ID, &f.UserID, &f.UserEmail, &f.Rating, &f.Type, &f.Message, &f.AppVersion, &f.DeviceInfo, &f.CreatedAt)
+		if err != nil {
+			return nil, 0, err
+		}
+		items = append(items, &f)
+	}
+	return items, totalCount, nil
 }
 
 func (r *adminRepository) getPeriodInterval(period string) string {

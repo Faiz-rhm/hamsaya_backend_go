@@ -745,6 +745,33 @@ func (h *AdminHandler) UpdateReportStatus(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Report status updated successfully", nil)
 }
 
+// ListFeedback godoc
+// @Summary List user feedback
+// @Description List all user feedback with pagination and optional type filter
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Items per page" default(20)
+// @Param type query string false "Filter by type (GENERAL, BUG, FEATURE, IMPROVEMENT)"
+// @Success 200 {object} utils.Response{data=models.PaginatedResponse}
+// @Failure 401 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /admin/feedback [get]
+func (h *AdminHandler) ListFeedback(c *gin.Context) {
+	var filter models.AdminFeedbackFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.SendBadRequest(c, "Invalid query parameters", err)
+		return
+	}
+	result, err := h.adminService.ListFeedback(c.Request.Context(), &filter)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Feedback retrieved successfully", result)
+}
+
 // ListAllBusinesses godoc
 // @Summary List all businesses
 // @Description List businesses with filtering and pagination

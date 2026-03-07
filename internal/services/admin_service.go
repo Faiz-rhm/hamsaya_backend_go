@@ -718,3 +718,31 @@ func (s *AdminService) BroadcastNotification(ctx context.Context, req *models.Br
 	
 	return nil
 }
+
+// ListFeedback lists user feedback with pagination and optional type filter
+func (s *AdminService) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) (*models.PaginatedResponse, error) {
+	items, total, err := s.adminRepo.ListFeedback(ctx, filter)
+	if err != nil {
+		s.logger.Error("Failed to list feedback", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to list feedback", err)
+	}
+	limit := 20
+	if filter.Limit > 0 {
+		limit = filter.Limit
+	}
+	page := 1
+	if filter.Page > 0 {
+		page = filter.Page
+	}
+	totalPages := int(total) / limit
+	if int(total)%limit > 0 {
+		totalPages++
+	}
+	return &models.PaginatedResponse{
+		Items:      items,
+		TotalCount: total,
+		Page:       page,
+		Limit:      limit,
+		TotalPages: totalPages,
+	}, nil
+}

@@ -412,6 +412,26 @@ type BroadcastNotificationRequest struct {
 	UserIDs  []string `json:"user_ids,omitempty"`
 }
 
+// AdminFeedbackResponse is user feedback for admin list
+type AdminFeedbackResponse struct {
+	ID         string    `json:"id"`
+	UserID     string    `json:"user_id"`
+	UserEmail  string    `json:"user_email"`
+	Rating     int       `json:"rating"` // 1-5
+	Type       string    `json:"type"`   // GENERAL, BUG, FEATURE, IMPROVEMENT
+	Message    string    `json:"message"`
+	AppVersion *string   `json:"app_version,omitempty"`
+	DeviceInfo *string   `json:"device_info,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// AdminFeedbackFilter is filter for listing feedback
+type AdminFeedbackFilter struct {
+	Page   int    `form:"page"`
+	Limit  int    `form:"limit"`
+	Type   string `form:"type"` // GENERAL, BUG, FEATURE, IMPROVEMENT or empty for all
+}
+
 // PaginatedResponse is a generic paginated response
 type PaginatedResponse struct {
 	Items      interface{} `json:"items"`
