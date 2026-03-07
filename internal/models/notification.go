@@ -20,6 +20,7 @@ const (
 	NotificationTypePollVote        NotificationType = "POLL_VOTE"
 	NotificationTypeNewPost         NotificationType = "NEW_POST"
 	NotificationTypeAdmin           NotificationType = "ADMIN"
+	NotificationTypeSellExpired     NotificationType = "SELL_EXPIRED"
 )
 
 // NotificationCategory represents notification category for settings

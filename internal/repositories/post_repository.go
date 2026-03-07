@@ -55,6 +55,10 @@ type PostRepository interface {
 
 	// Stats
 	CountPostsByUser(ctx context.Context, userID string) (int, error)
+
+	// ListExpiredSellPostsNeedingNotification returns SELL posts that are expired (not sold, expired_at <= asOf)
+	// and have not yet had a SELL_EXPIRED notification created. Used by the expire-sell-notify job.
+	ListExpiredSellPostsNeedingNotification(ctx context.Context, asOf time.Time) ([]*models.Post, error)
 }
 
 // locationSelectFragment selects post location columns as four doubles instead
@@ -814,6 +818,63 @@ func (r *postRepository) CountPostsByUser(ctx context.Context, userID string) (i
 	var count int
 	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(&count)
 	return count, err
+}
+
+// ListExpiredSellPostsNeedingNotification returns SELL posts that are expired (not sold, expired_at <= asOf)
+// and have not yet had a SELL_EXPIRED notification created.
+func (r *postRepository) ListExpiredSellPostsNeedingNotification(ctx context.Context, asOf time.Time) ([]*models.Post, error) {
+	query := `
+		SELECT
+			p.id, p.user_id, p.business_id, p.original_post_id, p.category_id,
+			p.title, p.description, p.type, p.status, p.visibility,
+			p.currency, p.price, p.discount, p.free, p.sold, p.is_promoted, p.country_code, p.contact_no, p.is_location,
+			p.start_date, p.start_time, p.end_date, p.end_time, p.event_state, p.interested_count, p.going_count, p.expired_at,
+			` + locationSelectFragment + `,
+			p.country, p.province, p.district, p.neighborhood,
+			p.total_comments, p.total_likes, p.total_shares,
+			p.created_at, p.updated_at, p.deleted_at
+		FROM posts p
+		WHERE p.type = 'SELL'
+		  AND p.sold = false
+		  AND p.deleted_at IS NULL
+		  AND p.expired_at IS NOT NULL
+		  AND p.expired_at <= $1
+		  AND p.user_id IS NOT NULL
+		  AND NOT EXISTS (
+			SELECT 1 FROM notifications n
+			WHERE n.user_id = p.user_id
+			  AND n.type = 'SELL_EXPIRED'
+			  AND n.data->>'post_id' = p.id::text
+		  )
+		ORDER BY p.expired_at ASC
+	`
+	rows, err := r.db.Pool.Query(ctx, query, asOf)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var posts []*models.Post
+	for rows.Next() {
+		post := &models.Post{}
+		var addrLng, addrLat, userLng, userLat pgtype.Float8
+		err := rows.Scan(
+			&post.ID, &post.UserID, &post.BusinessID, &post.OriginalPostID, &post.CategoryID,
+			&post.Title, &post.Description, &post.Type, &post.Status, &post.Visibility,
+			&post.Currency, &post.Price, &post.Discount, &post.Free, &post.Sold, &post.IsPromoted, &post.CountryCode, &post.ContactNo, &post.IsLocation,
+			&post.StartDate, &post.StartTime, &post.EndDate, &post.EndTime, &post.EventState, &post.InterestedCount, &post.GoingCount, &post.ExpiredAt,
+			&addrLng, &addrLat, &userLng, &userLat,
+			&post.Country, &post.Province, &post.District, &post.Neighborhood,
+			&post.TotalComments, &post.TotalLikes, &post.TotalShares,
+			&post.CreatedAt, &post.UpdatedAt, &post.DeletedAt,
+		)
+		if err != nil {
+			return nil, err
+		}
+		scanPostLocations(float8ToFloat64(addrLng), float8ToFloat64(addrLat), float8ToFloat64(userLng), float8ToFloat64(userLat), post)
+		posts = append(posts, post)
+	}
+	return posts, rows.Err()
 }
 
 // queryPosts is a helper function to query posts

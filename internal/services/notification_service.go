@@ -67,6 +67,8 @@ func typeToCategory(t models.NotificationType) models.NotificationCategory {
 		return models.NotificationCategoryEvents
 	case models.NotificationTypeBusinessFollow:
 		return models.NotificationCategoryBusiness
+	case models.NotificationTypeSellExpired:
+		return models.NotificationCategorySales
 	default:
 		return models.NotificationCategoryPosts
 	}
