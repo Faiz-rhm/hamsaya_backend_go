@@ -4,21 +4,24 @@ import "time"
 
 // DashboardStats contains aggregate statistics for the admin dashboard
 type DashboardStats struct {
-	TotalUsers        int64            `json:"total_users"`
-	NewUsersToday     int64            `json:"new_users_today"`
-	NewUsersWeek      int64            `json:"new_users_week"`
-	NewUsersMonth     int64            `json:"new_users_month"`
-	TotalPosts        int64            `json:"total_posts"`
-	TotalFeedPosts    int64            `json:"total_feed_posts"`
-	TotalEventPosts   int64            `json:"total_event_posts"`
-	TotalSellPosts    int64            `json:"total_sell_posts"`
-	TotalPollPosts    int64            `json:"total_poll_posts"`
-	TotalBusinesses   int64            `json:"total_businesses"`
-	ActiveBusinesses  int64            `json:"active_businesses"`
-	PendingReports    int64            `json:"pending_reports"`
-	ResolvedReports   int64            `json:"resolved_reports"`
-	TotalComments     int64            `json:"total_comments"`
-	TotalLikes        int64            `json:"total_likes"`
+	TotalUsers         int64 `json:"total_users"`
+	NewUsersToday      int64 `json:"new_users_today"`
+	NewUsersWeek       int64 `json:"new_users_week"`
+	NewUsersMonth      int64 `json:"new_users_month"`
+	SuspendedUsers     int64 `json:"suspended_users"`
+	TotalPosts         int64 `json:"total_posts"`
+	TotalFeedPosts     int64 `json:"total_feed_posts"`
+	TotalEventPosts    int64 `json:"total_event_posts"`
+	TotalSellPosts     int64 `json:"total_sell_posts"`
+	TotalPollPosts     int64 `json:"total_poll_posts"`
+	TotalBusinesses    int64 `json:"total_businesses"`
+	ActiveBusinesses   int64 `json:"active_businesses"`
+	PendingBusinesses  int64 `json:"pending_businesses"`
+	NewBusinessesWeek  int64 `json:"new_businesses_week"`
+	PendingReports     int64 `json:"pending_reports"`
+	ResolvedReports    int64 `json:"resolved_reports"`
+	TotalComments      int64 `json:"total_comments"`
+	TotalLikes         int64 `json:"total_likes"`
 }
 
 // TimeSeriesData represents a data point in time series analytics

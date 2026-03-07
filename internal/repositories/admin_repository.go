@@ -84,13 +84,14 @@ func NewAdminRepository(db *database.DB) AdminRepository {
 
 func (r *adminRepository) GetDashboardStats(ctx context.Context) (*models.DashboardStats, error) {
 	stats := &models.DashboardStats{}
-	
+
 	query := `
 		SELECT 
 			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as total_users,
 			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE) as new_users_today,
 			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '7 days') as new_users_week,
 			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '30 days') as new_users_month,
+			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND locked_until IS NOT NULL AND locked_until > NOW()) as suspended_users,
 			(SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL) as total_posts,
 			(SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND type = 'FEED') as total_feed_posts,
 			(SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND type = 'EVENT') as total_event_posts,
@@ -98,6 +99,8 @@ func (r *adminRepository) GetDashboardStats(ctx context.Context) (*models.Dashbo
 			(SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND type = 'PULL') as total_poll_posts,
 			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL) as total_businesses,
 			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND status = true) as active_businesses,
+			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND status = false AND rejected_at IS NULL) as pending_businesses,
+			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '7 days') as new_businesses_week,
 			(SELECT COUNT(*) FROM post_reports WHERE report_status = 'PENDING') + 
 			(SELECT COUNT(*) FROM comment_reports WHERE report_status = 'PENDING') + 
 			(SELECT COUNT(*) FROM user_reports WHERE resolved = false) + 
@@ -109,12 +112,13 @@ func (r *adminRepository) GetDashboardStats(ctx context.Context) (*models.Dashbo
 			(SELECT COUNT(*) FROM post_comments WHERE deleted_at IS NULL) as total_comments,
 			(SELECT COUNT(*) FROM post_likes) as total_likes
 	`
-	
+
 	err := r.db.Pool.QueryRow(ctx, query).Scan(
 		&stats.TotalUsers,
 		&stats.NewUsersToday,
 		&stats.NewUsersWeek,
 		&stats.NewUsersMonth,
+		&stats.SuspendedUsers,
 		&stats.TotalPosts,
 		&stats.TotalFeedPosts,
 		&stats.TotalEventPosts,
@@ -122,17 +126,19 @@ func (r *adminRepository) GetDashboardStats(ctx context.Context) (*models.Dashbo
 		&stats.TotalPollPosts,
 		&stats.TotalBusinesses,
 		&stats.ActiveBusinesses,
+		&stats.PendingBusinesses,
+		&stats.NewBusinessesWeek,
 		&stats.PendingReports,
 		&stats.ResolvedReports,
 		&stats.TotalComments,
 		&stats.TotalLikes,
 	)
-	
+
 	if err != nil {
 		r.logger.Errorw("Failed to get dashboard stats", "error", err)
 		return nil, err
 	}
-	
+
 	return stats, nil
 }
 
