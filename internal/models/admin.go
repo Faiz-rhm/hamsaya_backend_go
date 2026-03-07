@@ -319,6 +319,7 @@ type AdminPostReportResponse struct {
 	ID                 string    `json:"id"`
 	PostID             string    `json:"post_id"`
 	PostTitle          *string   `json:"post_title,omitempty"`
+	PostStatus         string    `json:"post_status"` // ACTIVE, HIDDEN, DELETED
 	PostAuthorID       string    `json:"post_author_id"`
 	PostAuthorEmail    string    `json:"post_author_email"`
 	ReporterID         string    `json:"reporter_id"`
@@ -348,16 +349,17 @@ type AdminCommentReportResponse struct {
 
 // AdminUserReportResponse is the user report data for admin API
 type AdminUserReportResponse struct {
-	ID                  string    `json:"id"`
-	ReportedUserID      string    `json:"reported_user_id"`
-	ReportedUserEmail   string    `json:"reported_user_email"`
-	ReportedUserName    string    `json:"reported_user_name"`
-	ReporterID          string    `json:"reporter_id"`
-	ReporterEmail       string    `json:"reporter_email"`
-	Reason              string    `json:"reason"`
-	Description         *string   `json:"description,omitempty"`
-	Resolved            bool      `json:"resolved"`
-	CreatedAt           time.Time `json:"created_at"`
+	ID                    string    `json:"id"`
+	ReportedUserID        string    `json:"reported_user_id"`
+	ReportedUserEmail     string    `json:"reported_user_email"`
+	ReportedUserName      string    `json:"reported_user_name"`
+	ReportedUserSuspended bool      `json:"reported_user_suspended"` // true if locked_until > NOW()
+	ReporterID            string    `json:"reporter_id"`
+	ReporterEmail         string    `json:"reporter_email"`
+	Reason                string    `json:"reason"`
+	Description           *string   `json:"description,omitempty"`
+	Resolved              bool      `json:"resolved"`
+	CreatedAt             time.Time `json:"created_at"`
 }
 
 // AdminBusinessReportResponse is the business report data for admin API
@@ -365,6 +367,7 @@ type AdminBusinessReportResponse struct {
 	ID                 string    `json:"id"`
 	BusinessID         string    `json:"business_id"`
 	BusinessName       string    `json:"business_name"`
+	BusinessStatus     string    `json:"business_status"` // ACTIVE, PENDING, SUSPENDED, etc.
 	BusinessOwnerID    string    `json:"business_owner_id"`
 	BusinessOwnerEmail string    `json:"business_owner_email"`
 	ReporterID         string    `json:"reporter_id"`

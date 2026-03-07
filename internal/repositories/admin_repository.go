@@ -1160,7 +1160,7 @@ func (r *adminRepository) GetBusinessHours(ctx context.Context, businessID strin
 	query := `
 		SELECT day, open_time::text, close_time::text, is_closed
 		FROM business_hours
-		WHERE business_id = $1
+		WHERE business_profile_id = $1
 		ORDER BY 
 			CASE day 
 				WHEN 'MONDAY' THEN 1
@@ -1228,7 +1228,7 @@ func (r *adminRepository) GetBusinessGallery(ctx context.Context, businessID str
 	query := `
 		SELECT id, photo
 		FROM business_attachments
-		WHERE business_id = $1 AND deleted_at IS NULL
+		WHERE business_profile_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at
 	`
 
@@ -1350,6 +1350,11 @@ func (r *adminRepository) GetPostReportByID(ctx context.Context, reportID string
 		SELECT 
 			r.id, r.post_id,
 			p.title,
+			CASE 
+				WHEN p.deleted_at IS NOT NULL THEN 'DELETED'
+				WHEN p.status = 'HIDDEN' THEN 'HIDDEN'
+				ELSE COALESCE(p.status, 'ACTIVE')
+			END,
 			COALESCE(p.user_id::text, ''),
 			COALESCE(pu.email, ''),
 			r.user_id::text,
@@ -1365,7 +1370,7 @@ func (r *adminRepository) GetPostReportByID(ctx context.Context, reportID string
 	var postTitle *string
 	err := r.db.Pool.QueryRow(ctx, query, reportID).Scan(
 		&report.ID, &report.PostID,
-		&postTitle,
+		&postTitle, &report.PostStatus,
 		&report.PostAuthorID, &report.PostAuthorEmail,
 		&report.ReporterID, &report.ReporterEmail,
 		&report.Reason, &report.AdditionalComments, &report.Status, &report.CreatedAt,
@@ -1571,6 +1576,7 @@ func (r *adminRepository) GetUserReportByID(ctx context.Context, reportID string
 			r.id, r.reported_user::text,
 			COALESCE(ru.email, ''),
 			COALESCE(rp.first_name || ' ' || rp.last_name, COALESCE(ru.email, '')),
+			COALESCE((ru.locked_until IS NOT NULL AND ru.locked_until > NOW()), false),
 			r.reported_by_id::text,
 			COALESCE(rb.email, ''),
 			r.reason, r.description, r.resolved, r.created_at
@@ -1583,6 +1589,7 @@ func (r *adminRepository) GetUserReportByID(ctx context.Context, reportID string
 	report := &models.AdminUserReportResponse{}
 	err := r.db.Pool.QueryRow(ctx, query, reportID).Scan(
 		&report.ID, &report.ReportedUserID, &report.ReportedUserEmail, &report.ReportedUserName,
+		&report.ReportedUserSuspended,
 		&report.ReporterID, &report.ReporterEmail,
 		&report.Reason, &report.Description, &report.Resolved, &report.CreatedAt,
 	)
@@ -1676,6 +1683,11 @@ func (r *adminRepository) GetBusinessReportByID(ctx context.Context, reportID st
 		SELECT 
 			r.id, r.business_id::text,
 			COALESCE(b.name, ''),
+			CASE 
+				WHEN b.deleted_at IS NOT NULL THEN 'DELETED'
+				WHEN b.status = true THEN 'ACTIVE'
+				ELSE 'SUSPENDED'
+			END,
 			COALESCE(b.user_id::text, ''),
 			COALESCE(bu.email, ''),
 			r.user_id::text,
@@ -1689,7 +1701,7 @@ func (r *adminRepository) GetBusinessReportByID(ctx context.Context, reportID st
 	`
 	report := &models.AdminBusinessReportResponse{}
 	err := r.db.Pool.QueryRow(ctx, query, reportID).Scan(
-		&report.ID, &report.BusinessID, &report.BusinessName,
+		&report.ID, &report.BusinessID, &report.BusinessName, &report.BusinessStatus,
 		&report.BusinessOwnerID, &report.BusinessOwnerEmail,
 		&report.ReporterID, &report.ReporterEmail,
 		&report.Reason, &report.AdditionalComments, &report.Status, &report.CreatedAt,
