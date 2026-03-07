@@ -307,11 +307,14 @@ type AdminBusinessHour struct {
 
 // AdminReportFilter contains filters for listing reports in admin panel
 type AdminReportFilter struct {
-	Status  string `form:"status"`
-	SortBy  string `form:"sort_by"`
-	SortDir string `form:"sort_dir"`
-	Page    int    `form:"page"`
-	Limit   int    `form:"limit"`
+	PostID     string `form:"post_id"`
+	UserID     string `form:"user_id"`     // filter by reported user (for user reports)
+	BusinessID string `form:"business_id"` // filter by business (for business reports)
+	Status     string `form:"status"`
+	SortBy     string `form:"sort_by"`
+	SortDir    string `form:"sort_dir"`
+	Page       int    `form:"page"`
+	Limit      int    `form:"limit"`
 }
 
 // AdminPostReportResponse is the post report data for admin API

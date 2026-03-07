@@ -1274,7 +1274,13 @@ func (r *adminRepository) ListPostReports(ctx context.Context, filter *models.Ad
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
-	
+
+	if filter.PostID != "" {
+		conditions = append(conditions, fmt.Sprintf("r.post_id = $%d", argIndex))
+		args = append(args, filter.PostID)
+		argIndex++
+	}
+
 	if filter.Status != "" {
 		conditions = append(conditions, fmt.Sprintf("r.report_status = $%d", argIndex))
 		args = append(args, filter.Status)
@@ -1499,37 +1505,43 @@ func (r *adminRepository) ListUserReports(ctx context.Context, filter *models.Ad
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
-	
+
+	if filter.UserID != "" {
+		conditions = append(conditions, fmt.Sprintf("r.reported_user = $%d", argIndex))
+		args = append(args, filter.UserID)
+		argIndex++
+	}
+
 	if filter.Status == "RESOLVED" {
 		conditions = append(conditions, "r.resolved = true")
 	} else if filter.Status == "PENDING" {
 		conditions = append(conditions, "r.resolved = false")
 	}
-	
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")
 	}
-	
+
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM user_reports r WHERE %s`, whereClause)
-	
+
 	var totalCount int64
 	err := r.db.Pool.QueryRow(ctx, countQuery, args...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, err
 	}
-	
+
 	limit := 20
 	if filter.Limit > 0 && filter.Limit <= 100 {
 		limit = filter.Limit
 	}
-	
+
 	page := 1
 	if filter.Page > 0 {
 		page = filter.Page
 	}
 	offset := (page - 1) * limit
-	
+
 	query := fmt.Sprintf(`
 		SELECT 
 			r.id, r.reported_user::text,
@@ -1546,7 +1558,7 @@ func (r *adminRepository) ListUserReports(ctx context.Context, filter *models.Ad
 		ORDER BY r.created_at DESC
 		LIMIT $%d OFFSET $%d
 	`, whereClause, argIndex, argIndex+1)
-	
+
 	args = append(args, limit, offset)
 	
 	rows, err := r.db.Pool.Query(ctx, query, args...)
@@ -1605,13 +1617,19 @@ func (r *adminRepository) ListBusinessReports(ctx context.Context, filter *model
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
-	
+
+	if filter.BusinessID != "" {
+		conditions = append(conditions, fmt.Sprintf("r.business_id = $%d", argIndex))
+		args = append(args, filter.BusinessID)
+		argIndex++
+	}
+
 	if filter.Status != "" {
 		conditions = append(conditions, fmt.Sprintf("r.report_status = $%d", argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
-	
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")
