@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/hamsaya/backend/internal/middleware"
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/services"
@@ -536,6 +537,10 @@ func (h *AdminHandler) GetPostReport(c *gin.Context) {
 	reportID := c.Param("report_id")
 	if reportID == "" {
 		utils.SendBadRequest(c, "Report ID is required", nil)
+		return
+	}
+	if _, err := uuid.Parse(reportID); err != nil {
+		utils.SendBadRequest(c, "Invalid report ID format", err)
 		return
 	}
 	report, err := h.adminService.GetPostReport(c.Request.Context(), reportID)

@@ -1352,8 +1352,8 @@ func (r *adminRepository) GetPostReportByID(ctx context.Context, reportID string
 			p.title,
 			CASE 
 				WHEN p.deleted_at IS NOT NULL THEN 'DELETED'
-				WHEN p.status = 'HIDDEN' THEN 'HIDDEN'
-				ELSE COALESCE(p.status, 'ACTIVE')
+				WHEN p.status = false THEN 'HIDDEN'
+				ELSE 'ACTIVE'
 			END,
 			COALESCE(p.user_id::text, ''),
 			COALESCE(pu.email, ''),
