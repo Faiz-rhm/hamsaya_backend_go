@@ -437,13 +437,39 @@ func (h *AdminHandler) ListAllComments(c *gin.Context) {
 		utils.SendBadRequest(c, "Invalid query parameters", err)
 		return
 	}
-	
+
 	result, err := h.adminService.ListComments(c.Request.Context(), &filter)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 	utils.SendSuccess(c, http.StatusOK, "Comments retrieved successfully", result)
+}
+
+// GetComment godoc
+// @Summary Get comment by ID
+// @Description Get a single comment with details (includes soft-deleted)
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param comment_id path string true "Comment ID"
+// @Success 200 {object} utils.Response{data=models.AdminCommentDetailResponse}
+// @Failure 401 {object} utils.Response
+// @Failure 403 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Router /admin/comments/{comment_id} [get]
+func (h *AdminHandler) GetComment(c *gin.Context) {
+	commentID := c.Param("comment_id")
+	if commentID == "" {
+		utils.SendBadRequest(c, "Comment ID is required", nil)
+		return
+	}
+	comment, err := h.adminService.GetComment(c.Request.Context(), commentID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Comment retrieved successfully", comment)
 }
 
 // DeleteComment godoc

@@ -36,6 +36,7 @@ type AdminRepository interface {
 	DeletePost(ctx context.Context, postID string) error
 	
 	ListComments(ctx context.Context, filter *models.AdminCommentFilter) ([]*models.AdminCommentResponse, int64, error)
+	GetCommentByID(ctx context.Context, commentID string) (*models.AdminCommentDetailResponse, error)
 	DeleteComment(ctx context.Context, commentID string) error
 	RestoreComment(ctx context.Context, commentID string) error
 	ResolveCommentReportsByCommentID(ctx context.Context, commentID string) error
@@ -99,7 +100,7 @@ func (r *adminRepository) GetDashboardStats(ctx context.Context) (*models.Dashbo
 			(SELECT COUNT(*) FROM posts WHERE deleted_at IS NULL AND type = 'PULL') as total_poll_posts,
 			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL) as total_businesses,
 			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND status = true) as active_businesses,
-			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND status = false AND rejected_at IS NULL) as pending_businesses,
+			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND status = false) as pending_businesses,
 			(SELECT COUNT(*) FROM business_profiles WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '7 days') as new_businesses_week,
 			(SELECT COUNT(*) FROM post_reports WHERE report_status = 'PENDING') + 
 			(SELECT COUNT(*) FROM comment_reports WHERE report_status = 'PENDING') + 
@@ -867,19 +868,54 @@ func (r *adminRepository) DeletePost(ctx context.Context, postID string) error {
 	return err
 }
 
+func (r *adminRepository) GetCommentByID(ctx context.Context, commentID string) (*models.AdminCommentDetailResponse, error) {
+	query := `
+		SELECT 
+			c.id, c.text, c.post_id, p.title,
+			c.user_id, u.email, COALESCE(NULLIF(trim(pr.first_name || ' ' || pr.last_name), ''), u.email) as author_name,
+			c.total_likes,
+			(SELECT COUNT(*) FROM comment_reports WHERE comment_id = c.id) as report_count,
+			c.created_at, c.deleted_at
+		FROM post_comments c
+		LEFT JOIN posts p ON c.post_id = p.id
+		LEFT JOIN users u ON c.user_id = u.id
+		LEFT JOIN profiles pr ON u.id = pr.id
+		WHERE c.id = $1
+	`
+	out := &models.AdminCommentDetailResponse{}
+	var postTitle *string
+	err := r.db.Pool.QueryRow(ctx, query, commentID).Scan(
+		&out.ID, &out.Content, &out.PostID, &postTitle,
+		&out.AuthorID, &out.AuthorEmail, &out.AuthorName,
+		&out.TotalLikes, &out.ReportCount,
+		&out.CreatedAt, &out.DeletedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	out.PostTitle = postTitle
+	return out, nil
+}
+
 func (r *adminRepository) ListComments(ctx context.Context, filter *models.AdminCommentFilter) ([]*models.AdminCommentResponse, int64, error) {
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
-	
+
 	conditions = append(conditions, "c.deleted_at IS NULL")
-	
+
+	if filter.CommentID != "" {
+		conditions = append(conditions, fmt.Sprintf("c.id = $%d", argIndex))
+		args = append(args, filter.CommentID)
+		argIndex++
+	}
+
 	if filter.Search != "" {
 		conditions = append(conditions, fmt.Sprintf("c.text ILIKE $%d", argIndex))
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
-	
+
 	if filter.PostID != "" {
 		conditions = append(conditions, fmt.Sprintf("c.post_id = $%d", argIndex))
 		args = append(args, filter.PostID)
@@ -1006,7 +1042,25 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 		args = append(args, statusBool)
 		argIndex++
 	}
-	
+
+	if filter.Province != "" {
+		conditions = append(conditions, fmt.Sprintf("b.province ILIKE $%d", argIndex))
+		args = append(args, "%"+filter.Province+"%")
+		argIndex++
+	}
+
+	if filter.Category != "" {
+		conditions = append(conditions, fmt.Sprintf(`
+			EXISTS (
+				SELECT 1 FROM business_categories bc
+				JOIN categories c ON bc.category_id = c.id
+				WHERE bc.business_id = b.id AND c.name ILIKE $%d
+			)
+		`, argIndex))
+		args = append(args, "%"+filter.Category+"%")
+		argIndex++
+	}
+
 	whereClause := strings.Join(conditions, " AND ")
 	
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM business_profiles b WHERE %s`, whereClause)
@@ -1400,13 +1454,19 @@ func (r *adminRepository) ListCommentReports(ctx context.Context, filter *models
 	var conditions []string
 	var args []interface{}
 	argIndex := 1
-	
+
+	if filter.CommentID != "" {
+		conditions = append(conditions, fmt.Sprintf("r.comment_id = $%d", argIndex))
+		args = append(args, filter.CommentID)
+		argIndex++
+	}
+
 	if filter.Status != "" {
 		conditions = append(conditions, fmt.Sprintf("r.report_status = $%d", argIndex))
 		args = append(args, filter.Status)
 		argIndex++
 	}
-	
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")

@@ -211,14 +211,15 @@ type AdminPostCommentResponse struct {
 
 // AdminCommentFilter contains filters for listing comments in admin panel
 type AdminCommentFilter struct {
-	Search   string `form:"search"`
-	PostID   string `form:"post_id"`
-	UserID   string `form:"user_id"`
-	Reported bool   `form:"reported"`
-	SortBy   string `form:"sort_by"`
-	SortDir  string `form:"sort_dir"`
-	Page     int    `form:"page"`
-	Limit    int    `form:"limit"`
+	Search    string `form:"search"`
+	CommentID string `form:"comment_id"` // fetch single comment by ID
+	PostID    string `form:"post_id"`
+	UserID    string `form:"user_id"`
+	Reported  bool   `form:"reported"`
+	SortBy    string `form:"sort_by"`
+	SortDir   string `form:"sort_dir"`
+	Page      int    `form:"page"`
+	Limit     int    `form:"limit"`
 }
 
 // AdminCommentResponse is the comment data returned in admin API
@@ -233,6 +234,12 @@ type AdminCommentResponse struct {
 	TotalLikes  int64     `json:"total_likes"`
 	ReportCount int64     `json:"report_count"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// AdminCommentDetailResponse is the full comment detail for admin (includes deleted state)
+type AdminCommentDetailResponse struct {
+	AdminCommentResponse
+	DeletedAt *time.Time `json:"deleted_at,omitempty"`
 }
 
 // AdminBusinessFilter contains filters for listing businesses in admin panel
@@ -311,6 +318,7 @@ type AdminBusinessHour struct {
 // AdminReportFilter contains filters for listing reports in admin panel
 type AdminReportFilter struct {
 	PostID     string `form:"post_id"`
+	CommentID  string `form:"comment_id"`  // filter by comment (for comment reports)
 	UserID     string `form:"user_id"`     // filter by reported user (for user reports)
 	BusinessID string `form:"business_id"` // filter by business (for business reports)
 	Status     string `form:"status"`

@@ -305,6 +305,16 @@ func (s *AdminService) DeletePost(ctx context.Context, postID, adminID string) e
 	return nil
 }
 
+// GetComment returns a single comment by ID (including if soft-deleted)
+func (s *AdminService) GetComment(ctx context.Context, commentID string) (*models.AdminCommentDetailResponse, error) {
+	comment, err := s.adminRepo.GetCommentByID(ctx, commentID)
+	if err != nil {
+		s.logger.Error("Failed to get comment", zap.String("comment_id", commentID), zap.Error(err))
+		return nil, utils.NewNotFoundError("Comment not found", err)
+	}
+	return comment, nil
+}
+
 // ListComments lists comments with filtering and pagination
 func (s *AdminService) ListComments(ctx context.Context, filter *models.AdminCommentFilter) (*models.PaginatedResponse, error) {
 	comments, total, err := s.adminRepo.ListComments(ctx, filter)
