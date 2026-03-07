@@ -428,6 +428,8 @@ func (r *adminRepository) GetUserByID(ctx context.Context, userID string) (*mode
 		SELECT 
 			u.id, u.email, u.phone, u.email_verified, u.mfa_enabled, u.role,
 			p.first_name, p.last_name, p.avatar, p.cover, p.country, p.province, p.district, p.neighborhood, p.is_complete,
+			ST_X(p.location::geometry) as longitude,
+			ST_Y(p.location::geometry) as latitude,
 			u.locked_until, u.last_login_at, u.created_at,
 			(SELECT COUNT(*) FROM posts WHERE user_id = u.id AND deleted_at IS NULL) as posts_count,
 			(SELECT COUNT(*) FROM user_follows WHERE following_id = u.id) as followers_count,
@@ -438,18 +440,21 @@ func (r *adminRepository) GetUserByID(ctx context.Context, userID string) (*mode
 	`
 	
 	user := &models.AdminUserResponse{}
+	var longitude, latitude *float64
 	err := r.db.Pool.QueryRow(ctx, query, userID).Scan(
 		&user.ID, &user.Email, &user.Phone, &user.EmailVerified, &user.MFAEnabled, &user.Role,
 		&user.FirstName, &user.LastName, &user.Avatar, &user.Cover,
 		&user.Country, &user.Province, &user.District, &user.Neighborhood,
 		&user.IsComplete,
+		&longitude, &latitude,
 		&user.LockedUntil, &user.LastLoginAt, &user.CreatedAt,
 		&user.PostsCount, &user.FollowersCount, &user.FollowingCount,
 	)
 	if err != nil {
 		return nil, err
 	}
-	
+	user.Longitude = longitude
+	user.Latitude = latitude
 	user.IsSuspended = user.LockedUntil != nil && user.LockedUntil.After(time.Now())
 	return user, nil
 }
@@ -713,6 +718,8 @@ func (r *adminRepository) GetPostByID(ctx context.Context, postID string) (*mode
 			p.start_date, p.end_date, p.event_state::text,
 			p.interested_count, p.going_count,
 			p.country, p.province, p.district, p.neighborhood,
+			ST_X(p.address_location::geometry) as longitude,
+			ST_Y(p.address_location::geometry) as latitude,
 			p.total_likes, p.total_comments, p.total_shares,
 			(SELECT COUNT(*) FROM post_reports WHERE post_id = p.id) as report_count,
 			p.created_at, p.updated_at
@@ -726,6 +733,7 @@ func (r *adminRepository) GetPostByID(ctx context.Context, postID string) (*mode
 	post := &models.AdminPostDetailResponse{}
 	var authorAvatar *models.Photo
 	var eventState *string
+	var longitude, latitude *float64
 	err := r.db.Pool.QueryRow(ctx, query, postID).Scan(
 		&post.ID, &post.Type, &post.Title, &post.Description, &post.Status,
 		&post.Visibility,
@@ -737,6 +745,7 @@ func (r *adminRepository) GetPostByID(ctx context.Context, postID string) (*mode
 		&post.StartDate, &post.EndDate, &eventState,
 		&post.InterestedCount, &post.GoingCount,
 		&post.Country, &post.Province, &post.District, &post.Neighborhood,
+		&longitude, &latitude,
 		&post.TotalLikes, &post.TotalComments, &post.TotalShares,
 		&post.ReportCount,
 		&post.CreatedAt, &post.UpdatedAt,
@@ -746,6 +755,8 @@ func (r *adminRepository) GetPostByID(ctx context.Context, postID string) (*mode
 	}
 	post.AuthorAvatar = authorAvatar
 	post.EventState = eventState
+	post.Longitude = longitude
+	post.Latitude = latitude
 
 	// Fetch attachments
 	attachRows, err := r.db.Pool.Query(ctx, `
@@ -1133,7 +1144,10 @@ func (r *adminRepository) GetBusinessByID(ctx context.Context, businessID string
 			b.avatar, b.avatar_color, b.cover,
 			CASE WHEN b.status = true THEN 'ACTIVE' ELSE 'INACTIVE' END as status,
 			b.additional_info,
-			b.country, b.province, b.district, b.neighborhood, b.show_location,
+			b.country, b.province, b.district, b.neighborhood,
+			ST_X(b.address_location::geometry) as longitude,
+			ST_Y(b.address_location::geometry) as latitude,
+			b.show_location,
 			b.user_id, u.email,
 			COALESCE(NULLIF(trim(COALESCE(pr.first_name,'') || ' ' || COALESCE(pr.last_name,'')), ''), u.email) as owner_name,
 			pr.avatar as owner_avatar,
@@ -1148,13 +1162,16 @@ func (r *adminRepository) GetBusinessByID(ctx context.Context, businessID string
 	`
 
 	business := &models.AdminBusinessDetailResponse{}
+	var longitude, latitude *float64
 	err := r.db.Pool.QueryRow(ctx, query, businessID).Scan(
 		&business.ID, &business.Name, &business.LicenseNo, &business.Description, &business.Address,
 		&business.PhoneNumber, &business.Email, &business.Website,
 		&business.Avatar, &business.AvatarColor, &business.Cover,
 		&business.Status,
 		&business.AdditionalInfo,
-		&business.Country, &business.Province, &business.District, &business.Neighborhood, &business.ShowLocation,
+		&business.Country, &business.Province, &business.District, &business.Neighborhood,
+		&longitude, &latitude,
+		&business.ShowLocation,
 		&business.OwnerID, &business.OwnerEmail, &business.OwnerName,
 		&business.OwnerAvatar,
 		&business.TotalFollow, &business.TotalViews, &business.TotalPosts,
@@ -1164,7 +1181,8 @@ func (r *adminRepository) GetBusinessByID(ctx context.Context, businessID string
 	if err != nil {
 		return nil, err
 	}
-
+	business.Longitude = longitude
+	business.Latitude = latitude
 	return business, nil
 }
 

@@ -89,6 +89,8 @@ type AdminUserResponse struct {
 	Province      *string    `json:"province,omitempty"`
 	District      *string    `json:"district,omitempty"`
 	Neighborhood  *string    `json:"neighborhood,omitempty"`
+	Latitude      *float64   `json:"latitude,omitempty"`
+	Longitude     *float64   `json:"longitude,omitempty"`
 	IsComplete    bool       `json:"is_complete"`
 	IsSuspended   bool       `json:"is_suspended"`
 	LockedUntil   *time.Time `json:"locked_until,omitempty"`
@@ -173,10 +175,12 @@ type AdminPostDetailResponse struct {
 	GoingCount      int        `json:"going_count"`
 
 	// Location
-	Country      *string `json:"country,omitempty"`
-	Province     *string `json:"province,omitempty"`
-	District     *string `json:"district,omitempty"`
-	Neighborhood *string `json:"neighborhood,omitempty"`
+	Country      *string  `json:"country,omitempty"`
+	Province     *string  `json:"province,omitempty"`
+	District     *string  `json:"district,omitempty"`
+	Neighborhood *string  `json:"neighborhood,omitempty"`
+	Latitude     *float64 `json:"latitude,omitempty"`
+	Longitude    *float64 `json:"longitude,omitempty"`
 
 	// Media
 	Attachments []AttachmentResponse `json:"attachments"`
@@ -290,6 +294,8 @@ type AdminBusinessDetailResponse struct {
 	Province       *string                `json:"province,omitempty"`
 	District       *string                `json:"district,omitempty"`
 	Neighborhood   *string                `json:"neighborhood,omitempty"`
+	Latitude       *float64               `json:"latitude,omitempty"`
+	Longitude      *float64               `json:"longitude,omitempty"`
 	ShowLocation   bool                   `json:"show_location"`
 	OwnerID        string                 `json:"owner_id"`
 	OwnerEmail     string                 `json:"owner_email"`
