@@ -8,18 +8,19 @@ import (
 
 // PostComment represents a comment on a post
 type PostComment struct {
-	ID              string         `json:"id"`
-	PostID          string         `json:"post_id"`
-	UserID          string         `json:"user_id"`
-	BusinessID      *string        `json:"business_id,omitempty"`
-	ParentCommentID *string        `json:"parent_comment_id,omitempty"`
-	Text            string         `json:"text"`
-	Location        *pgtype.Point  `json:"location,omitempty"`
-	TotalLikes      int            `json:"total_likes"`
-	TotalReplies    int            `json:"total_replies"`
-	CreatedAt       time.Time      `json:"created_at"`
-	UpdatedAt       time.Time      `json:"updated_at"`
-	DeletedAt       *time.Time     `json:"-"`
+	ID                string         `json:"id"`
+	PostID            string         `json:"post_id"`
+	UserID            string         `json:"user_id"`
+	BusinessID        *string        `json:"business_id,omitempty"`
+	ParentCommentID   *string        `json:"parent_comment_id,omitempty"`
+	Text              string         `json:"text"`
+	Location          *pgtype.Point  `json:"location,omitempty"`
+	TotalLikes        int            `json:"total_likes"`
+	TotalReplies      int            `json:"total_replies"`
+	CreatedAt         time.Time      `json:"created_at"`
+	UpdatedAt         time.Time      `json:"updated_at"`
+	DeletedAt         *time.Time     `json:"-"`
+	MentionedUserIDs  []string       `json:"-"` // Stored in DB as JSONB; order matches @mentions in text
 }
 
 // CommentAttachment represents an attachment on a comment
@@ -65,6 +66,12 @@ type CommentAttachmentResponse struct {
 	Photo Photo  `json:"photo"`
 }
 
+// MentionedUser is a user mentioned in a comment (for tap-to-profile).
+type MentionedUser struct {
+	UserID   string `json:"user_id"`
+	FullName string `json:"full_name"`
+}
+
 // CommentResponse represents a comment in API responses
 type CommentResponse struct {
 	ID              string                      `json:"id"`
@@ -83,6 +90,7 @@ type CommentResponse struct {
 	Replies         []*CommentResponse          `json:"replies,omitempty"`
 	CreatedAt       time.Time                   `json:"created_at"`
 	UpdatedAt       time.Time                   `json:"updated_at"`
+	MentionedUsers  []MentionedUser             `json:"mentioned_users,omitempty"` // Ordered to match @mentions in text
 }
 
 // CommentFilter represents filters for fetching comments

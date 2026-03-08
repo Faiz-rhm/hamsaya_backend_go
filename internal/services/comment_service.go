@@ -96,6 +96,11 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		}
 	}
 
+	// Store mentioned user IDs (order matches @mentions in text for client)
+	if len(req.TaggedUserIDs) > 0 {
+		comment.MentionedUserIDs = req.TaggedUserIDs
+	}
+
 	// Create comment in database
 	if err := s.commentRepo.Create(ctx, comment); err != nil {
 		s.logger.Error("Failed to create comment", zap.String("post_id", postID), zap.Error(err))
@@ -543,6 +548,24 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 		}
 		// Check if comment belongs to the viewer
 		response.IsMine = comment.UserID == *viewerID
+	}
+
+	// Populate mentioned users (ordered to match @mentions in text) for tap-to-profile
+	if len(comment.MentionedUserIDs) > 0 {
+		for _, uid := range comment.MentionedUserIDs {
+			if uid == "" {
+				continue
+			}
+			profile, err := s.userRepo.GetProfileByUserID(ctx, uid)
+			if err != nil {
+				response.MentionedUsers = append(response.MentionedUsers, models.MentionedUser{UserID: uid, FullName: ""})
+				continue
+			}
+			response.MentionedUsers = append(response.MentionedUsers, models.MentionedUser{
+				UserID:   uid,
+				FullName: profile.FullName(),
+			})
+		}
 	}
 
 	// If comment was posted as a business, attach business_id and business_profile

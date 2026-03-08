@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -47,12 +48,16 @@ func NewCommentRepository(db *database.DB) CommentRepository {
 
 // Create creates a new comment
 func (r *commentRepository) Create(ctx context.Context, comment *models.PostComment) error {
+	mentionedJSON := []byte("[]")
+	if len(comment.MentionedUserIDs) > 0 {
+		mentionedJSON, _ = json.Marshal(comment.MentionedUserIDs)
+	}
 	query := `
 		INSERT INTO post_comments (
 			id, post_id, user_id, business_id, parent_comment_id, text, location,
-			total_likes, total_replies, created_at, updated_at
+			total_likes, total_replies, created_at, updated_at, mentioned_user_ids
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 		)
 	`
 
@@ -68,6 +73,7 @@ func (r *commentRepository) Create(ctx context.Context, comment *models.PostComm
 		comment.TotalReplies,
 		comment.CreatedAt,
 		comment.UpdatedAt,
+		mentionedJSON,
 	)
 
 	return err
@@ -78,12 +84,13 @@ func (r *commentRepository) GetByID(ctx context.Context, commentID string) (*mod
 	query := `
 		SELECT
 			id, post_id, user_id, business_id, parent_comment_id, text, location,
-			total_likes, total_replies, created_at, updated_at, deleted_at
+			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
 	comment := &models.PostComment{}
+	var mentionedRaw []byte
 	err := r.db.Pool.QueryRow(ctx, query, commentID).Scan(
 		&comment.ID,
 		&comment.PostID,
@@ -97,13 +104,19 @@ func (r *commentRepository) GetByID(ctx context.Context, commentID string) (*mod
 		&comment.CreatedAt,
 		&comment.UpdatedAt,
 		&comment.DeletedAt,
+		&mentionedRaw,
 	)
 
 	if err == pgx.ErrNoRows {
 		return nil, fmt.Errorf("comment not found")
 	}
-
-	return comment, err
+	if err != nil {
+		return nil, err
+	}
+	if len(mentionedRaw) > 0 {
+		_ = json.Unmarshal(mentionedRaw, &comment.MentionedUserIDs)
+	}
+	return comment, nil
 }
 
 // Update updates a comment
@@ -141,7 +154,7 @@ func (r *commentRepository) GetByPostID(ctx context.Context, postID string, limi
 	query := `
 		SELECT
 			id, post_id, user_id, business_id, parent_comment_id, text, location,
-			total_likes, total_replies, created_at, updated_at, deleted_at
+			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE post_id = $1 AND parent_comment_id IS NULL AND deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -156,7 +169,7 @@ func (r *commentRepository) GetReplies(ctx context.Context, parentCommentID stri
 	query := `
 		SELECT
 			id, post_id, user_id, business_id, parent_comment_id, text, location,
-			total_likes, total_replies, created_at, updated_at, deleted_at
+			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE parent_comment_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at ASC
@@ -326,6 +339,7 @@ func (r *commentRepository) queryComments(ctx context.Context, query string, arg
 	var comments []*models.PostComment
 	for rows.Next() {
 		comment := &models.PostComment{}
+		var mentionedRaw []byte
 		err := rows.Scan(
 			&comment.ID,
 			&comment.PostID,
@@ -339,9 +353,13 @@ func (r *commentRepository) queryComments(ctx context.Context, query string, arg
 			&comment.CreatedAt,
 			&comment.UpdatedAt,
 			&comment.DeletedAt,
+			&mentionedRaw,
 		)
 		if err != nil {
 			return nil, err
+		}
+		if len(mentionedRaw) > 0 {
+			_ = json.Unmarshal(mentionedRaw, &comment.MentionedUserIDs)
 		}
 		comments = append(comments, comment)
 	}
