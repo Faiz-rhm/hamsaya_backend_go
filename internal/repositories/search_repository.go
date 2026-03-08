@@ -177,9 +177,12 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 // SearchUsers searches for users using full-text search
 func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.SearchFilter) ([]*models.Profile, error) {
 	query := `
-		SELECT p.*, u.email,
-			ST_Y(p.location::geometry) as latitude,
+		SELECT p.id, p.first_name, p.last_name, p.avatar, p.avatar_color, p.cover, p.about, p.gender, p.dob, p.website,
 			ST_X(p.location::geometry) as longitude,
+			ST_Y(p.location::geometry) as latitude,
+			p.country, p.province, p.district, p.neighborhood, p.is_complete,
+			p.created_at, p.updated_at, p.deleted_at,
+			u.email,
 			(SELECT COUNT(*) FROM user_follows WHERE following_id = p.id) as follower_count,
 			(SELECT COUNT(*) FROM user_follows WHERE follower_id = p.id) as following_count
 		FROM profiles p
@@ -244,12 +247,14 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 			&profile.FirstName,
 			&profile.LastName,
 			&profile.Avatar,
+			&profile.AvatarColor,
 			&profile.Cover,
 			&profile.About,
 			&profile.Gender,
 			&profile.DOB,
 			&profile.Website,
-			&profile.Location,
+			&lng,
+			&lat,
 			&profile.Country,
 			&profile.Province,
 			&profile.District,
@@ -259,8 +264,6 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 			&profile.UpdatedAt,
 			&profile.DeletedAt,
 			&email,
-			&lat,
-			&lng,
 			&followerCount,
 			&followingCount,
 		)
@@ -268,6 +271,12 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 			return nil, fmt.Errorf("failed to scan profile: %w", err)
 		}
 
+		if lat != nil && lng != nil {
+			profile.Location = &pgtype.Point{
+				P:     pgtype.Vec2{X: *lng, Y: *lat},
+				Valid: true,
+			}
+		}
 		profiles = append(profiles, profile)
 	}
 

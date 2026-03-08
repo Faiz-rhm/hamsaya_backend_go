@@ -47,7 +47,8 @@ type CreateCommentRequest struct {
 	BusinessID      *string  `json:"business_id,omitempty" validate:"omitempty,uuid"`
 	Latitude        *float64 `json:"latitude,omitempty"`
 	Longitude       *float64 `json:"longitude,omitempty"`
-	Attachments     []string `json:"attachments,omitempty"` // Photo URLs
+	Attachments     []string `json:"attachments,omitempty"`   // Photo URLs
+	TaggedUserIDs   []string `json:"tagged_user_ids,omitempty"` // User IDs mentioned in the comment; each receives a MENTION notification
 }
 
 // UpdateCommentRequest represents a request to update a comment

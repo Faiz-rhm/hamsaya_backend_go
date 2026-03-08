@@ -217,6 +217,59 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		}()
 	}
 
+	// Notify each tagged/mentioned user (skip self and post owner to avoid duplicate)
+	if len(req.TaggedUserIDs) > 0 && s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			actorName := "Someone"
+			var actorAvatar interface{}
+			var actorAvatarColor string
+			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
+				actorName = actor.FullName()
+				actorAvatar = actor.Avatar
+				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+					actorAvatarColor = *actor.AvatarColor
+				}
+			}
+			notified := make(map[string]bool)
+			if post.UserID != nil {
+				notified[*post.UserID] = true
+			}
+			notified[userID] = true
+			if req.ParentCommentID != nil {
+				if parent, err := s.commentRepo.GetByID(ctxDetach, *req.ParentCommentID); err == nil {
+					notified[parent.UserID] = true
+				}
+			}
+			for _, taggedID := range req.TaggedUserIDs {
+				if taggedID == "" || notified[taggedID] {
+					continue
+				}
+				notified[taggedID] = true
+				title := actorName + " mentioned you in a comment"
+				msg := title
+				data := map[string]interface{}{
+					"actor_id":     userID,
+					"actor_name":   actorName,
+					"actor_avatar": actorAvatar,
+					"actor_avatar_color": actorAvatarColor,
+					"post_id":      postID,
+					"comment_id":   commentID,
+				}
+				if post.BusinessID != nil && *post.BusinessID != "" {
+					data["business_id"] = *post.BusinessID
+				}
+				s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+					UserID:  taggedID,
+					Type:    models.NotificationTypeMention,
+					Title:   &title,
+					Message: &msg,
+					Data:    data,
+				})
+			}
+		}()
+	}
+
 	// Return enriched comment
 	return s.GetComment(ctx, commentID, &userID)
 }
