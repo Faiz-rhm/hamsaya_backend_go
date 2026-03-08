@@ -99,6 +99,7 @@ type DiscoverBusiness struct {
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
 	Avatar      *Photo    `json:"avatar,omitempty"`
+	Cover       *Photo    `json:"cover,omitempty"`
 	Location    *Location `json:"location"`
 	Distance    float64   `json:"distance"` // Distance in km from search point
 	Categories  []string  `json:"categories,omitempty"`

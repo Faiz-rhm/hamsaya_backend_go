@@ -400,6 +400,7 @@ func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses
 			Name:        business.Name,
 			Description: business.Description,
 			Avatar:      business.Avatar,
+			Cover:       business.Cover,
 			Location:    location,
 			Categories:  []string{},
 			TotalFollow: business.TotalFollow,
