@@ -825,7 +825,7 @@ func (s *AuthService) ForgotPassword(ctx context.Context, req *models.ForgotPass
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		s.logger.Warn("Password reset requested for non-existent email", zap.String("email", email))
-		return nil
+		return utils.NewNotFoundError("No account found with this email", err)
 	}
 
 	// Generate 6-digit reset code (entered in app; same pattern as email verification)
