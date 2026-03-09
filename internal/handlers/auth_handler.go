@@ -379,19 +379,11 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	devCode, err := h.authService.ForgotPassword(c.Request.Context(), &req)
-	if err != nil {
+	if err := h.authService.ForgotPassword(c.Request.Context(), &req); err != nil {
 		h.handleError(c, err)
 		return
 	}
-
-	// Always return success to prevent email enumeration
-	var data interface{}
-	if devCode != "" {
-		// Email was not sent (e.g. no RESEND/SMTP); include code for development/testing only
-		data = gin.H{"dev_reset_code": devCode}
-	}
-	utils.SendSuccess(c, http.StatusOK, "If an account exists with this email, a password reset link has been sent", data)
+	utils.SendSuccess(c, http.StatusOK, "If an account exists with this email, a password reset link has been sent", nil)
 }
 
 // ResetPassword godoc

@@ -72,6 +72,15 @@ The API will be available at **http://localhost:8080**.
 curl http://localhost:8080/health
 ```
 
+### 7. Email (verification & password reset)
+
+To **receive** verification and password-reset emails, configure one of these in `.env`:
+
+- **Resend (recommended):** Get an API key at [resend.com](https://resend.com). Set `RESEND_API_KEY=re_xxx` and optionally `EMAIL_FROM=Hamsaya <noreply@yourdomain.com>` (use a domain you verify in Resend).
+- **SMTP (e.g. Gmail):** Set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER`, and `SMTP_PASSWORD` (use an [app password](https://support.google.com/accounts/answer/185833) for Gmail).
+
+If neither is set, the server still accepts forgot-password requests but **no email is sent**. For local development, the **6-digit reset code is printed in the terminal** where the Go server is running (look for a log line like `Email not configured ... code=123456`). Restart the server after changing `.env`.
+
 Optional: run with **hot reload** during development:
 
 ```bash

@@ -815,30 +815,30 @@ func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID s
 	return nil
 }
 
-// ForgotPassword initiates password reset flow.
-// Returns devResetCode when email could not be sent (e.g. no RESEND/SMTP configured); caller may include it in response for development only.
-func (s *AuthService) ForgotPassword(ctx context.Context, req *models.ForgotPasswordRequest) (devResetCode string, err error) {
+// ForgotPassword initiates password reset flow. Sends the reset code by email only; the code is
+// never returned in the API response. When email cannot be sent (e.g. not configured), the code
+// is still not returned—configure RESEND_API_KEY or SMTP to deliver the code to the user.
+func (s *AuthService) ForgotPassword(ctx context.Context, req *models.ForgotPasswordRequest) (err error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
 	// Get user by email
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
-		// Don't reveal if email exists
 		s.logger.Warn("Password reset requested for non-existent email", zap.String("email", email))
-		return "", nil
+		return nil
 	}
 
 	// Generate 6-digit reset code (entered in app; same pattern as email verification)
-	resetCode, err := s.jwtService.GenerateVerificationCode()
+	code, err := s.jwtService.GenerateVerificationCode()
 	if err != nil {
 		s.logger.Error("Failed to generate reset code", zap.Error(err))
-		return "", utils.NewInternalError("Failed to process password reset", err)
+		return utils.NewInternalError("Failed to process password reset", err)
 	}
 
 	// Store reset code in Redis (valid for 15 minutes)
-	if err := s.tokenStorage.StorePasswordResetToken(ctx, user.ID, resetCode, 15*time.Minute); err != nil {
+	if err := s.tokenStorage.StorePasswordResetToken(ctx, user.ID, code, 15*time.Minute); err != nil {
 		s.logger.Error("Failed to store reset token", zap.Error(err))
-		return "", utils.NewInternalError("Failed to process password reset", err)
+		return utils.NewInternalError("Failed to process password reset", err)
 	}
 
 	// Get profile for personalized email
@@ -848,17 +848,13 @@ func (s *AuthService) ForgotPassword(ctx context.Context, req *models.ForgotPass
 		name = *profile.FirstName + " " + *profile.LastName
 	}
 
-	// Send password reset email with code (no link; user enters code in app)
-	if sendErr := s.emailService.SendPasswordResetEmail(user.Email, name, resetCode); sendErr != nil {
+	// Send password reset email. Code is never returned in the response.
+	if sendErr := s.emailService.SendPasswordResetEmail(user.Email, name, code); sendErr != nil {
 		s.logger.Error("Failed to send password reset email", zap.Error(sendErr))
-		// Return code so handler can include it in dev response when email is not configured
-		return resetCode, nil
+		return utils.NewInternalError("Failed to send password reset email; please try again later", sendErr)
 	}
-
-	s.logger.Info("Password reset requested",
-		zap.String("user_id", user.ID),
-	)
-	return "", nil
+	s.logger.Info("Password reset requested", zap.String("user_id", user.ID))
+	return nil
 }
 
 // VerifyResetCode checks that the reset code is valid and not expired (does not consume it).
