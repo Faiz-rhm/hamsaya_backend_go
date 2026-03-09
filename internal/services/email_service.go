@@ -2,8 +2,10 @@ package services
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
+	"net/http"
 	"net/smtp"
 
 	"github.com/hamsaya/backend/config"
@@ -38,14 +40,18 @@ type EmailData struct {
 	SupportEmail   string
 }
 
-// SendVerificationEmail sends an email verification link
-func (s *EmailService) SendVerificationEmail(email, name, verificationToken string) error {
+// SendVerificationEmail sends an email with a verification code (user enters code in the app)
+func (s *EmailService) SendVerificationEmail(email, name, verificationCode string) error {
+	s.logger.Info("Verification code generated (check server logs if email not configured)",
+		zap.String("email", email),
+		zap.String("code", verificationCode),
+	)
 	data := EmailData{
 		RecipientName:  name,
 		RecipientEmail: email,
-		Subject:        "Verify Your Email Address",
-		VerifyURL:      fmt.Sprintf("https://app.hamsaya.com/verify-email?token=%s", verificationToken),
-		Token:          verificationToken,
+		Subject:        "Your verification code",
+		VerifyURL:      "", // optional link; template focuses on code
+		Token:          verificationCode,
 		ExpiresIn:      "24 hours",
 		AppName:        "Hamsaya",
 		AppURL:         "https://hamsaya.com",
@@ -124,18 +130,67 @@ func (s *EmailService) SendPasswordChangedEmail(email, name string) error {
 	return s.sendEmail(email, data.Subject, htmlBody)
 }
 
-// sendEmail sends an email using SMTP
+// sendEmail sends an email using Resend API (if RESEND_API_KEY set) or SMTP.
+// Returns an error if neither is configured so callers can report failure.
 func (s *EmailService) sendEmail(to, subject, htmlBody string) error {
-	// Skip if SMTP is not configured
-	if s.cfg.SMTPHost == "" || s.cfg.SMTPPort == "" {
-		s.logger.Warn("SMTP not configured, skipping email send",
-			zap.String("to", to),
-			zap.String("subject", subject),
-		)
-		return nil
+	if s.cfg.ResendAPIKey != "" {
+		return s.sendEmailResend(to, subject, htmlBody)
+	}
+	if s.cfg.SMTPHost != "" && s.cfg.SMTPPort != "" {
+		return s.sendEmailSMTP(to, subject, htmlBody)
+	}
+	return fmt.Errorf("email not configured: set RESEND_API_KEY or SMTP_HOST and SMTP_PORT to send emails")
+}
+
+// sendEmailResend sends an email via Resend API
+func (s *EmailService) sendEmailResend(to, subject, htmlBody string) error {
+	from := s.cfg.From
+	if from == "" {
+		from = "Hamsaya <onboarding@resend.dev>"
 	}
 
-	// Prepare email headers and body
+	body := map[string]interface{}{
+		"from":    from,
+		"to":      []string{to},
+		"subject": subject,
+		"html":    htmlBody,
+	}
+	jsonBody, err := json.Marshal(body)
+	if err != nil {
+		return fmt.Errorf("failed to marshal Resend request: %w", err)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, "https://api.resend.com/emails", bytes.NewReader(jsonBody))
+	if err != nil {
+		return fmt.Errorf("failed to create Resend request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.cfg.ResendAPIKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		s.logger.Error("Resend API request failed", zap.String("to", to), zap.Error(err))
+		return fmt.Errorf("failed to send email via Resend: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		var errBody bytes.Buffer
+		_, _ = errBody.ReadFrom(resp.Body) // read response body into errBody
+		s.logger.Error("Resend API error",
+			zap.String("to", to),
+			zap.Int("status", resp.StatusCode),
+			zap.String("body", errBody.String()),
+		)
+		return fmt.Errorf("Resend API returned status %d: %s", resp.StatusCode, errBody.String())
+	}
+
+	s.logger.Info("Email sent via Resend", zap.String("to", to), zap.String("subject", subject))
+	return nil
+}
+
+// sendEmailSMTP sends an email using SMTP (caller must ensure SMTP is configured).
+func (s *EmailService) sendEmailSMTP(to, subject, htmlBody string) error {
 	from := s.cfg.From
 	if from == "" {
 		from = "noreply@hamsaya.com"
@@ -148,33 +203,21 @@ func (s *EmailService) sendEmail(to, subject, htmlBody string) error {
 	headers["MIME-Version"] = "1.0"
 	headers["Content-Type"] = "text/html; charset=UTF-8"
 
-	// Build message
 	message := ""
 	for k, v := range headers {
 		message += fmt.Sprintf("%s: %s\r\n", k, v)
 	}
 	message += "\r\n" + htmlBody
 
-	// SMTP authentication
 	auth := smtp.PlainAuth("", s.cfg.User, s.cfg.Password, s.cfg.SMTPHost)
-
-	// Send email
 	addr := s.cfg.SMTPHost + ":" + s.cfg.SMTPPort
 	err := smtp.SendMail(addr, auth, from, []string{to}, []byte(message))
 	if err != nil {
-		s.logger.Error("Failed to send email",
-			zap.String("to", to),
-			zap.String("subject", subject),
-			zap.Error(err),
-		)
+		s.logger.Error("Failed to send email", zap.String("to", to), zap.String("subject", subject), zap.Error(err))
 		return fmt.Errorf("failed to send email: %w", err)
 	}
 
-	s.logger.Info("Email sent successfully",
-		zap.String("to", to),
-		zap.String("subject", subject),
-	)
-
+	s.logger.Info("Email sent successfully", zap.String("to", to), zap.String("subject", subject))
 	return nil
 }
 
@@ -266,14 +309,10 @@ const verificationEmailTemplate = `
         </div>
         <div class="content">
             <h2>Hi {{.RecipientName}},</h2>
-            <p>Thank you for signing up with {{.AppName}}! We're excited to have you on board.</p>
-            <p>To complete your registration and verify your email address, please click the button below:</p>
-            <p style="text-align: center; margin: 30px 0;">
-                <a href="{{.VerifyURL}}" class="button">Verify Email Address</a>
-            </p>
-            <p>Or copy and paste this link into your browser:</p>
-            <div class="code">{{.VerifyURL}}</div>
-            <p><strong>This link will expire in {{.ExpiresIn}}.</strong></p>
+            <p>Thank you for signing up with {{.AppName}}! Use the code below to verify your email address in the app.</p>
+            <p style="text-align: center; margin: 20px 0; font-size: 14px; color: #6b7280;">Your verification code</p>
+            <div class="code" style="font-size: 28px; letter-spacing: 8px; font-weight: 700;">{{.Token}}</div>
+            <p><strong>This code expires in {{.ExpiresIn}}.</strong></p>
             <p>If you didn't create an account with {{.AppName}}, you can safely ignore this email.</p>
         </div>
         <div class="footer">

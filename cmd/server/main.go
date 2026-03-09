@@ -256,6 +256,7 @@ func main() {
 			// Protected auth routes (require authentication)
 			auth.POST("/logout", authMiddleware.RequireAuth(), authHandler.Logout)
 			auth.POST("/logout-all", authMiddleware.RequireAuth(), authHandler.LogoutAll)
+			auth.POST("/send-verification-email", authMiddleware.RequireAuth(), authHandler.SendVerificationEmail)
 			auth.POST("/change-password", authMiddleware.RequireAuth(), authHandler.ChangePassword)
 			auth.GET("/sessions", authMiddleware.RequireAuth(), authHandler.GetActiveSessions)
 		}

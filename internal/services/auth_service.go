@@ -134,6 +134,21 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			zap.String("email", email),
 		)
 
+		// Send verification code email (Resend or SMTP)
+		verificationCode, err := s.jwtService.GenerateVerificationCode()
+		if err == nil {
+			ttl := 24 * time.Hour
+			if storeErr := s.tokenStorage.StoreVerificationToken(ctx, userID, verificationCode, ttl); storeErr == nil {
+				name := strings.TrimSpace(req.FirstName + " " + req.LastName)
+				if name == "" {
+					name = email
+				}
+				if sendErr := s.emailService.SendVerificationEmail(email, name, verificationCode); sendErr != nil {
+					s.logger.Warn("Failed to send verification email after registration", zap.String("email", email), zap.Error(sendErr))
+				}
+			}
+		}
+
 		// Generate AAL1 token pair
 		return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
 	}
@@ -169,6 +184,23 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		zap.String("user_id", existingUser.ID),
 		zap.String("email", email),
 	)
+
+	// Send verification code email if not already verified (Resend or SMTP)
+	if !existingUser.EmailVerified {
+		verificationCode, err := s.jwtService.GenerateVerificationCode()
+		if err == nil {
+			ttl := 24 * time.Hour
+			if storeErr := s.tokenStorage.StoreVerificationToken(ctx, existingUser.ID, verificationCode, ttl); storeErr == nil {
+				name := strings.TrimSpace(req.FirstName + " " + req.LastName)
+				if name == "" {
+					name = email
+				}
+				if sendErr := s.emailService.SendVerificationEmail(email, name, verificationCode); sendErr != nil {
+					s.logger.Warn("Failed to send verification email after profile complete", zap.String("email", email), zap.Error(sendErr))
+				}
+			}
+		}
+	}
 
 	// Generate AAL1 token pair for existing user
 	return s.generateAuthResponse(ctx, existingUser, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
@@ -744,6 +776,42 @@ func (s *AuthService) VerifyEmail(ctx context.Context, req *models.VerifyEmailRe
 	}
 
 	s.logger.Info("Email verified successfully", zap.String("user_id", userID))
+	return nil
+}
+
+// SendVerificationEmailForUser sends a verification code email to the given user (e.g. after profile completed via PATCH).
+func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return utils.NewNotFoundError("User not found", err)
+	}
+	if user.EmailVerified {
+		return nil
+	}
+
+	verificationCode, err := s.jwtService.GenerateVerificationCode()
+	if err != nil {
+		return utils.NewInternalError("Failed to generate verification code", err)
+	}
+	ttl := 24 * time.Hour
+	if err := s.tokenStorage.StoreVerificationToken(ctx, userID, verificationCode, ttl); err != nil {
+		return utils.NewInternalError("Failed to store verification code", err)
+	}
+
+	name := user.Email
+	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
+	if err == nil && profile.FirstName != nil && profile.LastName != nil {
+		name = strings.TrimSpace(*profile.FirstName + " " + *profile.LastName)
+		if name == "" {
+			name = user.Email
+		}
+	}
+
+	if err := s.emailService.SendVerificationEmail(user.Email, name, verificationCode); err != nil {
+		s.logger.Error("Failed to send verification email", zap.String("user_id", userID), zap.Error(err))
+		return utils.NewInternalError("Failed to send verification email", err)
+	}
+	s.logger.Info("Verification email sent", zap.String("user_id", userID))
 	return nil
 }
 

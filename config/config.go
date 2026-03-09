@@ -134,13 +134,15 @@ type RateLimitConfig struct {
 	AuthWindow      time.Duration
 }
 
-// EmailConfig holds email configuration
+// EmailConfig holds email configuration (SMTP and/or Resend)
 type EmailConfig struct {
-	SMTPHost string
-	SMTPPort string
-	User     string
-	Password string
-	From     string
+	SMTPHost          string
+	SMTPPort          string
+	User              string
+	Password          string
+	From              string
+	ResendAPIKey      string // When set, send via Resend API instead of SMTP
+	EmailVerifyBaseURL string // Base URL for verification link (e.g. https://hamsaya.com or app deep link)
 }
 
 // CORSConfig holds CORS configuration
@@ -236,11 +238,13 @@ func Load() (*Config, error) {
 			AuthWindow:      viper.GetDuration("RATE_LIMIT_AUTH_WINDOW"),
 		},
 		Email: EmailConfig{
-			SMTPHost: viper.GetString("SMTP_HOST"),
-			SMTPPort: viper.GetString("SMTP_PORT"),
-			User:     viper.GetString("SMTP_USER"),
-			Password: viper.GetString("SMTP_PASSWORD"),
-			From:     viper.GetString("EMAIL_FROM"),
+			SMTPHost:           viper.GetString("SMTP_HOST"),
+			SMTPPort:           viper.GetString("SMTP_PORT"),
+			User:               viper.GetString("SMTP_USER"),
+			Password:           viper.GetString("SMTP_PASSWORD"),
+			From:               viper.GetString("EMAIL_FROM"),
+			ResendAPIKey:       viper.GetString("RESEND_API_KEY"),
+			EmailVerifyBaseURL: viper.GetString("EMAIL_VERIFY_BASE_URL"),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:   parseStringSlice(viper.GetString("CORS_ALLOWED_ORIGINS")),

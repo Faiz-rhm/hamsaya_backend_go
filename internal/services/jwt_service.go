@@ -129,9 +129,24 @@ func (s *JWTService) HashToken(token string) string {
 	return base64.URLEncoding.EncodeToString(hash[:])
 }
 
-// GenerateVerificationToken generates a token for email verification
+// GenerateVerificationToken generates a token for email verification (legacy/link flow)
 func (s *JWTService) GenerateVerificationToken() (string, error) {
 	return uuid.New().String(), nil
+}
+
+// GenerateVerificationCode generates a 6-digit numeric code for email verification (entered in app)
+func (s *JWTService) GenerateVerificationCode() (string, error) {
+	b := make([]byte, 3)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("generate verification code: %w", err)
+	}
+	// 0–999999 with uniform distribution
+	n := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
+	if n < 0 {
+		n = -n
+	}
+	code := n % 1000000
+	return fmt.Sprintf("%06d", code), nil
 }
 
 // GeneratePasswordResetToken generates a token for password reset

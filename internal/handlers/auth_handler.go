@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hamsaya/backend/internal/middleware"
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
@@ -329,6 +330,31 @@ func (h *AuthHandler) VerifyEmail(c *gin.Context) {
 	}
 
 	utils.SendSuccess(c, http.StatusOK, "Email verified successfully", nil)
+}
+
+// SendVerificationEmail godoc
+// @Summary Send verification email
+// @Description Sends a verification email to the authenticated user (e.g. after completing profile). No-op if email already verified.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /auth/send-verification-email [post]
+func (h *AuthHandler) SendVerificationEmail(c *gin.Context) {
+	userID, ok := middleware.GetUserID(c)
+	if !ok {
+		utils.SendError(c, http.StatusUnauthorized, "Authentication required", utils.ErrUnauthorized)
+		return
+	}
+
+	if err := h.authService.SendVerificationEmailForUser(c.Request.Context(), userID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Verification email sent", nil)
 }
 
 // ForgotPassword godoc

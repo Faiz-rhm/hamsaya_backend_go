@@ -65,6 +65,8 @@ services:
     container_name: hamsaya-api
     ports:
       - "8080:8080"
+    env_file:
+      - .env
     environment:
       - ENV=development
       - LOG_LEVEL=debug
