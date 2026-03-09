@@ -379,13 +379,19 @@ func (h *AuthHandler) ForgotPassword(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.ForgotPassword(c.Request.Context(), &req); err != nil {
+	devCode, err := h.authService.ForgotPassword(c.Request.Context(), &req)
+	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 
 	// Always return success to prevent email enumeration
-	utils.SendSuccess(c, http.StatusOK, "If an account exists with this email, a password reset link has been sent", nil)
+	var data interface{}
+	if devCode != "" {
+		// Email was not sent (e.g. no RESEND/SMTP); include code for development/testing only
+		data = gin.H{"dev_reset_code": devCode}
+	}
+	utils.SendSuccess(c, http.StatusOK, "If an account exists with this email, a password reset link has been sent", data)
 }
 
 // ResetPassword godoc
@@ -417,6 +423,37 @@ func (h *AuthHandler) ResetPassword(c *gin.Context) {
 	}
 
 	utils.SendSuccess(c, http.StatusOK, "Password reset successfully", nil)
+}
+
+// VerifyResetCode godoc
+// @Summary Verify reset code
+// @Description Verify the 6-digit password reset code (OTP) is valid before proceeding to set new password
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.VerifyResetCodeRequest true "Reset code (6 digits)"
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Router /auth/verify-reset-code [post]
+func (h *AuthHandler) VerifyResetCode(c *gin.Context) {
+	var req models.VerifyResetCodeRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	if err := h.authService.VerifyResetCode(c.Request.Context(), &req); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Reset code is valid", nil)
 }
 
 // ChangePassword godoc
@@ -525,6 +562,7 @@ func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup) {
 		auth.POST("/refresh", h.RefreshToken)
 		auth.POST("/verify-email", h.VerifyEmail)
 		auth.POST("/forgot-password", h.ForgotPassword)
+		auth.POST("/verify-reset-code", h.VerifyResetCode)
 		auth.POST("/reset-password", h.ResetPassword)
 		auth.POST("/mfa/verify", h.VerifyMFA)
 

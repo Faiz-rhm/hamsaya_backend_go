@@ -48,6 +48,11 @@ type ForgotPasswordRequest struct {
 	Email string `json:"email" validate:"required,email"`
 }
 
+// VerifyResetCodeRequest represents a request to verify the password reset OTP/code
+type VerifyResetCodeRequest struct {
+	Token string `json:"token" validate:"required,len=6"`
+}
+
 // ResetPasswordRequest represents a reset password request
 type ResetPasswordRequest struct {
 	Token       string `json:"token" validate:"required"`

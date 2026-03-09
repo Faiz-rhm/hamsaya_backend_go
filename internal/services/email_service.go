@@ -67,14 +67,17 @@ func (s *EmailService) SendVerificationEmail(email, name, verificationCode strin
 	return s.sendEmail(email, data.Subject, htmlBody)
 }
 
-// SendPasswordResetEmail sends a password reset link
-func (s *EmailService) SendPasswordResetEmail(email, name, resetToken string) error {
+// SendPasswordResetEmail sends a password reset code (user enters it in the app)
+func (s *EmailService) SendPasswordResetEmail(email, name, resetCode string) error {
+	s.logger.Info("Password reset code generated (check server logs if email not configured)",
+		zap.String("email", email),
+		zap.String("code", resetCode),
+	)
 	data := EmailData{
 		RecipientName:  name,
 		RecipientEmail: email,
-		Subject:        "Reset Your Password",
-		ResetURL:       fmt.Sprintf("https://app.hamsaya.com/reset-password?token=%s", resetToken),
-		Token:          resetToken,
+		Subject:        "Your password reset code",
+		Token:          resetCode,
 		ExpiresIn:      "15 minutes",
 		AppName:        "Hamsaya",
 		AppURL:         "https://hamsaya.com",
@@ -401,18 +404,13 @@ const passwordResetEmailTemplate = `
             <h1>{{.AppName}}</h1>
         </div>
         <div class="content">
-            <h2>Hi {{.RecipientName}},</h2>
+            <h2>Hi {{if .RecipientName}}{{.RecipientName}}{{else}}there{{end}},</h2>
             <p>We received a request to reset your password for your {{.AppName}} account.</p>
-            <p>To reset your password, please click the button below:</p>
-            <p style="text-align: center; margin: 30px 0;">
-                <a href="{{.ResetURL}}" class="button">Reset Password</a>
-            </p>
-            <p>Or copy and paste this link into your browser:</p>
-            <div class="code">{{.ResetURL}}</div>
-            <p><strong>This link will expire in {{.ExpiresIn}}.</strong></p>
+            <p><strong>Your password reset code is:</strong></p>
+            <div class="code">{{.Token}}</div>
+            <p>Enter this code in the app to set a new password. The code expires in {{.ExpiresIn}}.</p>
             <div class="warning">
-                <strong>⚠️ Security Notice:</strong><br>
-                If you didn't request a password reset, please ignore this email or contact our support team immediately. Your password will remain unchanged.
+                <strong>⚠️ Security:</strong> If you didn't request this, ignore this email. Your password will not change.
             </div>
         </div>
         <div class="footer">
