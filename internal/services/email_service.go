@@ -7,6 +7,8 @@ import (
 	"html/template"
 	"net/http"
 	"net/smtp"
+	"strconv"
+	"time"
 
 	"github.com/hamsaya/backend/config"
 	"go.uber.org/zap"
@@ -38,6 +40,7 @@ type EmailData struct {
 	AppName        string
 	AppURL         string
 	SupportEmail   string
+	Year           string // e.g. "2025" for footer
 }
 
 // SendVerificationEmail sends an email with a verification code (user enters code in the app)
@@ -50,12 +53,13 @@ func (s *EmailService) SendVerificationEmail(email, name, verificationCode strin
 		RecipientName:  name,
 		RecipientEmail: email,
 		Subject:        "Your verification code",
-		VerifyURL:      "", // optional link; template focuses on code
+		VerifyURL:      "",
 		Token:          verificationCode,
 		ExpiresIn:      "24 hours",
 		AppName:        "Hamsaya",
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
+		Year:           strconv.Itoa(time.Now().Year()),
 	}
 
 	htmlBody, err := s.renderTemplate(verificationEmailTemplate, data)
@@ -82,6 +86,7 @@ func (s *EmailService) SendPasswordResetEmail(email, name, resetCode string) err
 		AppName:        "Hamsaya",
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
+		Year:           strconv.Itoa(time.Now().Year()),
 	}
 
 	htmlBody, err := s.renderTemplate(passwordResetEmailTemplate, data)
@@ -102,6 +107,7 @@ func (s *EmailService) SendWelcomeEmail(email, name string) error {
 		AppName:        "Hamsaya",
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
+		Year:           strconv.Itoa(time.Now().Year()),
 	}
 
 	htmlBody, err := s.renderTemplate(welcomeEmailTemplate, data)
@@ -122,6 +128,7 @@ func (s *EmailService) SendPasswordChangedEmail(email, name string) error {
 		AppName:        "Hamsaya",
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
+		Year:           strconv.Itoa(time.Now().Year()),
 	}
 
 	htmlBody, err := s.renderTemplate(passwordChangedEmailTemplate, data)
@@ -239,88 +246,48 @@ func (s *EmailService) renderTemplate(tmpl string, data EmailData) (string, erro
 	return buf.String(), nil
 }
 
-// Email templates
+// Email templates — Hamsaya brand primary: #fc7b58
 const verificationEmailTemplate = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Subject}}</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            color: #2563eb;
-            margin: 0;
-        }
-        .content {
-            margin-bottom: 30px;
-        }
-        .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #2563eb;
-            color: #ffffff !important;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            text-align: center;
-        }
-        .button:hover {
-            background-color: #1d4ed8;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-        }
-        .code {
-            background-color: #f3f4f6;
-            padding: 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 16px;
-            text-align: center;
-            margin: 20px 0;
-        }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+        .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+        .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .logo { font-size: 24px; font-weight: 700; color: #fc7b58; margin: 0 0 8px 0; letter-spacing: -0.5px; }
+        .tagline { font-size: 14px; color: #6b7280; margin: 0 0 28px 0; }
+        .content { margin-bottom: 28px; }
+        .content h2 { font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; }
+        .content p { margin: 0 0 12px 0; font-size: 15px; color: #374151; }
+        .code-label { text-align: center; font-size: 13px; color: #6b7280; margin: 24px 0 8px 0; font-weight: 500; }
+        .code-box { background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 2px solid #fc7b58; border-radius: 12px; padding: 20px 24px; text-align: center; margin: 0 0 20px 0; }
+        .code-box .code { font-size: 32px; font-weight: 700; letter-spacing: 10px; color: #c2410c; font-family: 'SF Mono', Monaco, 'Courier New', monospace; }
+        .expiry { font-size: 14px; color: #6b7280; margin: 16px 0 0 0; }
+        .footer { text-align: center; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #9ca3af; }
+        .footer a { color: #fc7b58; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>{{.AppName}}</h1>
-        </div>
-        <div class="content">
-            <h2>Hi {{.RecipientName}},</h2>
-            <p>Thank you for signing up with {{.AppName}}! Use the code below to verify your email address in the app.</p>
-            <p style="text-align: center; margin: 20px 0; font-size: 14px; color: #6b7280;">Your verification code</p>
-            <div class="code" style="font-size: 28px; letter-spacing: 8px; font-weight: 700;">{{.Token}}</div>
-            <p><strong>This code expires in {{.ExpiresIn}}.</strong></p>
-            <p>If you didn't create an account with {{.AppName}}, you can safely ignore this email.</p>
-        </div>
-        <div class="footer">
-            <p>Need help? Contact us at <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>
-            <p>&copy; 2024 {{.AppName}}. All rights reserved.</p>
+    <div class="wrapper">
+        <div class="card">
+            <div class="content">
+                <p class="logo">{{.AppName}}</p>
+                <p class="tagline">Your neighborhood, connected.</p>
+                <h2>Hi {{.RecipientName}},</h2>
+                <p>Thanks for signing up. Use the code below in the app to verify your email and get started.</p>
+                <p class="code-label">Your verification code</p>
+                <div class="code-box"><span class="code">{{.Token}}</span></div>
+                <p class="expiry"><strong>This code expires in {{.ExpiresIn}}.</strong> Enter it in the app before it expires.</p>
+                <p style="margin-top: 20px; font-size: 14px; color: #6b7280;">If you didn't create an account with {{.AppName}}, you can safely ignore this email.</p>
+            </div>
+            <div class="footer">
+                <p>Need help? <a href="mailto:{{.SupportEmail}}">Contact us</a></p>
+                <p>&copy; {{.Year}} {{.AppName}}. All rights reserved.</p>
+            </div>
         </div>
     </div>
 </body>
@@ -329,93 +296,46 @@ const verificationEmailTemplate = `
 
 const passwordResetEmailTemplate = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Subject}}</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            color: #2563eb;
-            margin: 0;
-        }
-        .content {
-            margin-bottom: 30px;
-        }
-        .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #dc2626;
-            color: #ffffff !important;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            text-align: center;
-        }
-        .button:hover {
-            background-color: #b91c1c;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-        }
-        .warning {
-            background-color: #fef2f2;
-            border-left: 4px solid #dc2626;
-            padding: 12px;
-            margin: 20px 0;
-        }
-        .code {
-            background-color: #f3f4f6;
-            padding: 12px;
-            border-radius: 4px;
-            font-family: monospace;
-            font-size: 16px;
-            text-align: center;
-            margin: 20px 0;
-        }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+        .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+        .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .logo { font-size: 24px; font-weight: 700; color: #fc7b58; margin: 0 0 8px 0; }
+        .tagline { font-size: 14px; color: #6b7280; margin: 0 0 28px 0; }
+        .content { margin-bottom: 28px; }
+        .content h2 { font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; }
+        .content p { margin: 0 0 12px 0; font-size: 15px; color: #374151; }
+        .code-label { text-align: center; font-size: 13px; color: #6b7280; margin: 24px 0 8px 0; font-weight: 500; }
+        .code-box { background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%); border: 2px solid #fc7b58; border-radius: 12px; padding: 20px 24px; text-align: center; margin: 0 0 20px 0; }
+        .code-box .code { font-size: 32px; font-weight: 700; letter-spacing: 10px; color: #c2410c; font-family: 'SF Mono', Monaco, 'Courier New', monospace; }
+        .expiry { font-size: 14px; color: #6b7280; margin: 16px 0 0 0; }
+        .warning { background: #fef2f2; border-left: 4px solid #dc2626; padding: 14px 16px; margin: 24px 0 0 0; border-radius: 0 8px 8px 0; font-size: 14px; color: #991b1b; }
+        .footer { text-align: center; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #9ca3af; }
+        .footer a { color: #fc7b58; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>{{.AppName}}</h1>
-        </div>
-        <div class="content">
-            <h2>Hi {{if .RecipientName}}{{.RecipientName}}{{else}}there{{end}},</h2>
-            <p>We received a request to reset your password for your {{.AppName}} account.</p>
-            <p><strong>Your password reset code is:</strong></p>
-            <div class="code">{{.Token}}</div>
-            <p>Enter this code in the app to set a new password. The code expires in {{.ExpiresIn}}.</p>
-            <div class="warning">
-                <strong>⚠️ Security:</strong> If you didn't request this, ignore this email. Your password will not change.
+    <div class="wrapper">
+        <div class="card">
+            <div class="content">
+                <p class="logo">{{.AppName}}</p>
+                <p class="tagline">Your neighborhood, connected.</p>
+                <h2>Hi {{if .RecipientName}}{{.RecipientName}}{{else}}there{{end}},</h2>
+                <p>We received a request to reset your password. Use the code below in the app to set a new password.</p>
+                <p class="code-label">Your password reset code</p>
+                <div class="code-box"><span class="code">{{.Token}}</span></div>
+                <p class="expiry"><strong>This code expires in {{.ExpiresIn}}.</strong> Enter it in the app right away.</p>
+                <div class="warning"><strong>Not you?</strong> If you didn't request a password reset, ignore this email. Your password will not change.</div>
             </div>
-        </div>
-        <div class="footer">
-            <p>Need help? Contact us at <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>
-            <p>&copy; 2024 {{.AppName}}. All rights reserved.</p>
+            <div class="footer">
+                <p>Need help? <a href="mailto:{{.SupportEmail}}">Contact us</a></p>
+                <p>&copy; {{.Year}} {{.AppName}}. All rights reserved.</p>
+            </div>
         </div>
     </div>
 </body>
@@ -424,92 +344,54 @@ const passwordResetEmailTemplate = `
 
 const welcomeEmailTemplate = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Subject}}</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            color: #2563eb;
-            margin: 0;
-        }
-        .content {
-            margin-bottom: 30px;
-        }
-        .button {
-            display: inline-block;
-            padding: 12px 24px;
-            background-color: #2563eb;
-            color: #ffffff !important;
-            text-decoration: none;
-            border-radius: 6px;
-            font-weight: 600;
-            text-align: center;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-        }
-        .features {
-            background-color: #f9fafb;
-            padding: 20px;
-            border-radius: 6px;
-            margin: 20px 0;
-        }
-        .features ul {
-            margin: 0;
-            padding-left: 20px;
-        }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+        .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+        .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .hero { text-align: center; margin-bottom: 28px; }
+        .hero h1 { font-size: 26px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
+        .hero .brand { color: #fc7b58; }
+        .content { margin-bottom: 28px; }
+        .content h2 { font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; }
+        .content p { margin: 0 0 12px 0; font-size: 15px; color: #374151; }
+        .features { background: #f9fafb; border-radius: 12px; padding: 20px 24px; margin: 20px 0; border: 1px solid #e5e7eb; }
+        .features ul { margin: 0; padding-left: 20px; font-size: 15px; color: #4b5563; line-height: 1.8; }
+        .cta { text-align: center; margin: 28px 0; }
+        .cta a { display: inline-block; padding: 14px 28px; background: #fc7b58; color: #ffffff !important; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 16px; }
+        .footer { text-align: center; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #9ca3af; }
+        .footer a { color: #fc7b58; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>Welcome to {{.AppName}}! 🎉</h1>
-        </div>
-        <div class="content">
-            <h2>Hi {{.RecipientName}},</h2>
-            <p>Welcome to {{.AppName}}! We're thrilled to have you join our community.</p>
-            <div class="features">
-                <p><strong>Here's what you can do with {{.AppName}}:</strong></p>
-                <ul>
-                    <li>Connect with neighbors in your area</li>
-                    <li>Discover local events and activities</li>
-                    <li>Buy and sell items in your neighborhood</li>
-                    <li>Share updates and build your community</li>
-                </ul>
+    <div class="wrapper">
+        <div class="card">
+            <div class="hero">
+                <h1>Welcome to <span class="brand">{{.AppName}}</span></h1>
+                <p style="font-size: 15px; color: #6b7280; margin: 0;">Your neighborhood, connected.</p>
             </div>
-            <p style="text-align: center; margin: 30px 0;">
-                <a href="{{.AppURL}}" class="button">Get Started</a>
-            </p>
-            <p>If you have any questions or need assistance, our support team is here to help!</p>
-        </div>
-        <div class="footer">
-            <p>Need help? Contact us at <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>
-            <p>&copy; 2024 {{.AppName}}. All rights reserved.</p>
+            <div class="content">
+                <h2>Hi {{.RecipientName}},</h2>
+                <p>You're all set. We're glad to have you in the community. Here's what you can do:</p>
+                <div class="features">
+                    <ul>
+                        <li>Connect with neighbors in your area</li>
+                        <li>Discover local events and activities</li>
+                        <li>Buy and sell items in your neighborhood</li>
+                        <li>Share updates and build your community</li>
+                    </ul>
+                </div>
+                <div class="cta"><a href="{{.AppURL}}">Open {{.AppName}}</a></div>
+                <p>If you have any questions, reply to this email or contact <a href="mailto:{{.SupportEmail}}" style="color: #fc7b58;">support</a>. We're here to help.</p>
+            </div>
+            <div class="footer">
+                <p>Need help? <a href="mailto:{{.SupportEmail}}">Contact us</a></p>
+                <p>&copy; {{.Year}} {{.AppName}}. All rights reserved.</p>
+            </div>
         </div>
     </div>
 </body>
@@ -518,80 +400,39 @@ const welcomeEmailTemplate = `
 
 const passwordChangedEmailTemplate = `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{.Subject}}</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        .container {
-            background-color: #ffffff;
-            border-radius: 8px;
-            padding: 40px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 30px;
-        }
-        .header h1 {
-            color: #2563eb;
-            margin: 0;
-        }
-        .content {
-            margin-bottom: 30px;
-        }
-        .footer {
-            text-align: center;
-            margin-top: 30px;
-            padding-top: 20px;
-            border-top: 1px solid #e5e7eb;
-            font-size: 14px;
-            color: #6b7280;
-        }
-        .warning {
-            background-color: #fef2f2;
-            border-left: 4px solid #dc2626;
-            padding: 12px;
-            margin: 20px 0;
-        }
-        .success {
-            background-color: #f0fdf4;
-            border-left: 4px solid #16a34a;
-            padding: 12px;
-            margin: 20px 0;
-        }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
+        .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+        .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .logo { font-size: 24px; font-weight: 700; color: #fc7b58; margin: 0 0 28px 0; }
+        .content { margin-bottom: 28px; }
+        .content h2 { font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; }
+        .content p { margin: 0 0 12px 0; font-size: 15px; color: #374151; }
+        .success { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 16px 20px; margin: 20px 0; border-radius: 0 10px 10px 0; font-size: 15px; color: #166534; }
+        .warning { background: #fef2f2; border-left: 4px solid #dc2626; padding: 16px 20px; margin: 20px 0 0 0; border-radius: 0 10px 10px 0; font-size: 14px; color: #991b1b; }
+        .warning a { color: #dc2626; font-weight: 600; }
+        .footer { text-align: center; padding-top: 24px; border-top: 1px solid #e5e7eb; font-size: 13px; color: #9ca3af; }
+        .footer a { color: #fc7b58; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>{{.AppName}}</h1>
-        </div>
-        <div class="content">
-            <h2>Hi {{.RecipientName}},</h2>
-            <div class="success">
-                <strong>✓ Password Changed Successfully</strong><br>
-                Your password has been changed successfully.
+    <div class="wrapper">
+        <div class="card">
+            <div class="content">
+                <p class="logo">{{.AppName}}</p>
+                <h2>Hi {{.RecipientName}},</h2>
+                <div class="success"><strong>Password changed successfully.</strong><br>Your {{.AppName}} account password was updated. If you made this change, you're all set.</div>
+                <div class="warning"><strong>Didn't make this change?</strong><br>Contact us immediately at <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a>. Your account may be at risk.</div>
             </div>
-            <p>This is a confirmation that your password for your {{.AppName}} account has been changed.</p>
-            <p>If you made this change, no further action is required.</p>
-            <div class="warning">
-                <strong>⚠️ Didn't make this change?</strong><br>
-                If you did not change your password, please contact our support team immediately at <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a>. Your account security may be compromised.
+            <div class="footer">
+                <p>Need help? <a href="mailto:{{.SupportEmail}}">Contact us</a></p>
+                <p>&copy; {{.Year}} {{.AppName}}. All rights reserved.</p>
             </div>
-        </div>
-        <div class="footer">
-            <p>Need help? Contact us at <a href="mailto:{{.SupportEmail}}">{{.SupportEmail}}</a></p>
-            <p>&copy; 2024 {{.AppName}}. All rights reserved.</p>
         </div>
     </div>
 </body>
