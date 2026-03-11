@@ -169,6 +169,8 @@ func main() {
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")
 	authMiddleware := middleware.NewAuthMiddleware(jwtService, userRepo, tokenStorage, logger)
+	// verifiedAuth requires email verification; use for create/update/delete (post, comment, follow, etc.)
+	verifiedAuth := authMiddleware.RequireVerifiedEmail()
 	rateLimiter := middleware.NewRateLimiter(redisClient, logger)
 
 	// Set Gin mode
@@ -272,28 +274,28 @@ func main() {
 
 			// Protected routes (require authentication)
 			users.GET("/me", authMiddleware.RequireAuth(), profileHandler.GetMyProfile)
-			users.PUT("/me", authMiddleware.RequireAuth(), profileHandler.UpdateProfile)
+			users.PUT("/me", verifiedAuth, profileHandler.UpdateProfile)
 			users.DELETE("/me", authMiddleware.RequireAuth(), profileHandler.DeleteAccount)
-			users.POST("/me/avatar", authMiddleware.RequireAuth(), profileHandler.UploadAvatar)
-			users.DELETE("/me/avatar", authMiddleware.RequireAuth(), profileHandler.DeleteAvatar)
-			users.POST("/me/cover", authMiddleware.RequireAuth(), profileHandler.UploadCover)
-			users.DELETE("/me/cover", authMiddleware.RequireAuth(), profileHandler.DeleteCover)
+			users.POST("/me/avatar", verifiedAuth, profileHandler.UploadAvatar)
+			users.DELETE("/me/avatar", verifiedAuth, profileHandler.DeleteAvatar)
+			users.POST("/me/cover", verifiedAuth, profileHandler.UploadCover)
+			users.DELETE("/me/cover", verifiedAuth, profileHandler.DeleteCover)
 
 			// Require auth for user profile and relationship views
 			users.GET("/:user_id", authMiddleware.RequireAuth(), profileHandler.GetUserProfile)
 
 			// Relationship routes (require authentication)
-			users.POST("/:user_id/follow", authMiddleware.RequireAuth(), relationshipsHandler.FollowUser)
-			users.DELETE("/:user_id/follow", authMiddleware.RequireAuth(), relationshipsHandler.UnfollowUser)
+			users.POST("/:user_id/follow", verifiedAuth, relationshipsHandler.FollowUser)
+			users.DELETE("/:user_id/follow", verifiedAuth, relationshipsHandler.UnfollowUser)
 			users.GET("/:user_id/followers", authMiddleware.RequireAuth(), relationshipsHandler.GetFollowers)
 			users.GET("/:user_id/following", authMiddleware.RequireAuth(), relationshipsHandler.GetFollowing)
-			users.POST("/:user_id/block", authMiddleware.RequireAuth(), relationshipsHandler.BlockUser)
-			users.DELETE("/:user_id/block", authMiddleware.RequireAuth(), relationshipsHandler.UnblockUser)
+			users.POST("/:user_id/block", verifiedAuth, relationshipsHandler.BlockUser)
+			users.DELETE("/:user_id/block", verifiedAuth, relationshipsHandler.UnblockUser)
 			users.GET("/blocked", authMiddleware.RequireAuth(), relationshipsHandler.GetBlockedUsers)
 			users.GET("/:user_id/relationship", authMiddleware.RequireAuth(), relationshipsHandler.GetRelationshipStatus)
 
 			// User reporting (require authentication + rate limiting)
-			users.POST("/:user_id/report", authMiddleware.RequireAuth(), rateLimiter.LimitReports(), reportHandler.ReportUser)
+			users.POST("/:user_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportUser)
 		}
 
 		// Post routes
@@ -303,55 +305,55 @@ func main() {
 			posts.GET("", authMiddleware.RequireAuth(), postHandler.GetFeed)
 			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
 
-			// Protected routes (require authentication)
-			posts.POST("", authMiddleware.RequireAuth(), postHandler.CreatePost)
-			posts.POST("/upload-image", authMiddleware.RequireAuth(), postHandler.UploadPostImage)
-			posts.PUT("/:post_id", authMiddleware.RequireAuth(), postHandler.UpdatePost)
-			posts.DELETE("/:post_id", authMiddleware.RequireAuth(), postHandler.DeletePost)
+			// Protected routes (require verified email)
+			posts.POST("", verifiedAuth, postHandler.CreatePost)
+			posts.POST("/upload-image", verifiedAuth, postHandler.UploadPostImage)
+			posts.PUT("/:post_id", verifiedAuth, postHandler.UpdatePost)
+			posts.DELETE("/:post_id", verifiedAuth, postHandler.DeletePost)
 
-			// Post interactions
-			posts.POST("/:post_id/like", authMiddleware.RequireAuth(), postHandler.LikePost)
-			posts.DELETE("/:post_id/like", authMiddleware.RequireAuth(), postHandler.UnlikePost)
-			posts.POST("/:post_id/bookmark", authMiddleware.RequireAuth(), postHandler.BookmarkPost)
-			posts.DELETE("/:post_id/bookmark", authMiddleware.RequireAuth(), postHandler.UnbookmarkPost)
-			posts.POST("/:post_id/share", authMiddleware.RequireAuth(), postHandler.SharePost)
-			posts.POST("/:post_id/report", authMiddleware.RequireAuth(), rateLimiter.LimitReports(), reportHandler.ReportPost)
+			// Post interactions (require verified email)
+			posts.POST("/:post_id/like", verifiedAuth, postHandler.LikePost)
+			posts.DELETE("/:post_id/like", verifiedAuth, postHandler.UnlikePost)
+			posts.POST("/:post_id/bookmark", verifiedAuth, postHandler.BookmarkPost)
+			posts.DELETE("/:post_id/bookmark", verifiedAuth, postHandler.UnbookmarkPost)
+			posts.POST("/:post_id/share", verifiedAuth, postHandler.SharePost)
+			posts.POST("/:post_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportPost)
 
 			// Comment routes
 			posts.GET("/:post_id/comments", authMiddleware.RequireAuth(), commentHandler.GetPostComments)
-			posts.POST("/:post_id/comments", authMiddleware.RequireAuth(), commentHandler.CreateComment)
+			posts.POST("/:post_id/comments", verifiedAuth, commentHandler.CreateComment)
 
 			// Poll routes
 			posts.GET("/:post_id/polls", authMiddleware.RequireAuth(), pollHandler.GetPostPoll)
-			posts.POST("/:post_id/polls", authMiddleware.RequireAuth(), pollHandler.CreatePoll)
+			posts.POST("/:post_id/polls", verifiedAuth, pollHandler.CreatePoll)
 		}
 
 		// Comment routes
 		comments := v1.Group("/comments")
 		{
 			comments.GET("/:comment_id", authMiddleware.RequireAuth(), commentHandler.GetComment)
-			comments.PUT("/:comment_id", authMiddleware.RequireAuth(), commentHandler.UpdateComment)
-			comments.DELETE("/:comment_id", authMiddleware.RequireAuth(), commentHandler.DeleteComment)
+			comments.PUT("/:comment_id", verifiedAuth, commentHandler.UpdateComment)
+			comments.DELETE("/:comment_id", verifiedAuth, commentHandler.DeleteComment)
 			comments.GET("/:comment_id/replies", authMiddleware.RequireAuth(), commentHandler.GetCommentReplies)
-			comments.POST("/:comment_id/like", authMiddleware.RequireAuth(), commentHandler.LikeComment)
-			comments.DELETE("/:comment_id/like", authMiddleware.RequireAuth(), commentHandler.UnlikeComment)
-			comments.POST("/:comment_id/report", authMiddleware.RequireAuth(), rateLimiter.LimitReports(), reportHandler.ReportComment)
+			comments.POST("/:comment_id/like", verifiedAuth, commentHandler.LikeComment)
+			comments.DELETE("/:comment_id/like", verifiedAuth, commentHandler.UnlikeComment)
+			comments.POST("/:comment_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportComment)
 		}
 
 		// Poll routes
 		polls := v1.Group("/polls")
 		{
 			polls.GET("/:poll_id", authMiddleware.RequireAuth(), pollHandler.GetPoll)
-			polls.POST("/:poll_id/vote", authMiddleware.RequireAuth(), pollHandler.VotePoll)
-			polls.DELETE("/:poll_id/vote", authMiddleware.RequireAuth(), pollHandler.DeleteVote)
+			polls.POST("/:poll_id/vote", verifiedAuth, pollHandler.VotePoll)
+			polls.DELETE("/:poll_id/vote", verifiedAuth, pollHandler.DeleteVote)
 		}
 
 		// Event routes
 		events := v1.Group("/events")
 		{
 			events.GET("/:post_id/interest", authMiddleware.RequireAuth(), eventHandler.GetEventInterestStatus)
-			events.POST("/:post_id/interest", authMiddleware.RequireAuth(), eventHandler.SetEventInterest)
-			events.DELETE("/:post_id/interest", authMiddleware.RequireAuth(), eventHandler.RemoveEventInterest)
+			events.POST("/:post_id/interest", verifiedAuth, eventHandler.SetEventInterest)
+			events.DELETE("/:post_id/interest", verifiedAuth, eventHandler.RemoveEventInterest)
 			events.GET("/:post_id/interested", authMiddleware.RequireAuth(), eventHandler.GetInterestedUsers)
 			events.GET("/:post_id/going", authMiddleware.RequireAuth(), eventHandler.GetGoingUsers)
 		}
@@ -367,27 +369,27 @@ func main() {
 
 			businesses.GET("/:business_id", authMiddleware.RequireAuth(), businessHandler.GetBusiness)
 
-			// Protected routes (require authentication)
+			// Protected routes (require verified email)
 			businesses.GET("", authMiddleware.RequireAuth(), businessHandler.GetMyBusinesses)
-			businesses.POST("", authMiddleware.RequireAuth(), businessHandler.CreateBusiness)
-			businesses.PUT("/:business_id", authMiddleware.RequireAuth(), businessHandler.UpdateBusiness)
-			businesses.DELETE("/:business_id", authMiddleware.RequireAuth(), businessHandler.DeleteBusiness)
+			businesses.POST("", verifiedAuth, businessHandler.CreateBusiness)
+			businesses.PUT("/:business_id", verifiedAuth, businessHandler.UpdateBusiness)
+			businesses.DELETE("/:business_id", verifiedAuth, businessHandler.DeleteBusiness)
 
-			// Business media
-			businesses.POST("/:business_id/avatar", authMiddleware.RequireAuth(), businessHandler.UploadAvatar)
-			businesses.POST("/:business_id/cover", authMiddleware.RequireAuth(), businessHandler.UploadCover)
-			businesses.POST("/:business_id/attachments", authMiddleware.RequireAuth(), businessHandler.AddGalleryImage)
-			businesses.DELETE("/:business_id/attachments/:attachment_id", authMiddleware.RequireAuth(), businessHandler.DeleteGalleryImage)
+			// Business media (require verified email)
+			businesses.POST("/:business_id/avatar", verifiedAuth, businessHandler.UploadAvatar)
+			businesses.POST("/:business_id/cover", verifiedAuth, businessHandler.UploadCover)
+			businesses.POST("/:business_id/attachments", verifiedAuth, businessHandler.AddGalleryImage)
+			businesses.DELETE("/:business_id/attachments/:attachment_id", verifiedAuth, businessHandler.DeleteGalleryImage)
 
-			// Business hours (POST requires auth)
-			businesses.POST("/:business_id/hours", authMiddleware.RequireAuth(), businessHandler.SetBusinessHours)
+			// Business hours (POST requires verified email)
+			businesses.POST("/:business_id/hours", verifiedAuth, businessHandler.SetBusinessHours)
 
-			// Business following
-			businesses.POST("/:business_id/follow", authMiddleware.RequireAuth(), businessHandler.FollowBusiness)
-			businesses.DELETE("/:business_id/follow", authMiddleware.RequireAuth(), businessHandler.UnfollowBusiness)
+			// Business following (require verified email)
+			businesses.POST("/:business_id/follow", verifiedAuth, businessHandler.FollowBusiness)
+			businesses.DELETE("/:business_id/follow", verifiedAuth, businessHandler.UnfollowBusiness)
 
-			// Business reporting (require authentication + rate limiting)
-			businesses.POST("/:business_id/report", authMiddleware.RequireAuth(), rateLimiter.LimitReports(), reportHandler.ReportBusiness)
+			// Business reporting (require verified email + rate limiting)
+			businesses.POST("/:business_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportBusiness)
 		}
 
 		// Category routes (marketplace categories)
@@ -397,9 +399,9 @@ func main() {
 			categories.GET("/:category_id", authMiddleware.RequireAuth(), categoryHandler.GetCategory)
 		}
 
-		// Chat routes (require authentication)
+		// Chat routes (require verified email for sending messages, etc.)
 		chat := v1.Group("/chat")
-		chat.Use(authMiddleware.RequireAuth())
+		chat.Use(verifiedAuth)
 		{
 			// WebSocket endpoint for real-time chat
 			chat.GET("/ws", chatHandler.HandleWebSocket)
@@ -412,24 +414,23 @@ func main() {
 			chat.DELETE("/messages/:message_id", chatHandler.DeleteMessage)
 		}
 
-		// Notification routes (require authentication)
+		// Notification routes (require auth for reads; verified email for writes)
 		notifications := v1.Group("/notifications")
-		notifications.Use(authMiddleware.RequireAuth())
 		{
-			// Notification management
-			notifications.GET("", notificationHandler.GetNotifications)
-			notifications.GET("/unread-count", notificationHandler.GetUnreadCount)
-			notifications.POST("/:notification_id/read", notificationHandler.MarkAsRead)
-			notifications.POST("/read-all", notificationHandler.MarkAllAsRead)
-			notifications.DELETE("/:notification_id", notificationHandler.DeleteNotification)
+			// Notification management (reads: auth only; writes: verified email)
+			notifications.GET("", authMiddleware.RequireAuth(), notificationHandler.GetNotifications)
+			notifications.GET("/unread-count", authMiddleware.RequireAuth(), notificationHandler.GetUnreadCount)
+			notifications.POST("/:notification_id/read", verifiedAuth, notificationHandler.MarkAsRead)
+			notifications.POST("/read-all", verifiedAuth, notificationHandler.MarkAllAsRead)
+			notifications.DELETE("/:notification_id", verifiedAuth, notificationHandler.DeleteNotification)
 
-			// Notification settings
-			notifications.GET("/settings", notificationHandler.GetNotificationSettings)
-			notifications.PUT("/settings", notificationHandler.UpdateNotificationSetting)
+			// Notification settings (read: auth; update: verified email)
+			notifications.GET("/settings", authMiddleware.RequireAuth(), notificationHandler.GetNotificationSettings)
+			notifications.PUT("/settings", verifiedAuth, notificationHandler.UpdateNotificationSetting)
 
-			// FCM token registration
-			notifications.POST("/fcm-token", notificationHandler.RegisterFCMToken)
-			notifications.DELETE("/fcm-token", notificationHandler.UnregisterFCMToken)
+			// FCM token registration (verified email)
+			notifications.POST("/fcm-token", verifiedAuth, notificationHandler.RegisterFCMToken)
+			notifications.DELETE("/fcm-token", verifiedAuth, notificationHandler.UnregisterFCMToken)
 		}
 
 		// Search and discovery routes (require auth)
@@ -439,12 +440,11 @@ func main() {
 		v1.GET("/search/businesses", authMiddleware.RequireAuth(), searchHandler.SearchBusinesses)
 		v1.GET("/discover", authMiddleware.RequireAuth(), searchHandler.Discover)
 
-		// Feedback routes (require auth)
+		// Feedback routes (require verified email to submit)
 		feedback := v1.Group("/feedback")
-		feedback.Use(authMiddleware.RequireAuth())
 		{
-			feedback.POST("", feedbackHandler.SubmitFeedback)
-			feedback.GET("/status", feedbackHandler.GetFeedbackStatus)
+			feedback.POST("", verifiedAuth, feedbackHandler.SubmitFeedback)
+			feedback.GET("/status", authMiddleware.RequireAuth(), feedbackHandler.GetFeedbackStatus)
 		}
 
 		// Admin routes (require admin role)
