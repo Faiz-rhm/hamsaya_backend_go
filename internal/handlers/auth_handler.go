@@ -544,8 +544,8 @@ func (h *AuthHandler) handleError(c *gin.Context, err error) {
 	}
 }
 
-// RegisterRoutes registers auth routes
-func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup) {
+// RegisterRoutes registers auth routes. Pass RequireAuth() as second arg to enable protected routes (logout, change-password, sessions).
+func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware ...gin.HandlerFunc) {
 	auth := router.Group("/auth")
 	{
 		// Public routes
@@ -558,11 +558,16 @@ func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup) {
 		auth.POST("/reset-password", h.ResetPassword)
 		auth.POST("/mfa/verify", h.VerifyMFA)
 
-		// Protected routes (require auth middleware)
-		// These will be added with middleware in main.go
-		// auth.POST("/logout", authMiddleware, h.Logout)
-		// auth.POST("/logout-all", authMiddleware, h.LogoutAll)
-		// auth.POST("/change-password", authMiddleware, h.ChangePassword)
-		// auth.GET("/sessions", authMiddleware, h.GetActiveSessions)
+		// Protected routes (when authMiddleware is provided)
+		var mw gin.HandlerFunc
+		if len(authMiddleware) > 0 {
+			mw = authMiddleware[0]
+		}
+		if mw != nil {
+			auth.POST("/logout", mw, h.Logout)
+			auth.POST("/logout-all", mw, h.LogoutAll)
+			auth.POST("/change-password", mw, h.ChangePassword)
+			auth.GET("/sessions", mw, h.GetActiveSessions)
+		}
 	}
 }

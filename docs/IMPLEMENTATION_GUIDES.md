@@ -160,7 +160,18 @@ admin.GET("/reports", adminHandler.GetReports)
 admin.PUT("/reports/:id/resolve", adminHandler.ResolveReport)
 ```
 
-**Step 3: Test Protection**
+**Step 3: Enable admin change-password**
+
+To allow admins to change their password from the admin panel, register auth protected routes with `RequireAuth()`:
+
+```go
+// When registering auth routes, pass the auth middleware so change-password is available
+authHandler.RegisterRoutes(v1, authMiddleware.RequireAuth())
+```
+
+This enables `POST /api/v1/auth/change-password` (current_password, new_password) for the authenticated user.
+
+**Step 4: Test Protection**
 
 ```bash
 # Should fail (403 Forbidden)
