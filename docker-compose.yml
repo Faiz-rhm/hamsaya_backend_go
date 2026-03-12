@@ -41,11 +41,12 @@ services:
     image: minio/minio:latest
     container_name: hamsaya-minio
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "9002:9000"
+      - "9003:9001"
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9003
     command: server /data --console-address ":9001"
     volumes:
       - minio_data:/data
@@ -95,7 +96,7 @@ services:
       - STORAGE_BUCKET_NAME=hamsaya-uploads
       - STORAGE_USE_SSL=false
       - STORAGE_REGION=us-east-1
-      - CDN_URL=http://localhost:9000
+      - CDN_URL=http://localhost:9002
       - RATE_LIMIT_REQUESTS_PER_HOUR=1000
       - RATE_LIMIT_AUTH_ATTEMPTS=5
       - RATE_LIMIT_AUTH_WINDOW=15m
