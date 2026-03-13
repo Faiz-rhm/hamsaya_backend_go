@@ -452,6 +452,7 @@ type AdminFeedbackFilter struct {
 	Type   string `form:"type"` // GENERAL, BUG, FEATURE, IMPROVEMENT or empty for all
 }
 
+
 // PaginatedResponse is a generic paginated response
 type PaginatedResponse struct {
 	Items      interface{} `json:"items"`

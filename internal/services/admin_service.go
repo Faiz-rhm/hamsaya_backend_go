@@ -775,3 +775,5 @@ func (s *AdminService) ListFeedback(ctx context.Context, filter *models.AdminFee
 		TotalPages: totalPages,
 	}, nil
 }
+
+// (help-center chat listing for admin was removed; feedback list remains.)

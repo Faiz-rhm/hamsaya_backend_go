@@ -1944,6 +1944,8 @@ func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.Admin
 	return items, totalCount, nil
 }
 
+// (help-center chat for admin was removed; feedback remains the primary channel.)
+
 func (r *adminRepository) getPeriodInterval(period string) string {
 	switch period {
 	case "week":

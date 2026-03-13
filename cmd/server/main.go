@@ -139,7 +139,6 @@ func main() {
 	searchRepo := repositories.NewSearchRepository(db)
 	reportRepo := repositories.NewReportRepository(db)
 	feedbackRepo := repositories.NewFeedbackRepository(db)
-	helpChatRepo := repositories.NewHelpChatRepository(db)
 	adminRepo := repositories.NewAdminRepository(db)
 
 	// Initialize services
@@ -165,7 +164,6 @@ func main() {
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
-	helpChatService := services.NewHelpChatService(helpChatRepo, validator)
 	adminService := services.NewAdminService(adminRepo, fcmClient, notificationService, logger)
 
 	// Initialize middleware
@@ -211,7 +209,6 @@ func main() {
 	searchHandler := handlers.NewSearchHandler(searchService, validator, logger)
 	reportHandler := handlers.NewReportHandler(reportService)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
-	helpChatHandler := handlers.NewHelpChatHandler(helpChatService)
 	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
 
 	// Health check routes (no versioning)
@@ -448,13 +445,6 @@ func main() {
 		{
 			feedback.POST("", verifiedAuth, feedbackHandler.SubmitFeedback)
 			feedback.GET("/status", authMiddleware.RequireAuth(), feedbackHandler.GetFeedbackStatus)
-		}
-
-		// Help center chat routes (separate from user chat; require verified email to send)
-		helpChat := v1.Group("/help-chat")
-		{
-			helpChat.POST("/messages", verifiedAuth, helpChatHandler.SendMessage)
-			helpChat.GET("/messages", authMiddleware.RequireAuth(), helpChatHandler.ListMessages)
 		}
 
 		// Admin routes (require admin role)
