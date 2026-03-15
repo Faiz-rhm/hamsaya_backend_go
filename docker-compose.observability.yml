@@ -1,0 +1,25 @@
+# Optional: run this to view traces in Jaeger UI.
+#
+# 1. Start: docker compose -f docker-compose.observability.yml up -d
+# 2. In .env set: OBSERVABILITY_ENABLED=true, OTLP_ENDPOINT=localhost:4317
+# 3. Start your API (e.g. go run cmd/server/main.go)
+# 4. Open Jaeger: http://localhost:16686 — select service "hamsaya-backend" and Find Traces
+#
+# Metrics: still at http://localhost:8080/metrics on your API.
+
+services:
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: hamsaya-jaeger
+    environment:
+      - COLLECTOR_OTLP_ENABLED=true
+    ports:
+      - "16686:16686"  # Jaeger UI
+      - "4317:4317"    # OTLP gRPC (your backend sends here)
+      - "4318:4318"    # OTLP HTTP
+    networks:
+      - observability
+
+networks:
+  observability:
+    driver: bridge
