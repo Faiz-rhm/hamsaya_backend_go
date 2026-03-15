@@ -3,6 +3,7 @@ package handlers
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/models"
@@ -137,6 +138,15 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	if (req.Latitude != nil && req.Longitude == nil) || (req.Latitude == nil && req.Longitude != nil) {
 		utils.SendError(c, http.StatusBadRequest, "Both latitude and longitude must be provided together", utils.ErrValidation)
 		return
+	}
+
+	// Date of birth must be in the past (before today UTC)
+	if req.DOB != nil {
+		todayStart := time.Now().UTC().Truncate(24 * time.Hour)
+		if !req.DOB.Before(todayStart) {
+			utils.SendError(c, http.StatusBadRequest, "Date of birth must be in the past", utils.ErrValidation)
+			return
+		}
 	}
 
 	// Update profile

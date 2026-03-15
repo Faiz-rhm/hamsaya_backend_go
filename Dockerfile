@@ -1,5 +1,5 @@
 # Build stage
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 # Install dependencies (libwebp for go-webp, gcc/musl-dev for cgo)
 RUN apk add --no-cache git make gcc musl-dev libwebp-dev
@@ -10,8 +10,8 @@ WORKDIR /app
 # Copy source and vendored modules (build offline, no go mod download)
 COPY . .
 
-# Build binary using vendor (CGO required for go-webp)
-RUN CGO_ENABLED=1 GOOS=linux go build -mod=vendor -a -o main ./cmd/server
+# Build binary (CGO required for go-webp). Uses -mod=mod so deps are resolved at build time.
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o main ./cmd/server
 
 # Final stage
 FROM alpine:latest
