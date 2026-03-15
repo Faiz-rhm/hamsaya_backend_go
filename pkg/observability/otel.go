@@ -5,16 +5,21 @@ import (
 	"fmt"
 	"time"
 
+	"go.opentelemetry.io/contrib/bridges/otelzap"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/propagation"
+	"go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.21.0"
 	"go.uber.org/zap"
+	"go.uber.org/zap/zapcore"
 )
 
 // Config holds configuration for the observability stack
@@ -31,6 +36,7 @@ type Config struct {
 type Stack struct {
 	TracerProvider *trace.TracerProvider
 	MeterProvider  *metric.MeterProvider
+	LoggerProvider *log.LoggerProvider
 	PromExporter   *prometheus.Exporter
 	logger         *zap.Logger
 }
@@ -81,8 +87,8 @@ func Init(ctx context.Context, cfg Config, logger *zap.Logger) (*Stack, error) {
 		propagation.Baggage{},
 	))
 
-	// Initialize Prometheus metrics
-	mp, promExporter, err := initMetrics(ctx, res)
+	// Initialize metrics (Prometheus + optional OTLP when endpoint is set)
+	mp, promExporter, err := initMetrics(ctx, cfg, res)
 	if err != nil {
 		logger.Warn("Failed to initialize metrics, continuing without them", zap.Error(err))
 	} else {
@@ -90,6 +96,20 @@ func Init(ctx context.Context, cfg Config, logger *zap.Logger) (*Stack, error) {
 		stack.PromExporter = promExporter
 		otel.SetMeterProvider(mp)
 		logger.Info("OpenTelemetry metrics initialized (Prometheus exporter)")
+		if cfg.OTLPEndpoint != "" {
+			logger.Info("OTLP metrics export enabled", zap.String("endpoint", cfg.OTLPEndpoint))
+		}
+	}
+
+	// Initialize OTLP log export when endpoint is configured
+	if cfg.OTLPEndpoint != "" {
+		lp, err := initLogging(ctx, cfg, res)
+		if err != nil {
+			logger.Warn("Failed to initialize OTLP logging, continuing without it", zap.Error(err))
+		} else {
+			stack.LoggerProvider = lp
+			logger.Info("OpenTelemetry OTLP logging initialized", zap.String("endpoint", cfg.OTLPEndpoint))
+		}
 	}
 
 	return stack, nil
@@ -129,21 +149,56 @@ func initTracing(ctx context.Context, cfg Config, res *resource.Resource) (*trac
 	return tp, nil
 }
 
-// initMetrics sets up the OpenTelemetry meter provider with Prometheus exporter
-func initMetrics(ctx context.Context, res *resource.Resource) (*metric.MeterProvider, *prometheus.Exporter, error) {
-	// Create Prometheus exporter
+// initMetrics sets up the OpenTelemetry meter provider with Prometheus and optional OTLP export
+func initMetrics(ctx context.Context, cfg Config, res *resource.Resource) (*metric.MeterProvider, *prometheus.Exporter, error) {
+	// Create Prometheus exporter (pull-based, for /metrics scraping)
 	promExporter, err := prometheus.New()
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create prometheus exporter: %w", err)
 	}
 
-	// Create meter provider
-	mp := metric.NewMeterProvider(
-		metric.WithReader(promExporter),
-		metric.WithResource(res),
-	)
+	readers := []metric.Reader{promExporter}
 
+	// When OTLP endpoint is set, also export metrics via OTLP (e.g. to Grafana, Jaeger, etc.)
+	if cfg.OTLPEndpoint != "" {
+		metricExporter, err := otlpmetricgrpc.New(ctx,
+			otlpmetricgrpc.WithEndpoint(cfg.OTLPEndpoint),
+			otlpmetricgrpc.WithInsecure(),
+		)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create OTLP metric exporter: %w", err)
+		}
+		readers = append(readers, metric.NewPeriodicReader(metricExporter,
+			metric.WithInterval(10*time.Second),
+			metric.WithTimeout(5*time.Second),
+		))
+	}
+
+	opts := make([]metric.Option, 0, len(readers)+1)
+	for _, r := range readers {
+		opts = append(opts, metric.WithReader(r))
+	}
+	opts = append(opts, metric.WithResource(res))
+
+	mp := metric.NewMeterProvider(opts...)
 	return mp, promExporter, nil
+}
+
+// initLogging sets up the OpenTelemetry logger provider with OTLP log exporter
+func initLogging(ctx context.Context, cfg Config, res *resource.Resource) (*log.LoggerProvider, error) {
+	exporter, err := otlploggrpc.New(ctx,
+		otlploggrpc.WithEndpoint(cfg.OTLPEndpoint),
+		otlploggrpc.WithInsecure(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OTLP log exporter: %w", err)
+	}
+
+	lp := log.NewLoggerProvider(
+		log.WithResource(res),
+		log.WithProcessor(log.NewBatchProcessor(exporter)),
+	)
+	return lp, nil
 }
 
 // Shutdown gracefully shuts down the observability stack
@@ -163,6 +218,12 @@ func (s *Stack) Shutdown(ctx context.Context) error {
 	if s.MeterProvider != nil {
 		if err := s.MeterProvider.Shutdown(ctx); err != nil {
 			errs = append(errs, fmt.Errorf("meter shutdown: %w", err))
+		}
+	}
+
+	if s.LoggerProvider != nil {
+		if err := s.LoggerProvider.Shutdown(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("logger shutdown: %w", err))
 		}
 	}
 
@@ -188,4 +249,17 @@ func (s *Stack) GetPrometheusExporter() *prometheus.Exporter {
 		return nil
 	}
 	return s.PromExporter
+}
+
+// WrapLoggerWithOTel returns a zap Logger that also exports log records to OpenTelemetry (when LoggerProvider is set).
+// Use this to get trace-correlated logs in your OTLP backend. The returned logger writes to both the original
+// logger and the OTel pipeline.
+func (s *Stack) WrapLoggerWithOTel(base *zap.Logger, loggerName string) *zap.Logger {
+	if s == nil || s.LoggerProvider == nil || base == nil {
+		return base
+	}
+	otelCore := otelzap.NewCore(loggerName, otelzap.WithLoggerProvider(s.LoggerProvider))
+	return base.WithOptions(zap.WrapCore(func(c zapcore.Core) zapcore.Core {
+		return zapcore.NewTee(c, otelCore)
+	}))
 }

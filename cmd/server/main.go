@@ -74,7 +74,7 @@ func main() {
 		"port", cfg.Server.Port,
 	)
 
-	// Initialize OpenTelemetry observability stack (tracing + metrics)
+	// Initialize OpenTelemetry observability (traces, metrics, logs) with fallback to no-op
 	otelCfg := observability.Config{
 		ServiceName:    "hamsaya-backend",
 		ServiceVersion: "1.0.0",
@@ -84,17 +84,26 @@ func main() {
 		Enabled:        cfg.Monitoring.ObservabilityEnabled,
 	}
 
-	otelStack, err := observability.Init(context.Background(), otelCfg, logger)
+	var telem observability.TelemetryProvider
+	telem, err = observability.NewTelemetry(context.Background(), otelCfg, logger)
 	if err != nil {
-		sugaredLogger.Warnw("OpenTelemetry init failed, continuing without observability", "error", err)
-	} else if otelStack != nil {
-		defer func() {
-			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
-			defer shutdownCancel()
-			if err := otelStack.Shutdown(shutdownCtx); err != nil {
-				sugaredLogger.Errorw("Failed to shutdown observability stack", "error", err)
-			}
-		}()
+		sugaredLogger.Warnw("OpenTelemetry init failed, falling back to no-op", "error", err)
+		telem = observability.NewNoopTelemetry(otelCfg, logger)
+	} else if telem == nil {
+		telem = observability.NewNoopTelemetry(otelCfg, logger)
+	}
+	defer func() {
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer shutdownCancel()
+		if err := telem.Shutdown(shutdownCtx); err != nil {
+			sugaredLogger.Errorw("Failed to shutdown observability", "error", err)
+		}
+	}()
+
+	// Optional: wrap logger so logs are also exported via OTLP when endpoint is set
+	if stack := telem.Stack(); stack != nil {
+		logger = stack.WrapLoggerWithOTel(logger, "hamsaya-backend")
+		sugaredLogger = logger.Sugar()
 	}
 
 	// Initialize validator
@@ -217,10 +226,12 @@ func main() {
 	router.Use(middleware.RequestID())
 	router.Use(middleware.SecurityHeaders())
 
-	// Add OpenTelemetry tracing middleware (if enabled)
-	if otelStack != nil {
+	// OpenTelemetry: in-flight count, request duration/count metrics, and tracing
+	router.Use(telem.MeterRequestsInFlight())
+	router.Use(telem.MeterRequestDuration())
+	if telem.Stack() != nil {
 		router.Use(otelgin.Middleware("hamsaya-backend"))
-		sugaredLogger.Info("OpenTelemetry tracing middleware enabled")
+		sugaredLogger.Info("OpenTelemetry tracing and metrics middleware enabled")
 	}
 
 	// Initialize handlers

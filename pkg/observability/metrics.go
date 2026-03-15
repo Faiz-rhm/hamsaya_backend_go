@@ -12,10 +12,11 @@ import (
 // Metrics holds commonly used application metrics
 type Metrics struct {
 	// HTTP metrics
-	HTTPRequestsTotal   metric.Int64Counter
-	HTTPRequestDuration metric.Float64Histogram
-	HTTPRequestSize     metric.Int64Histogram
-	HTTPResponseSize    metric.Int64Histogram
+	HTTPRequestsTotal    metric.Int64Counter
+	HTTPRequestDuration  metric.Float64Histogram
+	HTTPActiveRequests   metric.Int64UpDownCounter
+	HTTPRequestSize      metric.Int64Histogram
+	HTTPResponseSize     metric.Int64Histogram
 
 	// Database metrics
 	DBQueryDuration metric.Float64Histogram
@@ -50,6 +51,15 @@ func NewMetrics(serviceName string) (*Metrics, error) {
 		metric.WithDescription("HTTP request duration in seconds"),
 		metric.WithUnit("s"),
 		metric.WithExplicitBucketBoundaries(0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	m.HTTPActiveRequests, err = meter.Int64UpDownCounter(
+		"http_server_active_requests",
+		metric.WithDescription("Number of HTTP requests currently being processed"),
+		metric.WithUnit("{request}"),
 	)
 	if err != nil {
 		return nil, err
@@ -131,6 +141,16 @@ func NewMetrics(serviceName string) (*Metrics, error) {
 	}
 
 	return m, nil
+}
+
+// AddActiveRequest increments the in-flight request counter (call at request start).
+func (m *Metrics) AddActiveRequest(ctx context.Context, attrs ...attribute.KeyValue) {
+	m.HTTPActiveRequests.Add(ctx, 1, metric.WithAttributes(attrs...))
+}
+
+// DoneActiveRequest decrements the in-flight request counter (call at request end).
+func (m *Metrics) DoneActiveRequest(ctx context.Context, attrs ...attribute.KeyValue) {
+	m.HTTPActiveRequests.Add(ctx, -1, metric.WithAttributes(attrs...))
 }
 
 // RecordHTTPRequest records metrics for an HTTP request
