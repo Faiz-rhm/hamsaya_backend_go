@@ -19,10 +19,13 @@ import (
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/notification"
+	"github.com/hamsaya/backend/pkg/observability"
 	"github.com/hamsaya/backend/pkg/websocket"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 // @title Hamsaya Backend API
@@ -70,6 +73,29 @@ func main() {
 		"env", cfg.Server.Env,
 		"port", cfg.Server.Port,
 	)
+
+	// Initialize OpenTelemetry observability stack (tracing + metrics)
+	otelCfg := observability.Config{
+		ServiceName:    "hamsaya-backend",
+		ServiceVersion: "1.0.0",
+		Environment:    cfg.Server.Env,
+		OTLPEndpoint:   cfg.Monitoring.OTLPEndpoint,
+		SamplingRate:   cfg.Monitoring.TraceSamplingRate,
+		Enabled:        cfg.Monitoring.ObservabilityEnabled,
+	}
+
+	otelStack, err := observability.Init(context.Background(), otelCfg, logger)
+	if err != nil {
+		sugaredLogger.Warnw("OpenTelemetry init failed, continuing without observability", "error", err)
+	} else if otelStack != nil {
+		defer func() {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer shutdownCancel()
+			if err := otelStack.Shutdown(shutdownCtx); err != nil {
+				sugaredLogger.Errorw("Failed to shutdown observability stack", "error", err)
+			}
+		}()
+	}
 
 	// Initialize validator
 	validator := utils.NewValidator()
@@ -189,6 +215,13 @@ func main() {
 	router.Use(middleware.Logger(sugaredLogger))
 	router.Use(middleware.CORS(cfg.CORS))
 	router.Use(middleware.RequestID())
+	router.Use(middleware.SecurityHeaders())
+
+	// Add OpenTelemetry tracing middleware (if enabled)
+	if otelStack != nil {
+		router.Use(otelgin.Middleware("hamsaya-backend"))
+		sugaredLogger.Info("OpenTelemetry tracing middleware enabled")
+	}
 
 	// Initialize handlers
 	sugaredLogger.Info("Initializing handlers...")
@@ -220,6 +253,10 @@ func main() {
 	router.GET("/health/redis-stats", healthHandler.RedisStats)
 	router.GET("/health/version", healthHandler.Version)
 	router.GET("/health/metrics", healthHandler.Metrics)
+
+	// Prometheus metrics endpoint for scraping
+	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	sugaredLogger.Info("Prometheus metrics available at /metrics")
 
 	// Swagger API documentation
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))

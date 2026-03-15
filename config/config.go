@@ -153,10 +153,13 @@ type CORSConfig struct {
 	AllowCredentials bool
 }
 
-// MonitoringConfig holds monitoring configuration
+// MonitoringConfig holds monitoring and observability configuration
 type MonitoringConfig struct {
-	SentryDSN        string
-	PrometheusEnabled bool
+	SentryDSN            string
+	PrometheusEnabled    bool
+	ObservabilityEnabled bool
+	OTLPEndpoint         string
+	TraceSamplingRate    float64
 }
 
 // Load loads configuration from environment variables
@@ -253,9 +256,22 @@ func Load() (*Config, error) {
 			AllowCredentials: viper.GetBool("CORS_ALLOW_CREDENTIALS"),
 		},
 		Monitoring: MonitoringConfig{
-			SentryDSN:         viper.GetString("SENTRY_DSN"),
-			PrometheusEnabled: viper.GetBool("PROMETHEUS_ENABLED"),
+			SentryDSN:            viper.GetString("SENTRY_DSN"),
+			PrometheusEnabled:    viper.GetBool("PROMETHEUS_ENABLED"),
+			ObservabilityEnabled: viper.GetBool("OBSERVABILITY_ENABLED"),
+			OTLPEndpoint:         viper.GetString("OTLP_ENDPOINT"),
+			TraceSamplingRate:    viper.GetFloat64("TRACE_SAMPLING_RATE"),
 		},
+	}
+
+	// Default observability settings
+	if cfg.Monitoring.TraceSamplingRate == 0 {
+		// Default to 10% sampling in production, 100% in development
+		if cfg.Server.Env == "production" {
+			cfg.Monitoring.TraceSamplingRate = 0.1
+		} else {
+			cfg.Monitoring.TraceSamplingRate = 1.0
+		}
 	}
 
 	// Default CORS in development so admin panel (e.g. localhost:3001) works without .env

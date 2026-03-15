@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -52,6 +53,16 @@ func NewChatHandler(
 					return false
 				}
 
+				// Parse the origin URL for safe comparison
+				parsedOrigin, err := url.Parse(origin)
+				if err != nil {
+					logger.Warn("WebSocket connection rejected: invalid origin URL",
+						zap.String("origin", origin),
+						zap.Error(err),
+					)
+					return false
+				}
+
 				// Check if origin is in allowed list
 				for _, allowedOrigin := range allowedOrigins {
 					// Handle wildcard
@@ -59,8 +70,25 @@ func NewChatHandler(
 						return true
 					}
 
-					// Exact match or wildcard subdomain
-					if origin == allowedOrigin || strings.HasSuffix(origin, allowedOrigin) {
+					// Exact match (full URL)
+					if origin == allowedOrigin {
+						return true
+					}
+
+					// Safe subdomain matching: parse allowed origin and compare hosts
+					parsedAllowed, err := url.Parse(allowedOrigin)
+					if err != nil {
+						continue
+					}
+
+					// Exact host match
+					if parsedOrigin.Host == parsedAllowed.Host {
+						return true
+					}
+
+					// Safe subdomain check: origin host must end with ".allowedHost"
+					// This prevents "evil.localhost" from matching "localhost"
+					if strings.HasSuffix(parsedOrigin.Host, "."+parsedAllowed.Host) {
 						return true
 					}
 				}

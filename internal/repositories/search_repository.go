@@ -30,19 +30,26 @@ func NewSearchRepository(db *database.DB) SearchRepository {
 
 // SearchPosts searches for posts using full-text search
 func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.SearchFilter) ([]*models.Post, error) {
+	args := []interface{}{}
+	argCount := 1
+
+	// Build SELECT clause
 	query := `
 		SELECT DISTINCT p.*,
 			ST_Y(p.address_location::geometry) as latitude,
 			ST_X(p.address_location::geometry) as longitude
 	`
 
-	// Add distance calculation if location provided
-	if filter.Latitude != nil && filter.Longitude != nil {
+	// Add distance calculation if location provided (add location args first)
+	hasLocation := filter.Latitude != nil && filter.Longitude != nil
+	if hasLocation {
 		query += fmt.Sprintf(`,
 			ST_Distance(
 				p.address_location::geography,
 				ST_SetSRID(ST_MakePoint($%d, $%d), 4326)::geography
-			) / 1000 as distance`, len(filter.Query)+3, len(filter.Query)+4)
+			) / 1000 as distance`, argCount, argCount+1)
+		args = append(args, *filter.Longitude, *filter.Latitude)
+		argCount += 2
 	}
 
 	query += `
@@ -51,9 +58,6 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 			AND p.status = true
 			AND (p.type != 'SELL' OR p.sold = false)
 	`
-
-	args := []interface{}{}
-	argCount := 1
 
 	// Full-text search using tsvector/tsquery (GIN indexed) for performance at scale.
 	// Falls back to ILIKE for short queries where full-text may be too strict.
@@ -75,8 +79,8 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 		argCount++
 	}
 
-	// Location-based filtering
-	if filter.Latitude != nil && filter.Longitude != nil && filter.RadiusKm != nil {
+	// Location-based filtering (radius constraint)
+	if hasLocation && filter.RadiusKm != nil {
 		query += fmt.Sprintf(`
 			AND p.address_location IS NOT NULL
 			AND ST_DWithin(
@@ -90,7 +94,7 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 	}
 
 	// Order by relevance and recency
-	if filter.Latitude != nil && filter.Longitude != nil {
+	if hasLocation {
 		query += ` ORDER BY distance ASC, p.created_at DESC`
 	} else {
 		query += ` ORDER BY p.created_at DESC`

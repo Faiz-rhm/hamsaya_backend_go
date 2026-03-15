@@ -423,11 +423,22 @@ func (h *PostHandler) SharePost(c *gin.Context) {
 
 	postID := c.Param("post_id")
 
-	// Parse optional share text
+	// Parse optional share text with validation
 	var req struct {
-		ShareText *string `json:"share_text,omitempty"`
+		ShareText *string `json:"share_text,omitempty" validate:"omitempty,max=500"`
 	}
-	_ = c.ShouldBindJSON(&req)
+	if err := c.ShouldBindJSON(&req); err != nil {
+		// Ignore JSON parsing errors for optional body (e.g., empty body is valid)
+		req.ShareText = nil
+	}
+
+	// Validate share text length if provided
+	if req.ShareText != nil {
+		if err := h.validator.Validate(&req); err != nil {
+			utils.SendError(c, http.StatusBadRequest, "Share text validation failed", utils.ErrValidation)
+			return
+		}
+	}
 
 	// Share post
 	post, err := h.postService.SharePost(c.Request.Context(), userID.(string), postID, req.ShareText)

@@ -2,6 +2,7 @@ package utils
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
 )
@@ -42,7 +43,10 @@ func SendSuccess(c *gin.Context, statusCode int, message string, data interface{
 	})
 }
 
-// SendError sends an error response
+// SendError sends an error response with split-brain pattern:
+// - Full error details are logged server-side
+// - Only generic messages are exposed to clients in production
+// - Error details are exposed in development for debugging
 func SendError(c *gin.Context, statusCode int, message string, err error) {
 	response := Response{
 		Success: false,
@@ -50,15 +54,22 @@ func SendError(c *gin.Context, statusCode int, message string, err error) {
 	}
 
 	if err != nil {
-		response.Error = err.Error()
-		// Log the error
+		// Always log full error server-side for debugging and monitoring
 		GetLogger().Errorw("API Error",
 			"status", statusCode,
 			"message", message,
 			"error", err.Error(),
 			"path", c.Request.URL.Path,
 			"method", c.Request.Method,
+			"client_ip", c.ClientIP(),
 		)
+
+		// Only expose error details in development environment
+		// In production, internal errors (SQL, file paths, stack traces) are hidden
+		env := os.Getenv("ENV")
+		if env == "development" || env == "dev" || env == "" {
+			response.Error = err.Error()
+		}
 	}
 
 	c.JSON(statusCode, response)

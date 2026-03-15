@@ -16,8 +16,9 @@ import (
 
 // EmailService handles sending emails
 type EmailService struct {
-	cfg    *config.EmailConfig
-	logger *zap.Logger
+	cfg        *config.EmailConfig
+	logger     *zap.Logger
+	httpClient *http.Client
 }
 
 // NewEmailService creates a new email service
@@ -25,6 +26,14 @@ func NewEmailService(cfg *config.EmailConfig, logger *zap.Logger) *EmailService 
 	return &EmailService{
 		cfg:    cfg,
 		logger: logger,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        10,
+				MaxIdleConnsPerHost: 5,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}
 }
 
@@ -177,7 +186,7 @@ func (s *EmailService) sendEmailResend(to, subject, htmlBody string) error {
 	req.Header.Set("Authorization", "Bearer "+s.cfg.ResendAPIKey)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		s.logger.Error("Resend API request failed", zap.String("to", to), zap.Error(err))
 		return fmt.Errorf("failed to send email via Resend: %w", err)
