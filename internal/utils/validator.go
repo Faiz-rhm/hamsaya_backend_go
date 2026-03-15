@@ -18,7 +18,7 @@ func NewValidator() *Validator {
 	}
 }
 
-// Validate validates a struct
+// Validate validates a struct and returns the first error
 func (v *Validator) Validate(s interface{}) error {
 	if err := v.validator.Struct(s); err != nil {
 		if validationErrors, ok := err.(validator.ValidationErrors); ok {
@@ -28,6 +28,16 @@ func (v *Validator) Validate(s interface{}) error {
 			}
 		}
 		return err
+	}
+	return nil
+}
+
+// ValidateAll validates a struct and returns all field errors as a map.
+// Returns nil if validation passes, otherwise returns a map of field names to error messages.
+// Example: {"Email": "Email must be a valid email address", "Password": "Password must be at least 8 characters"}
+func (v *Validator) ValidateAll(s interface{}) map[string]string {
+	if err := v.validator.Struct(s); err != nil {
+		return FormatValidationErrors(err)
 	}
 	return nil
 }
@@ -53,6 +63,16 @@ func ValidateStruct(s interface{}) error {
 // ValidateVar validates a single variable
 func ValidateVar(field interface{}, tag string) error {
 	return GetValidator().Var(field, tag)
+}
+
+// ValidateStructAll validates a struct and returns all field errors as a map.
+// Returns nil if validation passes, otherwise returns a map of field names to error messages.
+// This is a convenience function that doesn't require creating a Validator instance.
+func ValidateStructAll(s interface{}) map[string]string {
+	if err := GetValidator().Struct(s); err != nil {
+		return FormatValidationErrors(err)
+	}
+	return nil
 }
 
 // FormatValidationError formats a single validation error into a readable message

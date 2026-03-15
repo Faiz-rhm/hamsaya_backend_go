@@ -15,6 +15,13 @@ type Response struct {
 	Error   string      `json:"error,omitempty"`
 }
 
+// ValidationErrorResponse represents a response with field-level validation errors
+type ValidationErrorResponse struct {
+	Success bool              `json:"success"`
+	Message string            `json:"message"`
+	Errors  map[string]string `json:"errors,omitempty"`
+}
+
 // PaginatedResponse represents a paginated API response
 type PaginatedResponse struct {
 	Success bool        `json:"success"`
@@ -145,4 +152,34 @@ func SendConflict(c *gin.Context, message string, err error) {
 // SendInternalServerError sends a 500 Internal Server Error response
 func SendInternalServerError(c *gin.Context, message string, err error) {
 	SendError(c, http.StatusInternalServerError, message, err)
+}
+
+// SendValidationError sends a 422 Unprocessable Entity response with field-level errors
+// Use this when you have multiple validation errors to report to the client.
+// The errors map should contain field names as keys and error messages as values.
+// Example: {"email": "must be a valid email", "password": "must be at least 8 characters"}
+func SendValidationError(c *gin.Context, message string, errors map[string]string) {
+	GetLogger().Warnw("Validation Error",
+		"message", message,
+		"errors", errors,
+		"path", c.Request.URL.Path,
+		"method", c.Request.Method,
+	)
+
+	c.JSON(http.StatusUnprocessableEntity, ValidationErrorResponse{
+		Success: false,
+		Message: message,
+		Errors:  errors,
+	})
+}
+
+// SendValidationErrorFromValidator sends a 422 response with validation errors from go-playground/validator.
+// It automatically extracts and formats field errors from validator.ValidationErrors.
+func SendValidationErrorFromValidator(c *gin.Context, err error) {
+	errors := FormatValidationErrors(err)
+	if len(errors) == 0 {
+		SendBadRequest(c, "Validation failed", err)
+		return
+	}
+	SendValidationError(c, "Validation failed", errors)
 }
