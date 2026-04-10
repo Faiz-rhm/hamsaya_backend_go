@@ -175,6 +175,7 @@ func main() {
 	reportRepo := repositories.NewReportRepository(db)
 	feedbackRepo := repositories.NewFeedbackRepository(db)
 	adminRepo := repositories.NewAdminRepository(db)
+	fanoutRepo := repositories.NewFanoutRepository(db)
 
 	// Initialize services
 	sugaredLogger.Info("Initializing services...")
@@ -190,7 +191,8 @@ func main() {
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
-	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, cfg.Storage.BucketName, logger)
+	fanoutService := services.NewFanoutService(fanoutRepo, logger)
+	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
@@ -351,6 +353,8 @@ func main() {
 		{
 			// Require auth for feed and post detail so engagement fields are always user-scoped
 			posts.GET("", authMiddleware.RequireAuth(), postHandler.GetFeed)
+			// /posts/feed must be registered before /:post_id to avoid the param route catching it
+			posts.GET("/feed", authMiddleware.RequireAuth(), postHandler.GetPersonalizedFeed)
 			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
 
 			// Protected routes (require verified email)

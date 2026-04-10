@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/models"
@@ -558,6 +559,15 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		}
 	}
 
+	// Cursor-based pagination: parse optional cursor param (RFC3339Nano or RFC3339)
+	if cursorStr := c.Query("cursor"); cursorStr != "" {
+		if t, err := time.Parse(time.RFC3339Nano, cursorStr); err == nil {
+			filter.Cursor = &t
+		} else if t, err := time.Parse(time.RFC3339, cursorStr); err == nil {
+			filter.Cursor = &t
+		}
+	}
+
 	// Get feed
 	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, viewerID)
 	if err != nil {
@@ -585,10 +595,61 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		"sort_by": filter.SortBy,
 	}
 
+	// Emit next_cursor so clients can request the next page without OFFSET
+	if len(posts) > 0 && len(posts) == filter.Limit && (filter.SortBy == "recent" || filter.SortBy == "") {
+		sorts["next_cursor"] = posts[len(posts)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+	}
+
 	utils.SendPaginatedWithFilters(c, posts, page, filter.Limit, totalCount, filters, sorts)
 }
 
 // GetMyPosts godoc
+// GetPersonalizedFeed godoc
+// @Summary Get personalized feed
+// @Description Returns a cursor-paginated feed assembled from followed users' posts (hybrid fanout)
+// @Tags posts
+// @Produce json
+// @Security BearerAuth
+// @Param cursor query string false "Cursor from previous response (RFC3339Nano)"
+// @Param limit query int false "Number of posts to return" default(20)
+// @Success 200 {object} utils.Response{data=[]models.PostResponse}
+// @Failure 401 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /posts/feed [get]
+func (h *PostHandler) GetPersonalizedFeed(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	limit := 20
+	if l, err := strconv.Atoi(c.Query("limit")); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	filter := &models.FeedFilter{SortBy: "recent", Limit: limit}
+	if cursorStr := c.Query("cursor"); cursorStr != "" {
+		if t, err := time.Parse(time.RFC3339Nano, cursorStr); err == nil {
+			filter.Cursor = &t
+		} else if t, err := time.Parse(time.RFC3339, cursorStr); err == nil {
+			filter.Cursor = &t
+		}
+	}
+
+	posts, nextCursor, err := h.postService.GetPersonalizedFeed(c.Request.Context(), userID.(string), filter)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	sorts := map[string]interface{}{"sort_by": "recent"}
+	if nextCursor != nil {
+		sorts["next_cursor"] = nextCursor.UTC().Format(time.RFC3339Nano)
+	}
+	utils.SendPaginatedWithFilters(c, posts, 1, limit, 0, nil, sorts)
+}
+
 // @Summary Get authenticated user's posts
 // @Description Get all posts created by the authenticated user
 // @Tags posts

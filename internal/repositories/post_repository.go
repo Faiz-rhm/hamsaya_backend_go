@@ -56,6 +56,9 @@ type PostRepository interface {
 	// Stats
 	CountPostsByUser(ctx context.Context, userID string) (int, error)
 
+	// GetPostsByIDs fetches multiple posts by ID in one query (for fanout feed assembly).
+	GetPostsByIDs(ctx context.Context, ids []string) ([]*models.Post, error)
+
 	// ListExpiredSellPostsNeedingNotification returns SELL posts that are expired (not sold, expired_at <= asOf)
 	// and have not yet had a SELL_EXPIRED notification created. Used by the expire-sell-notify job.
 	ListExpiredSellPostsNeedingNotification(ctx context.Context, asOf time.Time) ([]*models.Post, error)
@@ -875,6 +878,26 @@ func (r *postRepository) ListExpiredSellPostsNeedingNotification(ctx context.Con
 		posts = append(posts, post)
 	}
 	return posts, rows.Err()
+}
+
+// GetPostsByIDs fetches multiple posts by their IDs in a single query.
+// Used by the fanout feed to hydrate post IDs returned from user_feeds.
+func (r *postRepository) GetPostsByIDs(ctx context.Context, ids []string) ([]*models.Post, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	query := `
+		SELECT id, user_id, business_id, original_post_id, category_id,
+		       title, description, type, status, visibility,
+		       currency, price, discount, free, sold, is_promoted, country_code, contact_no, is_location,
+		       start_date, start_time, end_date, end_time, event_state, interested_count, going_count, expired_at,
+		       ` + locationSelectFragment + `,
+		       country, province, district, neighborhood,
+		       total_comments, total_likes, total_shares,
+		       created_at, updated_at, deleted_at
+		FROM posts
+		WHERE id = ANY($1) AND deleted_at IS NULL AND status = true`
+	return r.queryPosts(ctx, query, ids)
 }
 
 // queryPosts is a helper function to query posts

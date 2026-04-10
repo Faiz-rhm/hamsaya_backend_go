@@ -316,6 +316,22 @@ func (m *MockPostRepository) CountPostsByUser(ctx context.Context, userID string
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockPostRepository) GetPostsByIDs(ctx context.Context, ids []string) ([]*models.Post, error) {
+	args := m.Called(ctx, ids)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Post), args.Error(1)
+}
+
+func (m *MockPostRepository) ListExpiredSellPostsNeedingNotification(ctx context.Context, asOf time.Time) ([]*models.Post, error) {
+	args := m.Called(ctx, asOf)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Post), args.Error(1)
+}
+
 // MockReportRepository is a mock implementation of ReportRepository
 type MockReportRepository struct {
 	mock.Mock

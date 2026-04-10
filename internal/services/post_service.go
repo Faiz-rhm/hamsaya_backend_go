@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"hash/fnv"
+	"sort"
 	"strings"
 	"time"
 
@@ -25,6 +26,8 @@ type PostService struct {
 	categoryRepo        repositories.CategoryRepository
 	eventRepo           repositories.EventRepository
 	notificationService *NotificationService
+	fanoutService       *FanoutService
+	fanoutRepo          repositories.FanoutRepository
 	storageBucketName   string
 	logger              *zap.Logger
 }
@@ -39,6 +42,8 @@ func NewPostService(
 	categoryRepo repositories.CategoryRepository,
 	eventRepo repositories.EventRepository,
 	notificationService *NotificationService,
+	fanoutService *FanoutService,
+	fanoutRepo repositories.FanoutRepository,
 	storageBucketName string,
 	logger *zap.Logger,
 ) *PostService {
@@ -51,6 +56,8 @@ func NewPostService(
 		categoryRepo:        categoryRepo,
 		eventRepo:           eventRepo,
 		notificationService: notificationService,
+		fanoutService:       fanoutService,
+		fanoutRepo:          fanoutRepo,
 		storageBucketName:   storageBucketName,
 		logger:              logger,
 	}
@@ -251,6 +258,9 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 
 	// Notify followers of the new post (user followers or business followers)
 	go s.notifyFollowersOfNewPost(context.WithoutCancel(ctx), postID, userID, req.BusinessID)
+
+	// Fan out post to followers' feeds (skipped for celebrity authors with >10K followers)
+	go s.fanoutService.FanoutPost(context.WithoutCancel(ctx), postID, userID)
 
 	// Return enriched post
 	return s.GetPost(ctx, postID, &userID)
@@ -680,6 +690,71 @@ func (s *PostService) GetUserEventPosts(ctx context.Context, userID string, even
 	}
 
 	return enrichedPosts, nil
+}
+
+// GetPersonalizedFeed returns a cursor-paginated feed for viewerID assembled from
+// two sources merged together:
+//   - user_feeds rows (posts fanned out from non-celebrity authors)
+//   - posts from celebrity authors (queried on read to avoid write-amplification)
+func (s *PostService) GetPersonalizedFeed(ctx context.Context, viewerID string, filter *models.FeedFilter) ([]*models.PostResponse, *time.Time, error) {
+	fanoutIDs, lastCursor, err := s.fanoutRepo.GetPersonalizedFeed(ctx, viewerID, filter.Cursor, filter.Limit)
+	if err != nil {
+		return nil, nil, utils.NewInternalError("Failed to get personalized feed", err)
+	}
+
+	celebIDs, _ := s.fanoutRepo.GetCelebrityPostIDs(ctx, viewerID, filter.Cursor, filter.Limit)
+
+	allIDs := mergeDedupe(fanoutIDs, celebIDs)
+	if len(allIDs) == 0 {
+		return []*models.PostResponse{}, nil, nil
+	}
+
+	posts, err := s.postRepo.GetPostsByIDs(ctx, allIDs)
+	if err != nil {
+		return nil, nil, utils.NewInternalError("Failed to hydrate feed posts", err)
+	}
+
+	// Sort merged result by recency (sources may be interleaved)
+	sort.Slice(posts, func(i, j int) bool {
+		return posts[i].CreatedAt.After(posts[j].CreatedAt)
+	})
+	if len(posts) > filter.Limit {
+		posts = posts[:filter.Limit]
+	}
+
+	var enrichedPosts []*models.PostResponse
+	for _, post := range posts {
+		enrichedPost, err := s.enrichPost(ctx, post, &viewerID)
+		if err != nil {
+			s.logger.Warn("GetPersonalizedFeed: failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
+			continue
+		}
+		enrichedPosts = append(enrichedPosts, enrichedPost)
+	}
+
+	var nextCursor *time.Time
+	if len(posts) == filter.Limit {
+		if lastCursor != nil {
+			nextCursor = lastCursor
+		} else if len(enrichedPosts) > 0 {
+			t := enrichedPosts[len(enrichedPosts)-1].CreatedAt
+			nextCursor = &t
+		}
+	}
+	return enrichedPosts, nextCursor, nil
+}
+
+// mergeDedupe merges two string slices, preserving order and eliminating duplicates.
+func mergeDedupe(a, b []string) []string {
+	seen := make(map[string]struct{}, len(a)+len(b))
+	out := make([]string, 0, len(a)+len(b))
+	for _, id := range append(a, b...) {
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // enrichPost enriches a post with author, attachments, and engagement status
