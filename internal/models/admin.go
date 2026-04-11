@@ -92,6 +92,7 @@ type AdminUserResponse struct {
 	Latitude      *float64   `json:"latitude,omitempty"`
 	Longitude     *float64   `json:"longitude,omitempty"`
 	IsComplete    bool       `json:"is_complete"`
+	OAuthProvider *string    `json:"oauth_provider,omitempty"`
 	IsSuspended   bool       `json:"is_suspended"`
 	LockedUntil   *time.Time `json:"locked_until,omitempty"`
 	LastLoginAt   *time.Time `json:"last_login_at,omitempty"`

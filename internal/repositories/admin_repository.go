@@ -379,9 +379,10 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 	offset := (page - 1) * limit
 	
 	query := fmt.Sprintf(`
-		SELECT 
+		SELECT
 			u.id, u.email, u.phone, u.email_verified, u.mfa_enabled, u.role,
 			p.first_name, p.last_name, p.avatar, p.cover, p.country, p.province, p.district, p.neighborhood, p.is_complete,
+			u.oauth_provider,
 			u.locked_until, u.last_login_at, u.created_at,
 			(SELECT COUNT(*) FROM posts WHERE user_id = u.id AND deleted_at IS NULL) as posts_count,
 			(SELECT COUNT(*) FROM user_follows WHERE following_id = u.id) as followers_count,
@@ -409,6 +410,7 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 			&user.FirstName, &user.LastName, &user.Avatar, &user.Cover,
 			&user.Country, &user.Province, &user.District, &user.Neighborhood,
 			&user.IsComplete,
+			&user.OAuthProvider,
 			&user.LockedUntil, &user.LastLoginAt, &user.CreatedAt,
 			&user.PostsCount, &user.FollowersCount, &user.FollowingCount,
 		)
@@ -424,9 +426,10 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 
 func (r *adminRepository) GetUserByID(ctx context.Context, userID string) (*models.AdminUserResponse, error) {
 	query := `
-		SELECT 
+		SELECT
 			u.id, u.email, u.phone, u.email_verified, u.mfa_enabled, u.role,
 			p.first_name, p.last_name, p.avatar, p.cover, p.country, p.province, p.district, p.neighborhood, p.is_complete,
+			u.oauth_provider,
 			ST_X(p.location::geometry) as longitude,
 			ST_Y(p.location::geometry) as latitude,
 			u.locked_until, u.last_login_at, u.created_at,
@@ -445,6 +448,7 @@ func (r *adminRepository) GetUserByID(ctx context.Context, userID string) (*mode
 		&user.FirstName, &user.LastName, &user.Avatar, &user.Cover,
 		&user.Country, &user.Province, &user.District, &user.Neighborhood,
 		&user.IsComplete,
+		&user.OAuthProvider,
 		&longitude, &latitude,
 		&user.LockedUntil, &user.LastLoginAt, &user.CreatedAt,
 		&user.PostsCount, &user.FollowersCount, &user.FollowingCount,
