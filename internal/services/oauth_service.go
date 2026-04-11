@@ -252,6 +252,20 @@ func (s *OAuthService) AuthenticateWithOAuth(ctx context.Context, oauthInfo *OAu
 			return nil, nil, false, utils.NewInternalError("Failed to get profile", err)
 		}
 
+		// If the profile has no avatar (e.g. registered before the fix) and the OAuth
+		// provider returned a picture URL, persist it now so subsequent fetches have it.
+		if profile.Avatar == nil && oauthInfo.Picture != "" {
+			profile.Avatar = &models.Photo{
+				URL:      oauthInfo.Picture,
+				Name:     "avatar",
+				MimeType: "image/jpeg",
+			}
+			if updateErr := s.userRepo.UpdateProfile(ctx, profile); updateErr != nil {
+				s.logger.Error("Failed to back-fill OAuth avatar", zap.Error(updateErr))
+				// Non-fatal — continue with profile as-is
+			}
+		}
+
 		s.logger.Info("OAuth user logged in",
 			zap.String("user_id", existingUser.ID),
 			zap.String("provider", oauthInfo.Provider),

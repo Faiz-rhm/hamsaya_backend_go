@@ -312,21 +312,30 @@ func (r *userRepository) UpdateLastLogin(ctx context.Context, userID string) err
 
 // CreateProfile creates a new user profile
 func (r *userRepository) CreateProfile(ctx context.Context, profile *models.Profile) error {
+	var avatarJSON []byte
+	if profile.Avatar != nil {
+		var err error
+		avatarJSON, err = json.Marshal(profile.Avatar)
+		if err != nil {
+			return fmt.Errorf("failed to marshal avatar: %w", err)
+		}
+	}
+
 	var query string
 	var args []interface{}
 
 	if profile.Location != nil && profile.Location.Valid {
-		// Use PostGIS function to create GEOGRAPHY point
 		query = `
-			INSERT INTO profiles (id, first_name, last_name, location, avatar_color, is_complete, created_at, updated_at)
-			VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9)
+			INSERT INTO profiles (id, first_name, last_name, location, avatar, avatar_color, is_complete, created_at, updated_at)
+			VALUES ($1, $2, $3, ST_SetSRID(ST_MakePoint($4, $5), 4326)::geography, $6, $7, $8, $9, $10)
 		`
 		args = []interface{}{
 			profile.ID,
 			profile.FirstName,
 			profile.LastName,
-			profile.Location.P.X, // Longitude
-			profile.Location.P.Y, // Latitude
+			profile.Location.P.X,
+			profile.Location.P.Y,
+			avatarJSON,
 			profile.AvatarColor,
 			profile.IsComplete,
 			profile.CreatedAt,
@@ -334,13 +343,14 @@ func (r *userRepository) CreateProfile(ctx context.Context, profile *models.Prof
 		}
 	} else {
 		query = `
-			INSERT INTO profiles (id, first_name, last_name, avatar_color, is_complete, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7)
+			INSERT INTO profiles (id, first_name, last_name, avatar, avatar_color, is_complete, created_at, updated_at)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		`
 		args = []interface{}{
 			profile.ID,
 			profile.FirstName,
 			profile.LastName,
+			avatarJSON,
 			profile.AvatarColor,
 			profile.IsComplete,
 			profile.CreatedAt,
