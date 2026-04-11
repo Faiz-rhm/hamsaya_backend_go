@@ -294,21 +294,10 @@ func (s *ProfileService) DeleteCover(ctx context.Context, userID string) error {
 
 // isProfileComplete checks if a profile has all required fields
 func (s *ProfileService) isProfileComplete(profile *models.Profile) bool {
-	// A profile is complete if it has:
-	// - First name and last name
-	// - Location (latitude and longitude)
-
-	if profile.FirstName == nil || *profile.FirstName == "" {
-		return false
-	}
-	if profile.LastName == nil || *profile.LastName == "" {
-		return false
-	}
-	if profile.Location == nil || !profile.Location.Valid {
-		return false
-	}
-
-	return true
+	// A profile is complete when the user has set their location.
+	// First and last name are populated automatically for social (OAuth) users
+	// and are not required as a completion gate.
+	return profile.Location != nil && profile.Location.Valid
 }
 
 // Helper function

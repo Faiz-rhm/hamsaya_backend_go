@@ -37,11 +37,12 @@ func NewOAuthService(
 	}
 }
 
-// GoogleUserInfo represents user info from Google
+// GoogleUserInfo represents user info from Google.
+// email_verified is returned as a string ("true"/"false") by Google's tokeninfo endpoint.
 type GoogleUserInfo struct {
 	ID            string `json:"sub"`
 	Email         string `json:"email"`
-	EmailVerified bool   `json:"email_verified"`
+	EmailVerified string `json:"email_verified"`
 	Name          string `json:"name"`
 	GivenName     string `json:"given_name"`
 	FamilyName    string `json:"family_name"`
@@ -126,7 +127,7 @@ func (s *OAuthService) VerifyGoogleToken(ctx context.Context, idToken string) (*
 	return &OAuthUserInfo{
 		ProviderUserID: userInfo.ID,
 		Email:          userInfo.Email,
-		EmailVerified:  userInfo.EmailVerified,
+		EmailVerified:  userInfo.EmailVerified == "true",
 		FirstName:      userInfo.GivenName,
 		LastName:       userInfo.FamilyName,
 		Picture:        userInfo.Picture,
@@ -270,6 +271,7 @@ func (s *OAuthService) AuthenticateWithOAuth(ctx context.Context, oauthInfo *OAu
 		EmailVerified:       oauthInfo.EmailVerified,
 		PhoneVerified:       false,
 		MFAEnabled:          false,
+		Role:                models.RoleUser,
 		OAuthProvider:       &oauthInfo.Provider,
 		OAuthProviderID:     &providerID,
 		FailedLoginAttempts: 0,
