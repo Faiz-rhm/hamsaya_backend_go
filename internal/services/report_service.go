@@ -177,3 +177,167 @@ func (s *ReportService) ReportBusiness(ctx context.Context, userID, businessID s
 
 	return nil
 }
+
+// PostReportsResult holds paginated post report results.
+type PostReportsResult struct {
+	Reports    interface{}
+	TotalCount int
+	Page       int
+	Limit      int
+}
+
+// ListPostReports returns a paginated list of post reports.
+func (s *ReportService) ListPostReports(ctx context.Context, page, limit int) (*PostReportsResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	reports, total, err := s.reportRepo.ListPostReports(ctx, limit, offset)
+	if err != nil {
+		return nil, utils.NewInternalServerError("Failed to list post reports", err)
+	}
+
+	return &PostReportsResult{
+		Reports:    reports,
+		TotalCount: total,
+		Page:       page,
+		Limit:      limit,
+	}, nil
+}
+
+// UpdatePostReportStatus updates the status of a post report.
+func (s *ReportService) UpdatePostReportStatus(ctx context.Context, reportID string, status models.ReportStatus) error {
+	switch status {
+	case models.ReportStatusPending, models.ReportStatusReviewing, models.ReportStatusResolved, models.ReportStatusRejected:
+		// valid
+	default:
+		return utils.NewBadRequestError("Invalid report status", nil)
+	}
+
+	if err := s.reportRepo.UpdatePostReportStatus(ctx, reportID, status); err != nil {
+		return utils.NewNotFoundError("Report not found", err)
+	}
+	return nil
+}
+
+// GetPostReport retrieves a single post report by ID.
+func (s *ReportService) GetPostReport(ctx context.Context, reportID string) (*models.PostReport, error) {
+	report, err := s.reportRepo.GetPostReport(ctx, reportID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Report not found", err)
+	}
+	return report, nil
+}
+
+// ListCommentReports returns a paginated list of comment reports.
+func (s *ReportService) ListCommentReports(ctx context.Context, page, limit int) (*PostReportsResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+	reports, total, err := s.reportRepo.ListCommentReports(ctx, limit, offset)
+	if err != nil {
+		return nil, utils.NewInternalServerError("Failed to list comment reports", err)
+	}
+	return &PostReportsResult{Reports: reports, TotalCount: total, Page: page, Limit: limit}, nil
+}
+
+// ListUserReports returns a paginated list of user reports.
+func (s *ReportService) ListUserReports(ctx context.Context, page, limit int) (*PostReportsResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+	reports, total, err := s.reportRepo.ListUserReports(ctx, limit, offset)
+	if err != nil {
+		return nil, utils.NewInternalServerError("Failed to list user reports", err)
+	}
+	return &PostReportsResult{Reports: reports, TotalCount: total, Page: page, Limit: limit}, nil
+}
+
+// ListBusinessReports returns a paginated list of business reports.
+func (s *ReportService) ListBusinessReports(ctx context.Context, page, limit int) (*PostReportsResult, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 100 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+	reports, total, err := s.reportRepo.ListBusinessReports(ctx, limit, offset)
+	if err != nil {
+		return nil, utils.NewInternalServerError("Failed to list business reports", err)
+	}
+	return &PostReportsResult{Reports: reports, TotalCount: total, Page: page, Limit: limit}, nil
+}
+
+// UpdateCommentReportStatus updates the status of a comment report.
+func (s *ReportService) UpdateCommentReportStatus(ctx context.Context, reportID string, status models.ReportStatus) error {
+	switch status {
+	case models.ReportStatusPending, models.ReportStatusReviewing, models.ReportStatusResolved, models.ReportStatusRejected:
+	default:
+		return utils.NewBadRequestError("Invalid report status", nil)
+	}
+	if err := s.reportRepo.UpdateCommentReportStatus(ctx, reportID, status); err != nil {
+		return utils.NewNotFoundError("Report not found", err)
+	}
+	return nil
+}
+
+// UpdateUserReportStatus updates the resolved flag of a user report.
+func (s *ReportService) UpdateUserReportStatus(ctx context.Context, reportID string, resolved bool) error {
+	if err := s.reportRepo.UpdateUserReportResolved(ctx, reportID, resolved); err != nil {
+		return utils.NewNotFoundError("Report not found", err)
+	}
+	return nil
+}
+
+// UpdateBusinessReportStatus updates the status of a business report.
+func (s *ReportService) UpdateBusinessReportStatus(ctx context.Context, reportID string, status models.ReportStatus) error {
+	switch status {
+	case models.ReportStatusPending, models.ReportStatusReviewing, models.ReportStatusResolved, models.ReportStatusRejected:
+	default:
+		return utils.NewBadRequestError("Invalid report status", nil)
+	}
+	if err := s.reportRepo.UpdateBusinessReportStatus(ctx, reportID, status); err != nil {
+		return utils.NewNotFoundError("Report not found", err)
+	}
+	return nil
+}
+
+// GetCommentReport retrieves a single comment report by ID.
+func (s *ReportService) GetCommentReport(ctx context.Context, reportID string) (*models.CommentReport, error) {
+	report, err := s.reportRepo.GetCommentReport(ctx, reportID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Report not found", err)
+	}
+	return report, nil
+}
+
+// GetUserReport retrieves a single user report by ID.
+func (s *ReportService) GetUserReport(ctx context.Context, reportID string) (*models.UserReport, error) {
+	report, err := s.reportRepo.GetUserReport(ctx, reportID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Report not found", err)
+	}
+	return report, nil
+}
+
+// GetBusinessReport retrieves a single business report by ID.
+func (s *ReportService) GetBusinessReport(ctx context.Context, reportID string) (*models.BusinessReport, error) {
+	report, err := s.reportRepo.GetBusinessReport(ctx, reportID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Report not found", err)
+	}
+	return report, nil
+}

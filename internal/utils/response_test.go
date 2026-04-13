@@ -69,8 +69,8 @@ func TestSendPaginated(t *testing.T) {
 	err := json.Unmarshal(w.Body.Bytes(), &response)
 	assert.NoError(t, err)
 	assert.True(t, response.Success)
-	assert.Equal(t, 1, response.Meta.Page)
-	assert.Equal(t, 10, response.Meta.Limit)
+	assert.Equal(t, 1, response.Meta.CurrentPage)
+	assert.Equal(t, 10, response.Meta.ItemsPerPage)
 	assert.Equal(t, 3, response.Meta.TotalPages)
-	assert.Equal(t, int64(25), response.Meta.TotalCount)
+	assert.Equal(t, int64(25), response.Meta.TotalItems)
 }

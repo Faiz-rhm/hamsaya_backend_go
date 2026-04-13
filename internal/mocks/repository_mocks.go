@@ -332,6 +332,16 @@ func (m *MockPostRepository) ListExpiredSellPostsNeedingNotification(ctx context
 	return args.Get(0).([]*models.Post), args.Error(1)
 }
 
+func (m *MockPostRepository) MarkSellPostsExpired(ctx context.Context, postIDs []string) error {
+	args := m.Called(ctx, postIDs)
+	return args.Error(0)
+}
+
+func (m *MockPostRepository) ReactivateSellPost(ctx context.Context, postID string) error {
+	args := m.Called(ctx, postID)
+	return args.Error(0)
+}
+
 // MockReportRepository is a mock implementation of ReportRepository
 type MockReportRepository struct {
 	mock.Mock
