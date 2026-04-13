@@ -568,6 +568,7 @@ func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware ...
 			auth.POST("/logout-all", mw, h.LogoutAll)
 			auth.POST("/change-password", mw, h.ChangePassword)
 			auth.GET("/sessions", mw, h.GetActiveSessions)
+			auth.POST("/send-verification-email", mw, h.SendVerificationEmail)
 		}
 	}
 }
