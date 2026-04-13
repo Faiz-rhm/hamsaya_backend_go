@@ -1297,6 +1297,41 @@ func (s *PostService) validatePostRequest(req *models.CreatePostRequest) error {
 	return nil
 }
 
+// ResellPost reactivates an expired SELL post owned by userID.
+// It sets status=true, sold=false, and resets expired_at to 30 days from now so the
+// post is live again and the expiry job will re-evaluate it after the new window.
+func (s *PostService) ResellPost(ctx context.Context, postID, userID string) (*models.PostResponse, error) {
+	post, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Post not found", err)
+	}
+
+	if post.UserID == nil || *post.UserID != userID {
+		return nil, utils.NewForbiddenError("You don't have permission to resell this post", nil)
+	}
+
+	if post.Type != models.PostTypeSell {
+		return nil, utils.NewBadRequestError("Only sell posts can be resold", nil)
+	}
+
+	if err := s.postRepo.ReactivateSellPost(ctx, postID); err != nil {
+		return nil, utils.NewInternalError("Failed to resell post", err)
+	}
+
+	// Reload so the response reflects the DB state (updated status, sold, expired_at).
+	post, err = s.postRepo.GetByID(ctx, postID)
+	if err != nil {
+		return nil, utils.NewInternalError("Failed to reload post after resell", err)
+	}
+
+	s.logger.Info("Sell post resold",
+		zap.String("post_id", postID),
+		zap.String("user_id", userID),
+	)
+
+	return s.enrichPost(ctx, post, &userID)
+}
+
 // ProcessExpiredSellPosts finds all SELL posts that have passed their expiry date without
 // being sold, sends a SELL_EXPIRED push notification to each owner, then deactivates the posts
 // so they no longer appear in feeds. Returns the number of posts processed.

@@ -373,6 +373,7 @@ func main() {
 			posts.POST("/:post_id/bookmark", verifiedAuth, postHandler.BookmarkPost)
 			posts.DELETE("/:post_id/bookmark", verifiedAuth, postHandler.UnbookmarkPost)
 			posts.POST("/:post_id/share", verifiedAuth, postHandler.SharePost)
+			posts.POST("/:post_id/resell", verifiedAuth, postHandler.ResellPost)
 			posts.POST("/:post_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportPost)
 
 			// Comment routes

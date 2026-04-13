@@ -387,4 +387,8 @@ type FeedFilter struct {
 	// When Cursor is set, Offset is ignored. Cursor is the created_at timestamp
 	// of the last item from the previous page.
 	Cursor       *time.Time `json:"cursor,omitempty"`
+
+	// IncludeInactive bypasses the status = true filter so the post owner
+	// can see their own inactive/expired posts (e.g. the Expired tab).
+	IncludeInactive bool `json:"-"`
 }

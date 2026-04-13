@@ -283,6 +283,36 @@ func (h *PostHandler) DeletePost(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Post deleted successfully", nil)
 }
 
+// ResellPost godoc
+// @Summary Resell an expired sell post
+// @Description Reactivates an expired sell post, resets its expiry to 30 days from now
+// @Tags posts
+// @Produce json
+// @Security BearerAuth
+// @Param post_id path string true "Post ID"
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Failure 403 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Router /posts/{post_id}/resell [post]
+func (h *PostHandler) ResellPost(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	postID := c.Param("post_id")
+
+	post, err := h.postService.ResellPost(c.Request.Context(), postID, userID.(string))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Post relisted successfully", post)
+}
+
 // LikePost godoc
 // @Summary Like a post
 // @Description Like a post
@@ -715,6 +745,11 @@ func (h *PostHandler) GetMyPosts(c *gin.Context) {
 		if s, err := strconv.ParseBool(soldStr); err == nil {
 			filter.Sold = &s
 		}
+	}
+
+	// For own SELL posts, include inactive/expired so the Expired tab works.
+	if filter.Type != nil && *filter.Type == models.PostTypeSell {
+		filter.IncludeInactive = true
 	}
 
 	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, &userIDStr)

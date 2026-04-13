@@ -66,6 +66,9 @@ type PostRepository interface {
 	// MarkSellPostsExpired deactivates the given sell posts by setting status = false.
 	// Called after SELL_EXPIRED notifications have been sent so posts are hidden from feeds.
 	MarkSellPostsExpired(ctx context.Context, postIDs []string) error
+
+	// ReactivateSellPost sets status=true, sold=false, and resets expired_at to now+30 days.
+	ReactivateSellPost(ctx context.Context, postID string) error
 }
 
 // locationSelectFragment selects post location columns as four doubles instead
@@ -540,8 +543,12 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 			total_comments, total_likes, total_shares,
 			created_at, updated_at, deleted_at
 		FROM posts
-		WHERE deleted_at IS NULL AND status = true
+		WHERE deleted_at IS NULL
 	`)
+
+	if !filter.IncludeInactive {
+		queryBuilder.WriteString(" AND status = true")
+	}
 
 	args := []interface{}{}
 	argCount := 1
@@ -675,8 +682,11 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 	queryBuilder.WriteString(`
 		SELECT COUNT(*)
 		FROM posts
-		WHERE deleted_at IS NULL AND status = true
+		WHERE deleted_at IS NULL
 	`)
+	if !filter.IncludeInactive {
+		queryBuilder.WriteString(" AND status = true")
+	}
 
 	args := []interface{}{}
 	argCount := 1
@@ -852,6 +862,7 @@ func (r *postRepository) ListExpiredSellPostsNeedingNotification(ctx context.Con
 			WHERE n.user_id = p.user_id
 			  AND n.type = 'SELL_EXPIRED'
 			  AND n.data->>'post_id' = p.id::text
+			  AND n.created_at >= p.expired_at - interval '2 days'
 		  )
 		ORDER BY p.expired_at ASC
 	`
@@ -891,6 +902,17 @@ func (r *postRepository) MarkSellPostsExpired(ctx context.Context, postIDs []str
 	}
 	query := `UPDATE posts SET status = false, updated_at = NOW() WHERE id = ANY($1)`
 	_, err := r.db.Pool.Exec(ctx, query, postIDs)
+	return err
+}
+
+// ReactivateSellPost sets status=true, sold=false, and resets expired_at to now+30 days.
+func (r *postRepository) ReactivateSellPost(ctx context.Context, postID string) error {
+	query := `
+		UPDATE posts
+		SET status = true, sold = false, expired_at = NOW() + INTERVAL '30 days', updated_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+	_, err := r.db.Pool.Exec(ctx, query, postID)
 	return err
 }
 
