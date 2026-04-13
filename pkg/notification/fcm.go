@@ -2,7 +2,9 @@ package notification
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
@@ -16,18 +18,48 @@ type FCMClient struct {
 	logger *zap.Logger
 }
 
-// NewFCMClient creates a new FCM client
-func NewFCMClient(credentialsPath string, logger *zap.Logger) (*FCMClient, error) {
+// FCMConfig holds credentials for initialising Firebase — either a file path or
+// the three individual fields from environment variables.
+type FCMConfig struct {
+	CredentialsPath string // path to service-account JSON file (optional)
+	ProjectID       string // FIREBASE_PROJECT_ID
+	PrivateKey      string // FIREBASE_PRIVATE_KEY  (PEM, may use literal \n)
+	ClientEmail     string // FIREBASE_CLIENT_EMAIL
+}
+
+// NewFCMClient creates a new FCM client.
+// Priority: file path → individual env vars → error.
+func NewFCMClient(cfg FCMConfig, logger *zap.Logger) (*FCMClient, error) {
 	ctx := context.Background()
 
-	// Initialize Firebase app
-	opt := option.WithCredentialsFile(credentialsPath)
+	var opt option.ClientOption
+
+	if cfg.CredentialsPath != "" {
+		opt = option.WithCredentialsFile(cfg.CredentialsPath)
+	} else if cfg.ProjectID != "" && cfg.PrivateKey != "" && cfg.ClientEmail != "" {
+		// Build a service-account JSON from individual env vars so no file is needed.
+		// Replace literal "\n" sequences (common when storing PEM in env vars) with real newlines.
+		privateKey := strings.ReplaceAll(cfg.PrivateKey, `\n`, "\n")
+		credJSON, err := json.Marshal(map[string]string{
+			"type":                        "service_account",
+			"project_id":                  cfg.ProjectID,
+			"private_key":                 privateKey,
+			"client_email":                cfg.ClientEmail,
+			"token_uri":                   "https://oauth2.googleapis.com/token",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to build Firebase credentials JSON: %w", err)
+		}
+		opt = option.WithCredentialsJSON(credJSON)
+	} else {
+		return nil, fmt.Errorf("Firebase credentials not provided: set FIREBASE_CREDENTIALS_PATH or FIREBASE_PROJECT_ID + FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL")
+	}
+
 	app, err := firebase.NewApp(ctx, nil, opt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize Firebase app: %w", err)
 	}
 
-	// Get messaging client
 	client, err := app.Messaging(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get messaging client: %w", err)

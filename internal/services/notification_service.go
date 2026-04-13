@@ -383,6 +383,10 @@ func (s *NotificationService) UnregisterFCMToken(ctx context.Context, userID str
 
 // sendPushNotification sends a push notification via FCM
 func (s *NotificationService) sendPushNotification(ctx context.Context, notification *models.Notification) {
+	if s.fcmClient == nil {
+		return
+	}
+
 	// Get FCM token for user
 	key := fcmTokenPrefix + notification.UserID
 	token, err := s.redisClient.Get(ctx, key).Result()

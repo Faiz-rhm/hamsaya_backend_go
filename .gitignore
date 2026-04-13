@@ -26,6 +26,10 @@ go.work
 .env.local
 .env.*.local
 
+# Firebase service account key (never commit)
+serviceAccountKey.json
+*serviceAccount*.json
+
 # IDE
 .idea/
 .vscode/

@@ -143,14 +143,18 @@ func main() {
 
 	// Initialize Firebase Cloud Messaging (optional - only if credentials are provided)
 	var fcmClient *notification.FCMClient
-	if cfg.Firebase.CredentialsPath != "" {
+	fcmCfg := notification.FCMConfig{
+		CredentialsPath: cfg.Firebase.CredentialsPath,
+		ProjectID:       cfg.Firebase.ProjectID,
+		PrivateKey:      cfg.Firebase.PrivateKey,
+		ClientEmail:     cfg.Firebase.ClientEmail,
+	}
+	if fcmCfg.CredentialsPath != "" || (fcmCfg.ProjectID != "" && fcmCfg.PrivateKey != "" && fcmCfg.ClientEmail != "") {
 		sugaredLogger.Info("Initializing Firebase Cloud Messaging...")
-		fcmClient, err = notification.NewFCMClient(cfg.Firebase.CredentialsPath, logger)
+		fcmClient, err = notification.NewFCMClient(fcmCfg, logger)
 		if err != nil {
 			sugaredLogger.Warnw("Failed to initialize FCM client (push notifications will be disabled)", "error", err)
 			fcmClient = nil
-		} else {
-			sugaredLogger.Info("FCM client initialized successfully")
 		}
 	} else {
 		sugaredLogger.Info("Firebase credentials not provided, push notifications will be disabled")
@@ -480,9 +484,9 @@ func main() {
 			notifications.GET("/settings", authMiddleware.RequireAuth(), notificationHandler.GetNotificationSettings)
 			notifications.PUT("/settings", verifiedAuth, notificationHandler.UpdateNotificationSetting)
 
-			// FCM token registration (verified email)
-			notifications.POST("/fcm-token", verifiedAuth, notificationHandler.RegisterFCMToken)
-			notifications.DELETE("/fcm-token", verifiedAuth, notificationHandler.UnregisterFCMToken)
+			// FCM token registration (auth only — token must be registerable before email is verified)
+			notifications.POST("/fcm-token", authMiddleware.RequireAuth(), notificationHandler.RegisterFCMToken)
+			notifications.DELETE("/fcm-token", authMiddleware.RequireAuth(), notificationHandler.UnregisterFCMToken)
 		}
 
 		// Search and discovery routes (require auth)
