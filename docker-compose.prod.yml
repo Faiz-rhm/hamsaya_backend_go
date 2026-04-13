@@ -159,7 +159,7 @@ services:
       # JWT
       JWT_SECRET: ${JWT_SECRET:?JWT secret required}
       JWT_ACCESS_TOKEN_DURATION: "15m"
-      JWT_REFRESH_TOKEN_DURATION: "168h"
+      JWT_REFRESH_TOKEN_DURATION: "720h"
 
       # Storage
       STORAGE_ENDPOINT: "minio:9000"
