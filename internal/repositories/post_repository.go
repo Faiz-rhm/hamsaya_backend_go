@@ -62,6 +62,10 @@ type PostRepository interface {
 	// ListExpiredSellPostsNeedingNotification returns SELL posts that are expired (not sold, expired_at <= asOf)
 	// and have not yet had a SELL_EXPIRED notification created. Used by the expire-sell-notify job.
 	ListExpiredSellPostsNeedingNotification(ctx context.Context, asOf time.Time) ([]*models.Post, error)
+
+	// MarkSellPostsExpired deactivates the given sell posts by setting status = false.
+	// Called after SELL_EXPIRED notifications have been sent so posts are hidden from feeds.
+	MarkSellPostsExpired(ctx context.Context, postIDs []string) error
 }
 
 // locationSelectFragment selects post location columns as four doubles instead
@@ -878,6 +882,16 @@ func (r *postRepository) ListExpiredSellPostsNeedingNotification(ctx context.Con
 		posts = append(posts, post)
 	}
 	return posts, rows.Err()
+}
+
+// MarkSellPostsExpired sets status = false for the given post IDs so they are hidden from feeds.
+func (r *postRepository) MarkSellPostsExpired(ctx context.Context, postIDs []string) error {
+	if len(postIDs) == 0 {
+		return nil
+	}
+	query := `UPDATE posts SET status = false, updated_at = NOW() WHERE id = ANY($1)`
+	_, err := r.db.Pool.Exec(ctx, query, postIDs)
+	return err
 }
 
 // GetPostsByIDs fetches multiple posts by their IDs in a single query.

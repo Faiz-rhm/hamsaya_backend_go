@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"fmt"
 	"hash/fnv"
 	"sort"
 	"strings"
@@ -1294,4 +1295,69 @@ func (s *PostService) validatePostRequest(req *models.CreatePostRequest) error {
 	}
 
 	return nil
+}
+
+// ProcessExpiredSellPosts finds all SELL posts that have passed their expiry date without
+// being sold, sends a SELL_EXPIRED push notification to each owner, then deactivates the posts
+// so they no longer appear in feeds. Returns the number of posts processed.
+func (s *PostService) ProcessExpiredSellPosts(ctx context.Context) (int, error) {
+	now := time.Now()
+
+	posts, err := s.postRepo.ListExpiredSellPostsNeedingNotification(ctx, now)
+	if err != nil {
+		return 0, fmt.Errorf("failed to list expired sell posts: %w", err)
+	}
+
+	if len(posts) == 0 {
+		return 0, nil
+	}
+
+	expiredIDs := make([]string, 0, len(posts))
+	for _, post := range posts {
+		if post.UserID == nil {
+			continue
+		}
+
+		title := "Your listing has expired"
+		var body string
+		if post.Title != nil && *post.Title != "" {
+			body = fmt.Sprintf("Your sell listing \"%s\" has expired. Mark it as sold or repost it.", *post.Title)
+		} else {
+			body = "One of your sell listings has expired. Mark it as sold or repost it."
+		}
+
+		notifType := models.NotificationTypeSellExpired
+		_, notifErr := s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
+			UserID:  *post.UserID,
+			Type:    notifType,
+			Title:   &title,
+			Message: &body,
+			Data: map[string]interface{}{
+				"post_id": post.ID,
+				"type":    string(notifType),
+			},
+		})
+		if notifErr != nil {
+			s.logger.Warn("Failed to send SELL_EXPIRED notification",
+				zap.String("post_id", post.ID),
+				zap.String("user_id", *post.UserID),
+				zap.Error(notifErr),
+			)
+			// Do not skip deactivation — still deactivate the post even if notification fails.
+		}
+
+		expiredIDs = append(expiredIDs, post.ID)
+	}
+
+	if len(expiredIDs) > 0 {
+		if err := s.postRepo.MarkSellPostsExpired(ctx, expiredIDs); err != nil {
+			s.logger.Error("Failed to deactivate expired sell posts", zap.Error(err))
+			return len(expiredIDs), fmt.Errorf("failed to deactivate expired sell posts: %w", err)
+		}
+	}
+
+	s.logger.Info("Expired sell posts processed",
+		zap.Int("count", len(expiredIDs)),
+	)
+	return len(expiredIDs), nil
 }

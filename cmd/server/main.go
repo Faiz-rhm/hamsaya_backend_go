@@ -607,6 +607,33 @@ func main() {
 	// Wait for interrupt signal to gracefully shut down the server
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Background job: expire unsold SELL posts and notify owners (runs every hour)
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		// Run once immediately on startup to catch any posts that expired while server was down
+		if count, err := postService.ProcessExpiredSellPosts(context.Background()); err != nil {
+			sugaredLogger.Warnw("Sell expiry job failed", "error", err)
+		} else if count > 0 {
+			sugaredLogger.Infow("Sell expiry job completed", "expired_count", count)
+		}
+
+		for {
+			select {
+			case <-ticker.C:
+				if count, err := postService.ProcessExpiredSellPosts(context.Background()); err != nil {
+					sugaredLogger.Warnw("Sell expiry job failed", "error", err)
+				} else if count > 0 {
+					sugaredLogger.Infow("Sell expiry job completed", "expired_count", count)
+				}
+			case <-quit:
+				return
+			}
+		}
+	}()
+
 	<-quit
 
 	sugaredLogger.Info("Shutting down server...")
