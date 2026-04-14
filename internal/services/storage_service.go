@@ -74,16 +74,24 @@ func NewStorageService(cfg *config.Config, logger *zap.Logger) *StorageService {
 
 // UploadImage uploads an image and returns photo metadata
 func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, header *multipart.FileHeader, imageType ImageType) (*models.Photo, error) {
-	// Validate file size (max 10MB)
-	maxSize := int64(10 * 1024 * 1024)
-	if header.Size > maxSize {
-		return nil, utils.NewBadRequestError("File size exceeds 10MB limit", nil)
+	const maxSize = int64(10 * 1024 * 1024) // 10 MB
+
+	// Validate Content-Type header BEFORE reading bytes to reject non-images cheaply.
+	contentType := header.Header.Get("Content-Type")
+	if !s.isValidImageType(contentType) {
+		return nil, utils.NewBadRequestError(
+			fmt.Sprintf("Invalid image type: %s. Only JPEG, PNG, and WebP are allowed", contentType), nil)
 	}
 
-	// Read image data first
-	data, err := io.ReadAll(file)
+	// Use LimitReader so we never allocate more than maxSize+1 bytes regardless of
+	// what the multipart header claims — header.Size can be spoofed by clients.
+	limited := io.LimitReader(file, maxSize+1)
+	data, err := io.ReadAll(limited)
 	if err != nil {
 		return nil, utils.NewBadRequestError("Failed to read image file", err)
+	}
+	if int64(len(data)) > maxSize {
+		return nil, utils.NewBadRequestError("File size exceeds 10MB limit", nil)
 	}
 
 	// Decode image to validate it and get format/dimensions
@@ -93,13 +101,10 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 		return nil, utils.NewBadRequestError("Invalid image file", err)
 	}
 
-	// Use the multipart Content-Type if valid; otherwise infer from decoded format
-	contentType := header.Header.Get("Content-Type")
-	if !s.isValidImageType(contentType) {
-		contentType = mimeFromFormat(format)
-		if !s.isValidImageType(contentType) {
-			return nil, utils.NewBadRequestError(fmt.Sprintf("Invalid image type: %s. Only JPEG, PNG, and WebP are allowed", contentType), nil)
-		}
+	// Re-check MIME using the actual decoded format in case the header was misleading
+	if !s.isValidImageType(mimeFromFormat(format)) {
+		return nil, utils.NewBadRequestError(
+			fmt.Sprintf("Decoded image format %q is not allowed. Only JPEG, PNG, and WebP are accepted", format), nil)
 	}
 
 	// Process image based on type
@@ -195,10 +200,9 @@ func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipar
 
 	if isVideoContentType(contentType) {
 		// Video: larger limit, no image processing, upload raw file.
-		if header.Size > maxPostVideoSize {
-			return nil, utils.NewBadRequestError("Video file size exceeds 50MB limit", nil)
-		}
-		data, err := io.ReadAll(file)
+		// Use LimitReader to enforce the cap regardless of the (spoofable) header.Size.
+		limited := io.LimitReader(file, maxPostVideoSize+1)
+		data, err := io.ReadAll(limited)
 		if err != nil {
 			return nil, utils.NewBadRequestError("Failed to read file", err)
 		}

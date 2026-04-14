@@ -71,10 +71,10 @@ func SendError(c *gin.Context, statusCode int, message string, err error) {
 			"client_ip", c.ClientIP(),
 		)
 
-		// Only expose error details in development environment
-		// In production, internal errors (SQL, file paths, stack traces) are hidden
+		// Only expose error details in development environment.
+		// An unset ENV defaults to production-safe behavior (no detail exposure).
 		env := os.Getenv("ENV")
-		if env == "development" || env == "dev" || env == "" {
+		if env == "development" || env == "dev" {
 			response.Error = err.Error()
 		}
 	}

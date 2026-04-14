@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -49,6 +50,15 @@ func (c *Client) ReadPump() {
 				)
 			}
 			break
+		}
+
+		// Reject non-JSON payloads before any further processing.
+		// This prevents malformed/binary blobs from reaching business logic.
+		if !json.Valid(message) {
+			c.Hub.logger.Warn("Received invalid JSON WebSocket message, ignoring",
+				zap.String("user_id", c.ID),
+			)
+			continue
 		}
 
 		// Handle incoming message (typing indicators, read receipts, etc.)

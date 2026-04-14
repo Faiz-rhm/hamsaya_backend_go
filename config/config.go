@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -274,8 +275,16 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// Reject weak or default JWT secrets at startup to prevent accidental insecure deployments.
+	const defaultJWTSecret = "your-super-secret-jwt-key-change-this-in-production"
+	if cfg.JWT.Secret == "" || cfg.JWT.Secret == defaultJWTSecret || len(cfg.JWT.Secret) < 32 {
+		return nil, fmt.Errorf(
+			"JWT_SECRET must be set to a strong, unique secret of at least 32 characters " +
+				"(current value is empty, the default placeholder, or too short)")
+	}
+
 	// Default CORS in development so admin panel (e.g. localhost:3001) works without .env
-	if cfg.Server.Env == "development" || cfg.Server.Env == "" {
+	if cfg.Server.Env == "development" {
 		if len(cfg.CORS.AllowedOrigins) == 0 {
 			cfg.CORS.AllowedOrigins = []string{
 				"http://localhost:3000", "http://localhost:3001", "http://localhost:5173",

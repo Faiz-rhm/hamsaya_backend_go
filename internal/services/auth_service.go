@@ -832,11 +832,12 @@ func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID s
 func (s *AuthService) ForgotPassword(ctx context.Context, req *models.ForgotPasswordRequest) (err error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Get user by email
+	// Get user by email — always return nil to prevent account enumeration via status codes.
+	// If the account does not exist, we silently succeed (no error, no email sent).
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
-		s.logger.Warn("Password reset requested for non-existent email", zap.String("email", email))
-		return utils.NewNotFoundError("No account found with this email", err)
+		s.logger.Info("Password reset requested for unknown email (no-op)", zap.String("email", email))
+		return nil
 	}
 
 	// Generate 6-digit reset code (entered in app; same pattern as email verification)

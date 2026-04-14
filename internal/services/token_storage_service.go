@@ -2,12 +2,22 @@ package services
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// hashToken returns the hex-encoded SHA-256 digest of token.
+// Using a hash as the Redis key prevents enumeration of short codes
+// (e.g. 6-digit OTPs) by anyone with read access to Redis.
+func hashToken(token string) string {
+	sum := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(sum[:])
+}
 
 // TokenStorageService handles storing and retrieving tokens in Redis
 type TokenStorageService struct {
@@ -25,7 +35,7 @@ func NewTokenStorageService(redisClient *redis.Client, logger *zap.Logger) *Toke
 
 // StoreVerificationToken stores an email verification token
 func (s *TokenStorageService) StoreVerificationToken(ctx context.Context, userID, token string, ttl time.Duration) error {
-	key := fmt.Sprintf("verify:email:%s", token)
+	key := fmt.Sprintf("verify:email:%s", hashToken(token))
 	err := s.redis.Set(ctx, key, userID, ttl).Err()
 	if err != nil {
 		s.logger.Error("Failed to store verification token",
@@ -44,7 +54,7 @@ func (s *TokenStorageService) StoreVerificationToken(ctx context.Context, userID
 
 // GetUserIDFromVerificationToken retrieves user ID from verification token
 func (s *TokenStorageService) GetUserIDFromVerificationToken(ctx context.Context, token string) (string, error) {
-	key := fmt.Sprintf("verify:email:%s", token)
+	key := fmt.Sprintf("verify:email:%s", hashToken(token))
 	userID, err := s.redis.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return "", fmt.Errorf("verification token not found or expired")
@@ -62,7 +72,7 @@ func (s *TokenStorageService) GetUserIDFromVerificationToken(ctx context.Context
 
 // DeleteVerificationToken removes a verification token
 func (s *TokenStorageService) DeleteVerificationToken(ctx context.Context, token string) error {
-	key := fmt.Sprintf("verify:email:%s", token)
+	key := fmt.Sprintf("verify:email:%s", hashToken(token))
 	err := s.redis.Del(ctx, key).Err()
 	if err != nil {
 		s.logger.Error("Failed to delete verification token",
@@ -77,7 +87,7 @@ func (s *TokenStorageService) DeleteVerificationToken(ctx context.Context, token
 
 // StorePasswordResetToken stores a password reset token
 func (s *TokenStorageService) StorePasswordResetToken(ctx context.Context, userID, token string, ttl time.Duration) error {
-	key := fmt.Sprintf("reset:password:%s", token)
+	key := fmt.Sprintf("reset:password:%s", hashToken(token))
 	err := s.redis.Set(ctx, key, userID, ttl).Err()
 	if err != nil {
 		s.logger.Error("Failed to store password reset token",
@@ -96,7 +106,7 @@ func (s *TokenStorageService) StorePasswordResetToken(ctx context.Context, userI
 
 // GetUserIDFromPasswordResetToken retrieves user ID from password reset token
 func (s *TokenStorageService) GetUserIDFromPasswordResetToken(ctx context.Context, token string) (string, error) {
-	key := fmt.Sprintf("reset:password:%s", token)
+	key := fmt.Sprintf("reset:password:%s", hashToken(token))
 	userID, err := s.redis.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return "", fmt.Errorf("password reset token not found or expired")
@@ -114,7 +124,7 @@ func (s *TokenStorageService) GetUserIDFromPasswordResetToken(ctx context.Contex
 
 // DeletePasswordResetToken removes a password reset token
 func (s *TokenStorageService) DeletePasswordResetToken(ctx context.Context, token string) error {
-	key := fmt.Sprintf("reset:password:%s", token)
+	key := fmt.Sprintf("reset:password:%s", hashToken(token))
 	err := s.redis.Del(ctx, key).Err()
 	if err != nil {
 		s.logger.Error("Failed to delete password reset token",

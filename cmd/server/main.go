@@ -299,8 +299,8 @@ func main() {
 			// Email and password flows
 			auth.POST("/verify-email", rateLimiter.LimitAuth(), authHandler.VerifyEmail)
 			auth.POST("/forgot-password", rateLimiter.LimitStrict(), authHandler.ForgotPassword)
-			auth.POST("/verify-reset-code", rateLimiter.LimitAuth(), authHandler.VerifyResetCode)
-			auth.POST("/reset-password", rateLimiter.LimitAuth(), authHandler.ResetPassword)
+			auth.POST("/verify-reset-code", rateLimiter.LimitPasswordReset(), authHandler.VerifyResetCode)
+			auth.POST("/reset-password", rateLimiter.LimitPasswordReset(), authHandler.ResetPassword)
 
 			// MFA verification
 			auth.POST("/mfa/verify", rateLimiter.LimitAuth(), authHandler.VerifyMFA)

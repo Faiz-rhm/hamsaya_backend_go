@@ -35,9 +35,12 @@ func SecurityHeaders() gin.HandlerFunc {
 		// Enable HSTS if behind TLS terminating proxy or direct HTTPS
 		// Check X-Forwarded-Proto for reverse proxy setups
 		if c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https" {
-			// max-age=1 year, include subdomains
-			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload")
+			// max-age=2 years, include subdomains
+			c.Header("Strict-Transport-Security", "max-age=63072000; includeSubDomains; preload")
 		}
+
+		// Block cross-domain policies (Adobe Flash/Acrobat)
+		c.Header("X-Permitted-Cross-Domain-Policies", "none")
 
 		// Permissions-Policy (formerly Feature-Policy) - restrict browser features
 		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")

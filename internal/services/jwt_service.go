@@ -84,8 +84,9 @@ func (s *JWTService) GenerateRefreshToken() (string, error) {
 // ValidateAccessToken validates and parses an access token
 func (s *JWTService) ValidateAccessToken(tokenString string) (*models.JWTClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Verify signing method
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+		// Explicitly require HS256 — reject none, RS256, and other algorithms
+		// to prevent algorithm confusion attacks (e.g. alg:none, RS256 with HMAC key)
+		if token.Method != jwt.SigningMethodHS256 {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
 		return []byte(s.cfg.Secret), nil

@@ -41,6 +41,12 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      24 * time.Hour,
 		KeyPrefix:   "ratelimit:reports:",
 	},
+	// password-reset: tighter window for OTP/code verification to slow brute-force on 6-digit codes
+	"password-reset": {
+		MaxRequests: 3,
+		Window:      10 * time.Minute,
+		KeyPrefix:   "ratelimit:pwreset:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
@@ -225,21 +231,23 @@ func (rl *RateLimiter) LimitByUser(config RateLimitConfig) gin.HandlerFunc {
 	}
 }
 
-// LimitLoginAttempts specifically limits login attempts per IP
+// LimitLoginAttempts specifically limits login attempts per IP.
+// Limit: 3 attempts per 15 minutes per IP.
 func (rl *RateLimiter) LimitLoginAttempts() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Use IP-based rate limiting for login attempts
-		// This prevents brute force attacks on the login endpoint
-		// Limit: 5 attempts per 15 minutes per IP
-
 		config := RateLimitConfig{
-			MaxRequests: 5,
+			MaxRequests: 3,
 			Window:      15 * time.Minute,
 			KeyPrefix:   "ratelimit:login:",
 		}
-
 		rl.Limit(config)(c)
 	}
+}
+
+// LimitPasswordReset limits password-reset OTP verification attempts per IP.
+// Limit: 3 attempts per 10 minutes — tight enough to prevent brute-forcing 6-digit codes.
+func (rl *RateLimiter) LimitPasswordReset() gin.HandlerFunc {
+	return rl.LimitByType("password-reset")
 }
 
 // ClearRateLimit clears rate limit for a specific key (useful for testing or admin actions)

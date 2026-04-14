@@ -23,8 +23,8 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 			}
 		}
 
-		// Always set CORS headers for allowed origins or wildcard
-		if allowed || len(cfg.AllowedOrigins) > 0 && cfg.AllowedOrigins[0] == "*" {
+		// Always set CORS headers for allowed origins
+		if allowed {
 			if origin != "" {
 				c.Header("Access-Control-Allow-Origin", origin)
 			} else {
