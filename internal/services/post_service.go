@@ -1133,8 +1133,11 @@ func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, rec
 		"actor_avatar_color": actorAvatarColor,
 		"post_id":            postID,
 	}
-	if post, err := s.postRepo.GetByID(ctx, postID); err == nil && post.BusinessID != nil && *post.BusinessID != "" {
-		data["business_id"] = *post.BusinessID
+	if post, err := s.postRepo.GetByID(ctx, postID); err == nil {
+		data["post_type"] = strings.ToUpper(string(post.Type))
+		if post.BusinessID != nil && *post.BusinessID != "" {
+			data["business_id"] = *post.BusinessID
+		}
 	}
 	s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
 		UserID:  recipientUserID,
@@ -1195,6 +1198,9 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 		"actor_avatar":       actorAvatar,
 		"actor_avatar_color": actorAvatarColor,
 		"post_id":            postID,
+	}
+	if post, err := s.postRepo.GetByID(ctx, postID); err == nil {
+		data["post_type"] = strings.ToUpper(string(post.Type))
 	}
 	if businessID != nil && *businessID != "" {
 		data["business_id"] = *businessID

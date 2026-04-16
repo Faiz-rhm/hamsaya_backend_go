@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"hash/fnv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -160,6 +161,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				"actor_avatar":       actorAvatar,
 				"actor_avatar_color": actorAvatarColor,
 				"post_id":            postID,
+				"post_type":          strings.ToUpper(string(post.Type)),
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
@@ -207,6 +209,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				"actor_avatar":       actorAvatar,
 				"actor_avatar_color": actorAvatarColor,
 				"post_id":            postID,
+				"post_type":          strings.ToUpper(string(post.Type)),
 				"comment_id":         *req.ParentCommentID,
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
@@ -254,12 +257,13 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				title := actorName + " mentioned you in a comment"
 				msg := title
 				data := map[string]interface{}{
-					"actor_id":     userID,
-					"actor_name":   actorName,
-					"actor_avatar": actorAvatar,
+					"actor_id":           userID,
+					"actor_name":         actorName,
+					"actor_avatar":       actorAvatar,
 					"actor_avatar_color": actorAvatarColor,
-					"post_id":      postID,
-					"comment_id":   commentID,
+					"post_id":            postID,
+					"post_type":          strings.ToUpper(string(post.Type)),
+					"comment_id":         commentID,
 				}
 				if post.BusinessID != nil && *post.BusinessID != "" {
 					data["business_id"] = *post.BusinessID

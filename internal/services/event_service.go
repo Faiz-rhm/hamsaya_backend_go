@@ -118,6 +118,7 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 				"actor_avatar":       actor.Avatar,
 				"actor_avatar_color": actorAvatarColor,
 				"post_id":            postID,
+				"post_type":          "EVENT",
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
