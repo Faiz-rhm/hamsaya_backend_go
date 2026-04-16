@@ -589,12 +589,19 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		}
 	}
 
-	// Cursor-based pagination: parse optional cursor param (RFC3339Nano or RFC3339)
+	// Cursor-based pagination.
+	// - recent/nearby: cursor is a RFC3339Nano timestamp (keyset on created_at)
+	// - trending:      cursor is a plain integer string representing the next OFFSET,
+	//                  because trending results are sorted by a computed score, not a
+	//                  stable column, so timestamp keyset pagination cannot be used.
 	if cursorStr := c.Query("cursor"); cursorStr != "" {
 		if t, err := time.Parse(time.RFC3339Nano, cursorStr); err == nil {
 			filter.Cursor = &t
 		} else if t, err := time.Parse(time.RFC3339, cursorStr); err == nil {
 			filter.Cursor = &t
+		} else if offset, err := strconv.Atoi(cursorStr); err == nil && filter.SortBy == "trending" {
+			filter.Offset = offset
+			page = (offset/filter.Limit) + 1
 		}
 	}
 
@@ -625,9 +632,15 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		"sort_by": filter.SortBy,
 	}
 
-	// Emit next_cursor so clients can request the next page without OFFSET
-	if len(posts) > 0 && len(posts) == filter.Limit && (filter.SortBy == "recent" || filter.SortBy == "") {
-		sorts["next_cursor"] = posts[len(posts)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+	// Emit next_cursor for all sort modes.
+	// Trending uses an integer offset cursor (score-ranked, no stable keyset column).
+	// Recent/nearby use a RFC3339Nano timestamp cursor (keyset on created_at).
+	if len(posts) > 0 && len(posts) == filter.Limit {
+		if filter.SortBy == "trending" {
+			sorts["next_cursor"] = strconv.Itoa(filter.Offset + filter.Limit)
+		} else {
+			sorts["next_cursor"] = posts[len(posts)-1].CreatedAt.UTC().Format(time.RFC3339Nano)
+		}
 	}
 
 	utils.SendPaginatedWithFilters(c, posts, page, filter.Limit, totalCount, filters, sorts)

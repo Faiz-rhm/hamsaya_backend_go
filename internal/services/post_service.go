@@ -707,7 +707,23 @@ func (s *PostService) GetPersonalizedFeed(ctx context.Context, viewerID string, 
 
 	allIDs := mergeDedupe(fanoutIDs, celebIDs)
 	if len(allIDs) == 0 {
-		return []*models.PostResponse{}, nil, nil
+		// No fanout entries yet (new user, no follows, or table freshly migrated with no
+		// backfill). Fall back to a generic recent-posts feed so the screen is never blank.
+		fallbackFilter := &models.FeedFilter{
+			SortBy: "recent",
+			Limit:  filter.Limit,
+			Cursor: filter.Cursor,
+		}
+		posts, _, err := s.GetFeed(ctx, fallbackFilter, &viewerID)
+		if err != nil {
+			return []*models.PostResponse{}, nil, nil
+		}
+		var nextCursor *time.Time
+		if len(posts) == filter.Limit && len(posts) > 0 {
+			t := posts[len(posts)-1].CreatedAt
+			nextCursor = &t
+		}
+		return posts, nextCursor, nil
 	}
 
 	posts, err := s.postRepo.GetPostsByIDs(ctx, allIDs)
