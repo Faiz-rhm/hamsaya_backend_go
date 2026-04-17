@@ -52,6 +52,18 @@ func NewNotificationService(
 	}
 }
 
+// channelForType returns the Android notification channel ID for the type.
+func channelForType(t models.NotificationType) string {
+	switch t {
+	case models.NotificationTypeMessage:
+		return "messages"
+	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing:
+		return "events"
+	default:
+		return "general"
+	}
+}
+
 // typeToCategory maps a notification type to its preference category.
 func typeToCategory(t models.NotificationType) models.NotificationCategory {
 	switch t {
@@ -421,10 +433,11 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 	data["type"] = string(notification.Type)
 
 	payload := &fcmclient.PushPayload{
-		Title: title,
-		Body:  body,
-		Data:  data,
-		Sound: "default",
+		Title:     title,
+		Body:      body,
+		Data:      data,
+		Sound:     "default",
+		ChannelID: channelForType(notification.Type),
 	}
 
 	// Send notification

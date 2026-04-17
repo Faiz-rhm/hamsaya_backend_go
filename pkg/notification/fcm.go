@@ -89,28 +89,39 @@ func (f *FCMClient) SendNotification(ctx context.Context, token string, payload 
 		message.Notification.ImageURL = payload.ImageURL
 	}
 
-	// Android specific config
-	if payload.Sound != "" || payload.ClickAction != "" {
-		message.Android = &messaging.AndroidConfig{
-			Notification: &messaging.AndroidNotification{
-				Sound:       payload.Sound,
-				ClickAction: payload.ClickAction,
-			},
-		}
+	// Android: always set high priority and channel ID so notifications wake the
+	// device immediately and land in the correct channel (API 26+).
+	channelID := payload.ChannelID
+	if channelID == "" {
+		channelID = "general"
+	}
+	apnsSound := payload.Sound
+	if apnsSound == "" {
+		apnsSound = "default"
+	}
+	message.Android = &messaging.AndroidConfig{
+		Priority: "high",
+		Notification: &messaging.AndroidNotification{
+			ChannelID:   channelID,
+			Sound:       payload.Sound,
+			ClickAction: payload.ClickAction,
+		},
 	}
 
-	// iOS specific config
-	if payload.Badge != nil || payload.Sound != "" {
-		message.APNS = &messaging.APNSConfig{
-			Payload: &messaging.APNSPayload{
-				Aps: &messaging.Aps{
-					Sound: payload.Sound,
-				},
+	// iOS: always include APNS headers for reliable immediate delivery.
+	message.APNS = &messaging.APNSConfig{
+		Headers: map[string]string{
+			"apns-push-type": "alert",
+			"apns-priority":  "10",
+		},
+		Payload: &messaging.APNSPayload{
+			Aps: &messaging.Aps{
+				Sound: apnsSound,
 			},
-		}
-		if payload.Badge != nil {
-			message.APNS.Payload.Aps.Badge = payload.Badge
-		}
+		},
+	}
+	if payload.Badge != nil {
+		message.APNS.Payload.Aps.Badge = payload.Badge
 	}
 
 	// Send message
@@ -151,28 +162,38 @@ func (f *FCMClient) SendMulticast(ctx context.Context, tokens []string, payload 
 		message.Notification.ImageURL = payload.ImageURL
 	}
 
-	// Android specific config
-	if payload.Sound != "" || payload.ClickAction != "" {
-		message.Android = &messaging.AndroidConfig{
-			Notification: &messaging.AndroidNotification{
-				Sound:       payload.Sound,
-				ClickAction: payload.ClickAction,
-			},
-		}
+	// Android: always set high priority and channel ID.
+	multicastChannelID := payload.ChannelID
+	if multicastChannelID == "" {
+		multicastChannelID = "general"
+	}
+	multicastAPNSSound := payload.Sound
+	if multicastAPNSSound == "" {
+		multicastAPNSSound = "default"
+	}
+	message.Android = &messaging.AndroidConfig{
+		Priority: "high",
+		Notification: &messaging.AndroidNotification{
+			ChannelID:   multicastChannelID,
+			Sound:       payload.Sound,
+			ClickAction: payload.ClickAction,
+		},
 	}
 
-	// iOS specific config
-	if payload.Badge != nil || payload.Sound != "" {
-		message.APNS = &messaging.APNSConfig{
-			Payload: &messaging.APNSPayload{
-				Aps: &messaging.Aps{
-					Sound: payload.Sound,
-				},
+	// iOS: always include APNS headers for reliable immediate delivery.
+	message.APNS = &messaging.APNSConfig{
+		Headers: map[string]string{
+			"apns-push-type": "alert",
+			"apns-priority":  "10",
+		},
+		Payload: &messaging.APNSPayload{
+			Aps: &messaging.Aps{
+				Sound: multicastAPNSSound,
 			},
-		}
-		if payload.Badge != nil {
-			message.APNS.Payload.Aps.Badge = payload.Badge
-		}
+		},
+	}
+	if payload.Badge != nil {
+		message.APNS.Payload.Aps.Badge = payload.Badge
 	}
 
 	// Send to multiple devices
@@ -230,11 +251,12 @@ func (f *FCMClient) UnsubscribeFromTopic(ctx context.Context, tokens []string, t
 
 // PushPayload represents the payload for push notifications
 type PushPayload struct {
-	Title       string                 `json:"title"`
-	Body        string                 `json:"body"`
-	Data        map[string]string      `json:"data,omitempty"`
-	ImageURL    string                 `json:"image_url,omitempty"`
-	Sound       string                 `json:"sound,omitempty"`
-	Badge       *int                   `json:"badge,omitempty"`
-	ClickAction string                 `json:"click_action,omitempty"`
+	Title       string            `json:"title"`
+	Body        string            `json:"body"`
+	Data        map[string]string `json:"data,omitempty"`
+	ImageURL    string            `json:"image_url,omitempty"`
+	Sound       string            `json:"sound,omitempty"`
+	Badge       *int              `json:"badge,omitempty"`
+	ClickAction string            `json:"click_action,omitempty"`
+	ChannelID   string            `json:"channel_id,omitempty"` // Android notification channel
 }
