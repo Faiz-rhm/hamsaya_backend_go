@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/hamsaya/backend/internal/models"
@@ -182,7 +184,7 @@ func (s *AdminService) SuspendUser(ctx context.Context, userID string, days int,
 		zap.String("reason", reason),
 		zap.Time("until", until),
 	)
-	
+	s.writeAuditLog(ctx, adminID, "suspend_user", "user", userID, map[string]interface{}{"days": days, "reason": reason}, "")
 	return nil
 }
 
@@ -198,7 +200,7 @@ func (s *AdminService) UnsuspendUser(ctx context.Context, userID string, adminID
 		zap.String("user_id", userID),
 		zap.String("admin_id", adminID),
 	)
-	
+	s.writeAuditLog(ctx, adminID, "unsuspend_user", "user", userID, nil, "")
 	return nil
 }
 
@@ -217,7 +219,7 @@ func (s *AdminService) UpdateUserRole(ctx context.Context, userID string, role s
 		zap.String("admin_id", adminID),
 		zap.String("new_role", role),
 	)
-	
+	s.writeAuditLog(ctx, adminID, "update_role", "user", userID, map[string]interface{}{"role": role}, "")
 	return nil
 }
 
@@ -233,7 +235,7 @@ func (s *AdminService) DeleteUser(ctx context.Context, userID string, adminID st
 		zap.String("user_id", userID),
 		zap.String("admin_id", adminID),
 	)
-	
+	s.writeAuditLog(ctx, adminID, "delete_user", "user", userID, nil, "")
 	return nil
 }
 
@@ -298,7 +300,7 @@ func (s *AdminService) UpdatePostStatus(ctx context.Context, postID, status, adm
 		zap.String("admin_id", adminID),
 		zap.String("status", status),
 	)
-	
+	s.writeAuditLog(ctx, adminID, "update_post_status", "post", postID, map[string]interface{}{"status": status}, "")
 	return nil
 }
 
@@ -310,6 +312,7 @@ func (s *AdminService) DeletePost(ctx context.Context, postID, adminID string) e
 		return utils.NewInternalError("Failed to delete post", err)
 	}
 	
+	s.writeAuditLog(ctx, adminID, "delete_post", "post", postID, nil, "")
 	s.logger.Info("Post deleted",
 		zap.String("post_id", postID),
 		zap.String("admin_id", adminID),
@@ -370,6 +373,7 @@ func (s *AdminService) DeleteComment(ctx context.Context, commentID, adminID str
 		s.logger.Warn("Failed to resolve comment reports for deleted comment", zap.String("comment_id", commentID), zap.Error(err))
 		// non-fatal: comment was already deleted
 	}
+	s.writeAuditLog(ctx, adminID, "delete_comment", "comment", commentID, nil, "")
 	s.logger.Info("Comment deleted",
 		zap.String("comment_id", commentID),
 		zap.String("admin_id", adminID),
@@ -384,6 +388,7 @@ func (s *AdminService) RestoreComment(ctx context.Context, commentID, adminID st
 		s.logger.Error("Failed to restore comment", zap.String("comment_id", commentID), zap.Error(err))
 		return utils.NewInternalError("Failed to restore comment", err)
 	}
+	s.writeAuditLog(ctx, adminID, "restore_comment", "comment", commentID, nil, "")
 	s.logger.Info("Comment restored",
 		zap.String("comment_id", commentID),
 		zap.String("admin_id", adminID),
@@ -461,12 +466,12 @@ func (s *AdminService) UpdateBusinessStatus(ctx context.Context, businessID, sta
 		return utils.NewInternalError("Failed to update business status", err)
 	}
 	
+	s.writeAuditLog(ctx, adminID, "update_business_status", "business", businessID, map[string]interface{}{"status": status}, "")
 	s.logger.Info("Business status updated",
 		zap.String("business_id", businessID),
 		zap.String("admin_id", adminID),
 		zap.String("status", status),
 	)
-	
 	return nil
 }
 
@@ -478,11 +483,11 @@ func (s *AdminService) DeleteBusiness(ctx context.Context, businessID, adminID s
 		return utils.NewInternalError("Failed to delete business", err)
 	}
 	
+	s.writeAuditLog(ctx, adminID, "delete_business", "business", businessID, nil, "")
 	s.logger.Info("Business deleted",
 		zap.String("business_id", businessID),
 		zap.String("admin_id", adminID),
 	)
-	
 	return nil
 }
 
@@ -673,13 +678,13 @@ func (s *AdminService) UpdateReportStatus(ctx context.Context, reportType, repor
 		return utils.NewInternalError("Failed to update report status", err)
 	}
 	
+	s.writeAuditLog(ctx, adminID, "resolve_report", "report", reportID, map[string]interface{}{"type": reportType, "status": status}, "")
 	s.logger.Info("Report status updated",
 		zap.String("report_type", reportType),
 		zap.String("report_id", reportID),
 		zap.String("admin_id", adminID),
 		zap.String("status", status),
 	)
-	
 	return nil
 }
 
@@ -787,3 +792,146 @@ func (s *AdminService) ListFeedback(ctx context.Context, filter *models.AdminFee
 }
 
 // (help-center chat listing for admin was removed; feedback list remains.)
+
+// ResolveFeedback marks a feedback item as reviewed or resolved
+func (s *AdminService) ResolveFeedback(ctx context.Context, feedbackID, adminID, status string, notes *string) error {
+	if err := s.adminRepo.ResolveFeedback(ctx, feedbackID, adminID, status, notes); err != nil {
+		s.logger.Error("Failed to resolve feedback", zap.Error(err))
+		return utils.NewInternalError("Failed to resolve feedback", err)
+	}
+	s.writeAuditLog(ctx, adminID, "resolve_feedback", "feedback", feedbackID, map[string]interface{}{"status": status}, "")
+	return nil
+}
+
+// WriteAuditLog records an admin action — called internally from service methods
+func (s *AdminService) writeAuditLog(ctx context.Context, adminID, action, entityType, entityID string, details map[string]interface{}, ipAddress string) {
+	_ = s.adminRepo.CreateAuditLog(ctx, &models.CreateAuditLogRequest{
+		AdminID:    adminID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Details:    details,
+		IPAddress:  ipAddress,
+	})
+}
+
+// ListAuditLogs returns paginated audit log entries
+func (s *AdminService) ListAuditLogs(ctx context.Context, filter *models.AuditLogFilter) ([]*models.AuditLog, int64, error) {
+	items, total, err := s.adminRepo.ListAuditLogs(ctx, filter)
+	if err != nil {
+		s.logger.Error("Failed to list audit logs", zap.Error(err))
+		return nil, 0, utils.NewInternalError("Failed to list audit logs", err)
+	}
+	return items, total, nil
+}
+
+// CreateAdminInvite generates an invite token for a new admin/moderator
+func (s *AdminService) CreateAdminInvite(ctx context.Context, req *models.CreateAdminInviteRequest, invitedBy string) (*models.AdminInvite, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return nil, utils.NewInternalError("Failed to generate invite token", err)
+	}
+	token := hex.EncodeToString(b)
+	expiresAt := time.Now().Add(72 * time.Hour)
+	if err := s.adminRepo.CreateAdminInvite(ctx, req.Email, token, req.Role, invitedBy, expiresAt); err != nil {
+		s.logger.Error("Failed to create admin invite", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to create invite", err)
+	}
+	s.writeAuditLog(ctx, invitedBy, "invite_admin", "user", "", map[string]interface{}{"email": req.Email, "role": req.Role}, "")
+	return &models.AdminInvite{
+		Email:     req.Email,
+		Role:      req.Role,
+		ExpiresAt: expiresAt,
+	}, nil
+}
+
+// ListAdminInvites returns all pending invites
+func (s *AdminService) ListAdminInvites(ctx context.Context) ([]*models.AdminInvite, error) {
+	items, err := s.adminRepo.ListAdminInvites(ctx)
+	if err != nil {
+		return nil, utils.NewInternalError("Failed to list invites", err)
+	}
+	return items, nil
+}
+
+// RevokeAdminInvite deletes an unused invite
+func (s *AdminService) RevokeAdminInvite(ctx context.Context, inviteID, adminID string) error {
+	if err := s.adminRepo.RevokeAdminInvite(ctx, inviteID); err != nil {
+		return utils.NewInternalError("Failed to revoke invite", err)
+	}
+	s.writeAuditLog(ctx, adminID, "revoke_invite", "invite", inviteID, nil, "")
+	return nil
+}
+
+// ListAdmins returns all admin and moderator accounts
+func (s *AdminService) ListAdmins(ctx context.Context) ([]*models.AdminActiveUser, error) {
+	items, err := s.adminRepo.ListAdmins(ctx)
+	if err != nil {
+		return nil, utils.NewInternalError("Failed to list admins", err)
+	}
+	return items, nil
+}
+
+// CreateIPBan bans an IP address
+func (s *AdminService) CreateIPBan(ctx context.Context, req *models.CreateIPBanRequest, adminID string) error {
+	var expiresAt *time.Time
+	if req.Days != nil && *req.Days > 0 {
+		t := time.Now().Add(time.Duration(*req.Days) * 24 * time.Hour)
+		expiresAt = &t
+	}
+	if err := s.adminRepo.CreateIPBan(ctx, req.IPAddress, adminID, req.Reason, expiresAt); err != nil {
+		return utils.NewInternalError("Failed to ban IP", err)
+	}
+	s.writeAuditLog(ctx, adminID, "ban_ip", "ip_ban", req.IPAddress, map[string]interface{}{"ip": req.IPAddress}, "")
+	return nil
+}
+
+// ListIPBans returns all IP bans
+func (s *AdminService) ListIPBans(ctx context.Context, page, limit int) ([]*models.IPBan, int64, error) {
+	items, total, err := s.adminRepo.ListIPBans(ctx, page, limit)
+	if err != nil {
+		return nil, 0, utils.NewInternalError("Failed to list IP bans", err)
+	}
+	return items, total, nil
+}
+
+// DeleteIPBan removes an IP ban
+func (s *AdminService) DeleteIPBan(ctx context.Context, banID, adminID string) error {
+	if err := s.adminRepo.DeleteIPBan(ctx, banID); err != nil {
+		return utils.NewInternalError("Failed to remove IP ban", err)
+	}
+	s.writeAuditLog(ctx, adminID, "unban_ip", "ip_ban", banID, nil, "")
+	return nil
+}
+
+// CreateDeviceBan bans a device
+func (s *AdminService) CreateDeviceBan(ctx context.Context, req *models.CreateDeviceBanRequest, adminID string) error {
+	var expiresAt *time.Time
+	if req.Days != nil && *req.Days > 0 {
+		t := time.Now().Add(time.Duration(*req.Days) * 24 * time.Hour)
+		expiresAt = &t
+	}
+	if err := s.adminRepo.CreateDeviceBan(ctx, req.DeviceID, adminID, req.Reason, expiresAt); err != nil {
+		return utils.NewInternalError("Failed to ban device", err)
+	}
+	s.writeAuditLog(ctx, adminID, "ban_device", "device_ban", req.DeviceID, map[string]interface{}{"device_id": req.DeviceID}, "")
+	return nil
+}
+
+// ListDeviceBans returns all device bans
+func (s *AdminService) ListDeviceBans(ctx context.Context, page, limit int) ([]*models.DeviceBan, int64, error) {
+	items, total, err := s.adminRepo.ListDeviceBans(ctx, page, limit)
+	if err != nil {
+		return nil, 0, utils.NewInternalError("Failed to list device bans", err)
+	}
+	return items, total, nil
+}
+
+// DeleteDeviceBan removes a device ban
+func (s *AdminService) DeleteDeviceBan(ctx context.Context, banID, adminID string) error {
+	if err := s.adminRepo.DeleteDeviceBan(ctx, banID); err != nil {
+		return utils.NewInternalError("Failed to remove device ban", err)
+	}
+	s.writeAuditLog(ctx, adminID, "unban_device", "device_ban", banID, nil, "")
+	return nil
+}

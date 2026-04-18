@@ -561,6 +561,28 @@ func main() {
 			// Push Notifications
 			admin.POST("/notifications/broadcast", adminHandler.BroadcastNotification)
 			admin.POST("/notifications/send", adminHandler.SendTargetedNotification)
+
+			// Audit Logs
+			admin.GET("/audit-logs", adminHandler.ListAuditLogs)
+
+			// Feedback Resolution
+			admin.PUT("/feedback/:feedback_id/resolve", adminHandler.ResolveFeedback)
+
+			// Admin Account Management
+			admin.GET("/accounts", adminHandler.ListAdmins)
+			admin.GET("/accounts/invites", adminHandler.ListAdminInvites)
+			admin.POST("/accounts/invites", adminHandler.CreateAdminInvite)
+			admin.DELETE("/accounts/invites/:invite_id", adminHandler.RevokeAdminInvite)
+
+			// IP Bans
+			admin.GET("/bans/ip", adminHandler.ListIPBans)
+			admin.POST("/bans/ip", adminHandler.CreateIPBan)
+			admin.DELETE("/bans/ip/:ban_id", adminHandler.DeleteIPBan)
+
+			// Device Bans
+			admin.GET("/bans/devices", adminHandler.ListDeviceBans)
+			admin.POST("/bans/devices", adminHandler.CreateDeviceBan)
+			admin.DELETE("/bans/devices/:ban_id", adminHandler.DeleteDeviceBan)
 		}
 
 		// Placeholder for future routes

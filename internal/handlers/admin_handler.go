@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -1012,4 +1013,179 @@ func (h *AdminHandler) handleError(c *gin.Context, err error) {
 	}
 	h.logger.Error("Unhandled error in admin handler", zap.Error(err))
 	utils.SendInternalServerError(c, "An error occurred", err)
+}
+
+// ListAuditLogs returns paginated audit log entries
+func (h *AdminHandler) ListAuditLogs(c *gin.Context) {
+	var filter models.AuditLogFilter
+	if err := c.ShouldBindQuery(&filter); err != nil {
+		utils.SendBadRequest(c, "Invalid query parameters", err)
+		return
+	}
+	items, total, err := h.adminService.ListAuditLogs(c.Request.Context(), &filter)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Audit logs retrieved", gin.H{
+		"logs":        items,
+		"total_count": total,
+		"page":        filter.Page,
+		"limit":       filter.Limit,
+	})
+}
+
+// ResolveFeedback marks a feedback item as reviewed or resolved
+func (h *AdminHandler) ResolveFeedback(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	feedbackID := c.Param("feedback_id")
+	if _, err := uuid.Parse(feedbackID); err != nil {
+		utils.SendBadRequest(c, "Invalid feedback ID", err)
+		return
+	}
+	var req models.ResolveFeedbackRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	if err := h.adminService.ResolveFeedback(c.Request.Context(), feedbackID, adminID, req.Status, req.AdminNotes); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Feedback resolved", nil)
+}
+
+// CreateAdminInvite generates an invite link for a new admin/moderator
+func (h *AdminHandler) CreateAdminInvite(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	var req models.CreateAdminInviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	invite, err := h.adminService.CreateAdminInvite(c.Request.Context(), &req, adminID)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusCreated, "Invite created", invite)
+}
+
+// ListAdminInvites returns all pending admin invitations
+func (h *AdminHandler) ListAdminInvites(c *gin.Context) {
+	items, err := h.adminService.ListAdminInvites(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Invites retrieved", items)
+}
+
+// RevokeAdminInvite deletes an unused invite
+func (h *AdminHandler) RevokeAdminInvite(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	inviteID := c.Param("invite_id")
+	if err := h.adminService.RevokeAdminInvite(c.Request.Context(), inviteID, adminID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Invite revoked", nil)
+}
+
+// ListAdmins returns all admin and moderator accounts
+func (h *AdminHandler) ListAdmins(c *gin.Context) {
+	items, err := h.adminService.ListAdmins(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Admins retrieved", items)
+}
+
+// CreateIPBan bans an IP address
+func (h *AdminHandler) CreateIPBan(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	var req models.CreateIPBanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	if err := h.adminService.CreateIPBan(c.Request.Context(), &req, adminID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusCreated, "IP banned", nil)
+}
+
+// ListIPBans returns all IP bans
+func (h *AdminHandler) ListIPBans(c *gin.Context) {
+	page := 1
+	limit := 50
+	if v, err := strconv.Atoi(c.Query("page")); err == nil && v > 0 {
+		page = v
+	}
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil && v > 0 {
+		limit = v
+	}
+	items, total, err := h.adminService.ListIPBans(c.Request.Context(), page, limit)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "IP bans retrieved", gin.H{"bans": items, "total_count": total})
+}
+
+// DeleteIPBan removes an IP ban
+func (h *AdminHandler) DeleteIPBan(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	banID := c.Param("ban_id")
+	if err := h.adminService.DeleteIPBan(c.Request.Context(), banID, adminID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "IP ban removed", nil)
+}
+
+// CreateDeviceBan bans a device
+func (h *AdminHandler) CreateDeviceBan(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	var req models.CreateDeviceBanRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	if err := h.adminService.CreateDeviceBan(c.Request.Context(), &req, adminID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusCreated, "Device banned", nil)
+}
+
+// ListDeviceBans returns all device bans
+func (h *AdminHandler) ListDeviceBans(c *gin.Context) {
+	page := 1
+	limit := 50
+	if v, err := strconv.Atoi(c.Query("page")); err == nil && v > 0 {
+		page = v
+	}
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil && v > 0 {
+		limit = v
+	}
+	items, total, err := h.adminService.ListDeviceBans(c.Request.Context(), page, limit)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Device bans retrieved", gin.H{"bans": items, "total_count": total})
+}
+
+// DeleteDeviceBan removes a device ban
+func (h *AdminHandler) DeleteDeviceBan(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	banID := c.Param("ban_id")
+	if err := h.adminService.DeleteDeviceBan(c.Request.Context(), banID, adminID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Device ban removed", nil)
 }

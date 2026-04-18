@@ -435,22 +435,27 @@ type BroadcastNotificationRequest struct {
 
 // AdminFeedbackResponse is user feedback for admin list
 type AdminFeedbackResponse struct {
-	ID         string    `json:"id"`
-	UserID     string    `json:"user_id"`
-	UserEmail  string    `json:"user_email"`
-	Rating     int       `json:"rating"` // 1-5
-	Type       string    `json:"type"`   // GENERAL, BUG, FEATURE, IMPROVEMENT
-	Message    string    `json:"message"`
-	AppVersion *string   `json:"app_version,omitempty"`
-	DeviceInfo *string   `json:"device_info,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID          string     `json:"id"`
+	UserID      string     `json:"user_id"`
+	UserEmail   string     `json:"user_email"`
+	Rating      int        `json:"rating"`
+	Type        string     `json:"type"`
+	Message     string     `json:"message"`
+	AppVersion  *string    `json:"app_version,omitempty"`
+	DeviceInfo  *string    `json:"device_info,omitempty"`
+	Status      string     `json:"status"`
+	ResolvedBy  *string    `json:"resolved_by,omitempty"`
+	ResolvedAt  *time.Time `json:"resolved_at,omitempty"`
+	AdminNotes  *string    `json:"admin_notes,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
 }
 
 // AdminFeedbackFilter is filter for listing feedback
 type AdminFeedbackFilter struct {
 	Page   int    `form:"page"`
 	Limit  int    `form:"limit"`
-	Type   string `form:"type"` // GENERAL, BUG, FEATURE, IMPROVEMENT or empty for all
+	Type   string `form:"type"`   // GENERAL, BUG, FEATURE, IMPROVEMENT or empty for all
+	Status string `form:"status"` // OPEN, REVIEWING, RESOLVED or empty for all
 }
 
 
@@ -480,4 +485,108 @@ type PaginatedResponse struct {
 	Page       int         `json:"page"`
 	Limit      int         `json:"limit"`
 	TotalPages int         `json:"total_pages"`
+}
+
+// AuditLog records an admin action
+type AuditLog struct {
+	ID         string                 `json:"id"`
+	AdminID    string                 `json:"admin_id"`
+	AdminEmail string                 `json:"admin_email"`
+	Action     string                 `json:"action"`
+	EntityType string                 `json:"entity_type"`
+	EntityID   *string                `json:"entity_id,omitempty"`
+	Details    map[string]interface{} `json:"details,omitempty"`
+	IPAddress  *string                `json:"ip_address,omitempty"`
+	CreatedAt  time.Time              `json:"created_at"`
+}
+
+// AuditLogFilter filters for listing audit logs
+type AuditLogFilter struct {
+	AdminID    string `form:"admin_id"`
+	Action     string `form:"action"`
+	EntityType string `form:"entity_type"`
+	Page       int    `form:"page"`
+	Limit      int    `form:"limit"`
+}
+
+// CreateAuditLogRequest is used internally to write an audit entry
+type CreateAuditLogRequest struct {
+	AdminID    string
+	Action     string
+	EntityType string
+	EntityID   string
+	Details    map[string]interface{}
+	IPAddress  string
+}
+
+// AdminInvite represents a pending admin/moderator invitation
+type AdminInvite struct {
+	ID          string     `json:"id"`
+	Email       string     `json:"email"`
+	Role        string     `json:"role"`
+	InvitedByID string     `json:"invited_by_id"`
+	InvitedBy   string     `json:"invited_by"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	UsedAt      *time.Time `json:"used_at,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+}
+
+// CreateAdminInviteRequest creates an invite
+type CreateAdminInviteRequest struct {
+	Email string `json:"email" binding:"required,email"`
+	Role  string `json:"role" binding:"required,oneof=admin moderator"`
+}
+
+// IPBan represents a banned IP address
+type IPBan struct {
+	ID        string     `json:"id"`
+	IPAddress string     `json:"ip_address"`
+	Reason    *string    `json:"reason,omitempty"`
+	BannedBy  string     `json:"banned_by"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// CreateIPBanRequest bans an IP
+type CreateIPBanRequest struct {
+	IPAddress string  `json:"ip_address" binding:"required"`
+	Reason    *string `json:"reason,omitempty"`
+	Days      *int    `json:"days,omitempty"`
+}
+
+// DeviceBan represents a banned device ID
+type DeviceBan struct {
+	ID        string     `json:"id"`
+	DeviceID  string     `json:"device_id"`
+	Reason    *string    `json:"reason,omitempty"`
+	BannedBy  string     `json:"banned_by"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+}
+
+// CreateDeviceBanRequest bans a device
+type CreateDeviceBanRequest struct {
+	DeviceID string  `json:"device_id" binding:"required"`
+	Reason   *string `json:"reason,omitempty"`
+	Days     *int    `json:"days,omitempty"`
+}
+
+// ResolveFeedbackRequest resolves a feedback item
+type ResolveFeedbackRequest struct {
+	Status     string  `json:"status" binding:"required,oneof=REVIEWING RESOLVED"`
+	AdminNotes *string `json:"admin_notes,omitempty"`
+}
+
+// BulkActionRequest performs an action on multiple entities
+type BulkActionRequest struct {
+	IDs    []string `json:"ids" binding:"required,min=1"`
+	Action string   `json:"action" binding:"required"`
+}
+
+// AdminActiveUser is a simplified admin user for account management lists
+type AdminActiveUser struct {
+	ID        string    `json:"id"`
+	Email     string    `json:"email"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
 }

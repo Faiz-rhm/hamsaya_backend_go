@@ -68,7 +68,32 @@ type AdminRepository interface {
 	GetUserIDsByProvince(ctx context.Context, province string) ([]string, error)
 
 	ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error)
+	ResolveFeedback(ctx context.Context, feedbackID, adminID, status string, notes *string) error
 	GetBusinessAnalytics(ctx context.Context, period string) (*models.BusinessAnalytics, error)
+
+	// Audit logs
+	CreateAuditLog(ctx context.Context, req *models.CreateAuditLogRequest) error
+	ListAuditLogs(ctx context.Context, filter *models.AuditLogFilter) ([]*models.AuditLog, int64, error)
+
+	// Admin invites
+	CreateAdminInvite(ctx context.Context, email, token, role, invitedBy string, expiresAt time.Time) error
+	ListAdminInvites(ctx context.Context) ([]*models.AdminInvite, error)
+	RevokeAdminInvite(ctx context.Context, inviteID string) error
+	GetAdminInviteByToken(ctx context.Context, token string) (*models.AdminInvite, error)
+	UseAdminInvite(ctx context.Context, token string) error
+	ListAdmins(ctx context.Context) ([]*models.AdminActiveUser, error)
+
+	// IP bans
+	CreateIPBan(ctx context.Context, ipAddress, bannedBy string, reason *string, expiresAt *time.Time) error
+	ListIPBans(ctx context.Context, page, limit int) ([]*models.IPBan, int64, error)
+	DeleteIPBan(ctx context.Context, banID string) error
+	IsIPBanned(ctx context.Context, ipAddress string) (bool, error)
+
+	// Device bans
+	CreateDeviceBan(ctx context.Context, deviceID, bannedBy string, reason *string, expiresAt *time.Time) error
+	ListDeviceBans(ctx context.Context, page, limit int) ([]*models.DeviceBan, int64, error)
+	DeleteDeviceBan(ctx context.Context, banID string) error
+	IsDeviceBanned(ctx context.Context, deviceID string) (bool, error)
 }
 
 type adminRepository struct {
@@ -1899,32 +1924,37 @@ func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.Admin
 	}
 	offset := (page - 1) * limit
 
+	var conditions []string
 	var countArgs []interface{}
-	countConditions := "1=1"
 	argIdx := 1
 	if filter.Type != "" {
-		countConditions = fmt.Sprintf("f.type = $%d", argIdx)
+		conditions = append(conditions, fmt.Sprintf("f.type = $%d", argIdx))
 		countArgs = append(countArgs, filter.Type)
 		argIdx++
 	}
-	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM user_feedback f WHERE %s`, countConditions)
+	if filter.Status != "" {
+		conditions = append(conditions, fmt.Sprintf("f.status = $%d", argIdx))
+		countArgs = append(countArgs, filter.Status)
+		argIdx++
+	}
+	whereClause := "1=1"
+	if len(conditions) > 0 {
+		whereClause = strings.Join(conditions, " AND ")
+	}
+
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM user_feedback f WHERE %s`, whereClause)
 	var totalCount int64
 	err := r.db.Pool.QueryRow(ctx, countQuery, countArgs...).Scan(&totalCount)
 	if err != nil {
 		return nil, 0, err
 	}
 
-	args := make([]interface{}, 0, 4)
-	whereClause := "1=1"
-	argIndex := 1
-	if filter.Type != "" {
-		whereClause = fmt.Sprintf("f.type = $%d", argIndex)
-		args = append(args, filter.Type)
-		argIndex++
-	}
-	args = append(args, limit, offset)
+	args := append(countArgs, limit, offset)
+	argIndex := argIdx
 	query := fmt.Sprintf(`
-		SELECT f.id, f.user_id, COALESCE(u.email, ''), f.rating, f.type, f.message, f.app_version, f.device_info, f.created_at
+		SELECT f.id, f.user_id, COALESCE(u.email, ''), f.rating, f.type, f.message,
+		       f.app_version, f.device_info, COALESCE(f.status, 'OPEN'),
+		       f.resolved_by::text, f.resolved_at, f.admin_notes, f.created_at
 		FROM user_feedback f
 		LEFT JOIN users u ON f.user_id = u.id
 		WHERE %s
@@ -1941,13 +1971,26 @@ func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.Admin
 	var items []*models.AdminFeedbackResponse
 	for rows.Next() {
 		var f models.AdminFeedbackResponse
-		err := rows.Scan(&f.ID, &f.UserID, &f.UserEmail, &f.Rating, &f.Type, &f.Message, &f.AppVersion, &f.DeviceInfo, &f.CreatedAt)
+		err := rows.Scan(
+			&f.ID, &f.UserID, &f.UserEmail, &f.Rating, &f.Type, &f.Message,
+			&f.AppVersion, &f.DeviceInfo, &f.Status,
+			&f.ResolvedBy, &f.ResolvedAt, &f.AdminNotes, &f.CreatedAt,
+		)
 		if err != nil {
 			return nil, 0, err
 		}
 		items = append(items, &f)
 	}
 	return items, totalCount, nil
+}
+
+func (r *adminRepository) ResolveFeedback(ctx context.Context, feedbackID, adminID, status string, notes *string) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		UPDATE user_feedback
+		SET status = $1, resolved_by = $2, resolved_at = NOW(), admin_notes = $3
+		WHERE id = $4
+	`, status, adminID, notes, feedbackID)
+	return err
 }
 
 // (help-center chat for admin was removed; feedback remains the primary channel.)
@@ -2066,4 +2109,312 @@ func (r *adminRepository) getPeriodInterval(period string) string {
 	default:
 		return "30 days"
 	}
+}
+
+// --- Audit Logs ---
+
+func (r *adminRepository) CreateAuditLog(ctx context.Context, req *models.CreateAuditLogRequest) error {
+	var detailsJSON []byte
+	var err error
+	if req.Details != nil {
+		detailsJSON, err = json.Marshal(req.Details)
+		if err != nil {
+			return err
+		}
+	}
+	var entityID *string
+	if req.EntityID != "" {
+		entityID = &req.EntityID
+	}
+	var ipAddress *string
+	if req.IPAddress != "" {
+		ipAddress = &req.IPAddress
+	}
+	_, err = r.db.Pool.Exec(ctx, `
+		INSERT INTO audit_logs (admin_id, action, entity_type, entity_id, details, ip_address)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, req.AdminID, req.Action, req.EntityType, entityID, detailsJSON, ipAddress)
+	return err
+}
+
+func (r *adminRepository) ListAuditLogs(ctx context.Context, filter *models.AuditLogFilter) ([]*models.AuditLog, int64, error) {
+	limit := 50
+	if filter.Limit > 0 && filter.Limit <= 200 {
+		limit = filter.Limit
+	}
+	page := 1
+	if filter.Page > 0 {
+		page = filter.Page
+	}
+	offset := (page - 1) * limit
+
+	var conditions []string
+	var args []interface{}
+	argIdx := 1
+
+	if filter.AdminID != "" {
+		conditions = append(conditions, fmt.Sprintf("l.admin_id = $%d", argIdx))
+		args = append(args, filter.AdminID)
+		argIdx++
+	}
+	if filter.Action != "" {
+		conditions = append(conditions, fmt.Sprintf("l.action = $%d", argIdx))
+		args = append(args, filter.Action)
+		argIdx++
+	}
+	if filter.EntityType != "" {
+		conditions = append(conditions, fmt.Sprintf("l.entity_type = $%d", argIdx))
+		args = append(args, filter.EntityType)
+		argIdx++
+	}
+
+	where := "1=1"
+	if len(conditions) > 0 {
+		where = strings.Join(conditions, " AND ")
+	}
+
+	var total int64
+	countArgs := make([]interface{}, len(args))
+	copy(countArgs, args)
+	err := r.db.Pool.QueryRow(ctx, fmt.Sprintf(`SELECT COUNT(*) FROM audit_logs l WHERE %s`, where), countArgs...).Scan(&total)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	args = append(args, limit, offset)
+	query := fmt.Sprintf(`
+		SELECT l.id, l.admin_id, COALESCE(u.email, ''), l.action, l.entity_type,
+		       l.entity_id::text, l.details, l.ip_address, l.created_at
+		FROM audit_logs l
+		LEFT JOIN users u ON l.admin_id = u.id
+		WHERE %s
+		ORDER BY l.created_at DESC
+		LIMIT $%d OFFSET $%d
+	`, where, argIdx, argIdx+1)
+
+	rows, err := r.db.Pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []*models.AuditLog
+	for rows.Next() {
+		var l models.AuditLog
+		var detailsRaw []byte
+		err := rows.Scan(
+			&l.ID, &l.AdminID, &l.AdminEmail, &l.Action, &l.EntityType,
+			&l.EntityID, &detailsRaw, &l.IPAddress, &l.CreatedAt,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		if detailsRaw != nil {
+			_ = json.Unmarshal(detailsRaw, &l.Details)
+		}
+		items = append(items, &l)
+	}
+	return items, total, nil
+}
+
+// --- Admin Invites ---
+
+func (r *adminRepository) CreateAdminInvite(ctx context.Context, email, token, role, invitedBy string, expiresAt time.Time) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		INSERT INTO admin_invites (email, token, role, invited_by, expires_at)
+		VALUES ($1, $2, $3, $4, $5)
+		ON CONFLICT (token) DO NOTHING
+	`, email, token, role, invitedBy, expiresAt)
+	return err
+}
+
+func (r *adminRepository) ListAdminInvites(ctx context.Context) ([]*models.AdminInvite, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT i.id, i.email, i.role, i.invited_by, COALESCE(u.email, ''), i.expires_at, i.used_at, i.created_at
+		FROM admin_invites i
+		LEFT JOIN users u ON i.invited_by = u.id
+		ORDER BY i.created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []*models.AdminInvite
+	for rows.Next() {
+		var inv models.AdminInvite
+		err := rows.Scan(&inv.ID, &inv.Email, &inv.Role, &inv.InvitedByID, &inv.InvitedBy, &inv.ExpiresAt, &inv.UsedAt, &inv.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, &inv)
+	}
+	return items, nil
+}
+
+func (r *adminRepository) RevokeAdminInvite(ctx context.Context, inviteID string) error {
+	_, err := r.db.Pool.Exec(ctx, `DELETE FROM admin_invites WHERE id = $1 AND used_at IS NULL`, inviteID)
+	return err
+}
+
+func (r *adminRepository) GetAdminInviteByToken(ctx context.Context, token string) (*models.AdminInvite, error) {
+	var inv models.AdminInvite
+	err := r.db.Pool.QueryRow(ctx, `
+		SELECT id, email, role, invited_by, expires_at, used_at, created_at
+		FROM admin_invites WHERE token = $1
+	`, token).Scan(&inv.ID, &inv.Email, &inv.Role, &inv.InvitedByID, &inv.ExpiresAt, &inv.UsedAt, &inv.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &inv, nil
+}
+
+func (r *adminRepository) UseAdminInvite(ctx context.Context, token string) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE admin_invites SET used_at = NOW() WHERE token = $1`, token)
+	return err
+}
+
+func (r *adminRepository) ListAdmins(ctx context.Context) ([]*models.AdminActiveUser, error) {
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT id, email, role, created_at FROM users
+		WHERE role IN ('admin', 'moderator') AND deleted_at IS NULL
+		ORDER BY role, created_at
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []*models.AdminActiveUser
+	for rows.Next() {
+		var u models.AdminActiveUser
+		err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, &u)
+	}
+	return items, nil
+}
+
+// --- IP Bans ---
+
+func (r *adminRepository) CreateIPBan(ctx context.Context, ipAddress, bannedBy string, reason *string, expiresAt *time.Time) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		INSERT INTO ip_bans (ip_address, banned_by, reason, expires_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (ip_address) DO UPDATE SET reason = $3, expires_at = $4, banned_by = $2
+	`, ipAddress, bannedBy, reason, expiresAt)
+	return err
+}
+
+func (r *adminRepository) ListIPBans(ctx context.Context, page, limit int) ([]*models.IPBan, int64, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	var total int64
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM ip_bans`).Scan(&total)
+
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT b.id, b.ip_address, b.reason, COALESCE(u.email, b.banned_by::text), b.expires_at, b.created_at
+		FROM ip_bans b LEFT JOIN users u ON b.banned_by = u.id
+		ORDER BY b.created_at DESC LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []*models.IPBan
+	for rows.Next() {
+		var b models.IPBan
+		err := rows.Scan(&b.ID, &b.IPAddress, &b.Reason, &b.BannedBy, &b.ExpiresAt, &b.CreatedAt)
+		if err != nil {
+			return nil, 0, err
+		}
+		items = append(items, &b)
+	}
+	return items, total, nil
+}
+
+func (r *adminRepository) DeleteIPBan(ctx context.Context, banID string) error {
+	_, err := r.db.Pool.Exec(ctx, `DELETE FROM ip_bans WHERE id = $1`, banID)
+	return err
+}
+
+func (r *adminRepository) IsIPBanned(ctx context.Context, ipAddress string) (bool, error) {
+	var exists bool
+	err := r.db.Pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM ip_bans
+			WHERE ip_address = $1 AND (expires_at IS NULL OR expires_at > NOW())
+		)
+	`, ipAddress).Scan(&exists)
+	return exists, err
+}
+
+// --- Device Bans ---
+
+func (r *adminRepository) CreateDeviceBan(ctx context.Context, deviceID, bannedBy string, reason *string, expiresAt *time.Time) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		INSERT INTO device_bans (device_id, banned_by, reason, expires_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (device_id) DO UPDATE SET reason = $3, expires_at = $4, banned_by = $2
+	`, deviceID, bannedBy, reason, expiresAt)
+	return err
+}
+
+func (r *adminRepository) ListDeviceBans(ctx context.Context, page, limit int) ([]*models.DeviceBan, int64, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if page <= 0 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+
+	var total int64
+	_ = r.db.Pool.QueryRow(ctx, `SELECT COUNT(*) FROM device_bans`).Scan(&total)
+
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT b.id, b.device_id, b.reason, COALESCE(u.email, b.banned_by::text), b.expires_at, b.created_at
+		FROM device_bans b LEFT JOIN users u ON b.banned_by = u.id
+		ORDER BY b.created_at DESC LIMIT $1 OFFSET $2
+	`, limit, offset)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+
+	var items []*models.DeviceBan
+	for rows.Next() {
+		var b models.DeviceBan
+		err := rows.Scan(&b.ID, &b.DeviceID, &b.Reason, &b.BannedBy, &b.ExpiresAt, &b.CreatedAt)
+		if err != nil {
+			return nil, 0, err
+		}
+		items = append(items, &b)
+	}
+	return items, total, nil
+}
+
+func (r *adminRepository) DeleteDeviceBan(ctx context.Context, banID string) error {
+	_, err := r.db.Pool.Exec(ctx, `DELETE FROM device_bans WHERE id = $1`, banID)
+	return err
+}
+
+func (r *adminRepository) IsDeviceBanned(ctx context.Context, deviceID string) (bool, error) {
+	var exists bool
+	err := r.db.Pool.QueryRow(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM device_bans
+			WHERE device_id = $1 AND (expires_at IS NULL OR expires_at > NOW())
+		)
+	`, deviceID).Scan(&exists)
+	return exists, err
 }

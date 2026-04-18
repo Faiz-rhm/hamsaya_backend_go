@@ -1,0 +1,7 @@
+ALTER TABLE user_feedback
+    ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'REVIEWING', 'RESOLVED')),
+    ADD COLUMN IF NOT EXISTS resolved_by UUID REFERENCES users(id) ON DELETE SET NULL,
+    ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP WITH TIME ZONE,
+    ADD COLUMN IF NOT EXISTS admin_notes TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_user_feedback_status ON user_feedback(status);

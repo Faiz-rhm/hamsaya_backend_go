@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS device_bans;
+DROP TABLE IF EXISTS ip_bans;
