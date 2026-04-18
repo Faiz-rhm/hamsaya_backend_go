@@ -513,6 +513,7 @@ func main() {
 			admin.GET("/analytics/users", adminHandler.GetUserAnalytics)
 			admin.GET("/analytics/posts", adminHandler.GetPostAnalytics)
 			admin.GET("/analytics/engagement", adminHandler.GetEngagementAnalytics)
+			admin.GET("/analytics/businesses", adminHandler.GetBusinessAnalytics)
 
 			// User Management
 			admin.GET("/users", adminHandler.ListUsers)

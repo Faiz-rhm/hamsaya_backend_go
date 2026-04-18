@@ -155,6 +155,14 @@ func (s *BusinessService) GetBusiness(ctx context.Context, businessID string, vi
 		}
 	}
 
+	// Increment view count for non-owner viewers
+	isOwner := viewerID != nil && *viewerID == business.UserID
+	if !isOwner {
+		go func() {
+			_ = s.businessRepo.IncrementViews(context.Background(), businessID)
+		}()
+	}
+
 	// Enrich business
 	return s.enrichBusiness(ctx, business, viewerID)
 }

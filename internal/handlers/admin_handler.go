@@ -112,13 +112,36 @@ func (h *AdminHandler) GetPostAnalytics(c *gin.Context) {
 // @Router /admin/analytics/engagement [get]
 func (h *AdminHandler) GetEngagementAnalytics(c *gin.Context) {
 	period := c.DefaultQuery("period", "month")
-	
+
 	analytics, err := h.adminService.GetEngagementAnalytics(c.Request.Context(), period)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
 	utils.SendSuccess(c, http.StatusOK, "Engagement analytics retrieved successfully", analytics)
+}
+
+// GetBusinessAnalytics godoc
+// @Summary Get business analytics
+// @Description Get business growth and ranking analytics
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Param period query string false "Period (week, month, year)" default(month)
+// @Success 200 {object} utils.Response{data=models.BusinessAnalytics}
+// @Failure 401 {object} utils.Response
+// @Failure 403 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /admin/analytics/businesses [get]
+func (h *AdminHandler) GetBusinessAnalytics(c *gin.Context) {
+	period := c.DefaultQuery("period", "month")
+
+	analytics, err := h.adminService.GetBusinessAnalytics(c.Request.Context(), period)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Business analytics retrieved successfully", analytics)
 }
 
 // ListUsers godoc

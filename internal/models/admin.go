@@ -454,6 +454,25 @@ type AdminFeedbackFilter struct {
 }
 
 
+// BusinessAnalytics contains business growth and engagement analytics
+type BusinessAnalytics struct {
+	NewBusinessesOverTime []TimeSeriesData  `json:"new_businesses_over_time"`
+	TopByViews            []BusinessRankItem `json:"top_by_views"`
+	TopByFollowers        []BusinessRankItem `json:"top_by_followers"`
+	TotalBusinesses       int64             `json:"total_businesses"`
+	ActiveBusinesses      int64             `json:"active_businesses"`
+	PendingBusinesses     int64             `json:"pending_businesses"`
+	NewBusinessesInPeriod int64             `json:"new_businesses_in_period"`
+}
+
+// BusinessRankItem represents a business in a ranked list
+type BusinessRankItem struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Count  int64  `json:"count"`
+	Avatar *Photo `json:"avatar,omitempty"`
+}
+
 // PaginatedResponse is a generic paginated response
 type PaginatedResponse struct {
 	Items      interface{} `json:"items"`

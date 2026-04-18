@@ -47,6 +47,9 @@ type BusinessRepository interface {
 	GetAllCategories(ctx context.Context, search *string) ([]*models.BusinessCategory, error)
 	// GetOrCreateCategoryByName returns category id by name; creates the category if it doesn't exist.
 	GetOrCreateCategoryByName(ctx context.Context, name string) (string, error)
+
+	// Analytics
+	IncrementViews(ctx context.Context, businessID string) error
 }
 
 type businessRepository struct {
@@ -813,6 +816,14 @@ func (r *businessRepository) GetAllCategories(ctx context.Context, search *strin
 		categories = []*models.BusinessCategory{}
 	}
 	return categories, rows.Err()
+}
+
+func (r *businessRepository) IncrementViews(ctx context.Context, businessID string) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`UPDATE business_profiles SET total_views = total_views + 1 WHERE id = $1 AND deleted_at IS NULL`,
+		businessID,
+	)
+	return err
 }
 
 // GetOrCreateCategoryByName returns category id by name; creates the category if it doesn't exist.

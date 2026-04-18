@@ -74,6 +74,16 @@ func (s *AdminService) GetEngagementAnalytics(ctx context.Context, period string
 	return analytics, nil
 }
 
+// GetBusinessAnalytics retrieves business growth and ranking analytics
+func (s *AdminService) GetBusinessAnalytics(ctx context.Context, period string) (*models.BusinessAnalytics, error) {
+	analytics, err := s.adminRepo.GetBusinessAnalytics(ctx, period)
+	if err != nil {
+		s.logger.Error("Failed to get business analytics", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get business analytics", err)
+	}
+	return analytics, nil
+}
+
 // ListUsers lists users with filtering and pagination
 func (s *AdminService) ListUsers(ctx context.Context, filter *models.AdminUserFilter) (*models.PaginatedResponse, error) {
 	users, total, err := s.adminRepo.ListUsers(ctx, filter)

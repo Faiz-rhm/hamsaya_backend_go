@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -67,6 +68,7 @@ type AdminRepository interface {
 	GetUserIDsByProvince(ctx context.Context, province string) ([]string, error)
 
 	ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error)
+	GetBusinessAnalytics(ctx context.Context, period string) (*models.BusinessAnalytics, error)
 }
 
 type adminRepository struct {
@@ -1949,6 +1951,109 @@ func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.Admin
 }
 
 // (help-center chat for admin was removed; feedback remains the primary channel.)
+
+func (r *adminRepository) GetBusinessAnalytics(ctx context.Context, period string) (*models.BusinessAnalytics, error) {
+	analytics := &models.BusinessAnalytics{}
+	interval := r.getPeriodInterval(period)
+
+	timeQuery := fmt.Sprintf(`
+		SELECT DATE(created_at) as date, COUNT(*) as count
+		FROM business_profiles
+		WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '%s'
+		GROUP BY DATE(created_at)
+		ORDER BY date
+	`, interval)
+
+	rows, err := r.db.Pool.Query(ctx, timeQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var data models.TimeSeriesData
+		var date time.Time
+		if err := rows.Scan(&date, &data.Count); err != nil {
+			return nil, err
+		}
+		data.Date = date.Format("2006-01-02")
+		analytics.NewBusinessesOverTime = append(analytics.NewBusinessesOverTime, data)
+	}
+
+	topViewsQuery := `
+		SELECT id, name, avatar, total_views
+		FROM business_profiles
+		WHERE deleted_at IS NULL
+		ORDER BY total_views DESC
+		LIMIT 10
+	`
+	viewRows, err := r.db.Pool.Query(ctx, topViewsQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer viewRows.Close()
+	for viewRows.Next() {
+		var item models.BusinessRankItem
+		var avatarJSON *[]byte
+		if err := viewRows.Scan(&item.ID, &item.Name, &avatarJSON, &item.Count); err != nil {
+			return nil, err
+		}
+		if avatarJSON != nil {
+			var photo models.Photo
+			if err := json.Unmarshal(*avatarJSON, &photo); err == nil {
+				item.Avatar = &photo
+			}
+		}
+		analytics.TopByViews = append(analytics.TopByViews, item)
+	}
+
+	topFollowQuery := `
+		SELECT id, name, avatar, total_follow
+		FROM business_profiles
+		WHERE deleted_at IS NULL
+		ORDER BY total_follow DESC
+		LIMIT 10
+	`
+	followRows, err := r.db.Pool.Query(ctx, topFollowQuery)
+	if err != nil {
+		return nil, err
+	}
+	defer followRows.Close()
+	for followRows.Next() {
+		var item models.BusinessRankItem
+		var avatarJSON *[]byte
+		if err := followRows.Scan(&item.ID, &item.Name, &avatarJSON, &item.Count); err != nil {
+			return nil, err
+		}
+		if avatarJSON != nil {
+			var photo models.Photo
+			if err := json.Unmarshal(*avatarJSON, &photo); err == nil {
+				item.Avatar = &photo
+			}
+		}
+		analytics.TopByFollowers = append(analytics.TopByFollowers, item)
+	}
+
+	totalsQuery := fmt.Sprintf(`
+		SELECT
+			COUNT(*) as total,
+			COUNT(*) FILTER (WHERE status = true) as active,
+			COUNT(*) FILTER (WHERE status = false) as pending,
+			COUNT(*) FILTER (WHERE created_at >= CURRENT_DATE - INTERVAL '%s') as new_in_period
+		FROM business_profiles
+		WHERE deleted_at IS NULL
+	`, interval)
+	err = r.db.Pool.QueryRow(ctx, totalsQuery).Scan(
+		&analytics.TotalBusinesses,
+		&analytics.ActiveBusinesses,
+		&analytics.PendingBusinesses,
+		&analytics.NewBusinessesInPeriod,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return analytics, nil
+}
 
 func (r *adminRepository) getPeriodInterval(period string) string {
 	switch period {
