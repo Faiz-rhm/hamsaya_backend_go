@@ -14,14 +14,14 @@ func TestLoad(t *testing.T) {
 	os.Setenv("DB_PORT", "5432")
 	os.Setenv("DB_NAME", "test")
 	os.Setenv("REDIS_HOST", "localhost")
-	os.Setenv("JWT_SECRET", "test-secret")
+	os.Setenv("JWT_SECRET", "test-secret-key-at-least-32-characters-long")
 
 	cfg, err := Load()
 	assert.NoError(t, err)
 	assert.NotNil(t, cfg)
 	assert.Equal(t, "8080", cfg.Server.Port)
 	assert.Equal(t, "localhost", cfg.Database.Host)
-	assert.Equal(t, "test-secret", cfg.JWT.Secret)
+	assert.Equal(t, "test-secret-key-at-least-32-characters-long", cfg.JWT.Secret)
 }
 
 func TestDatabaseConfig_GetDSN(t *testing.T) {

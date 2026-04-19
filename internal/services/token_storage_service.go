@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -258,12 +260,18 @@ func (s *TokenStorageService) GetCachedSession(ctx context.Context, sessionID st
 		return nil, err
 	}
 
-	data := &SessionCacheData{}
-	var expiresUnix int64
-	_, err = fmt.Sscanf(value, "%s|%s|%t|%d",
-		&data.UserID, &data.AccessTokenHash, &data.Revoked, &expiresUnix)
+	parts := strings.Split(value, "|")
+	if len(parts) != 4 {
+		s.redis.Del(ctx, key)
+		return nil, nil
+	}
+	data := &SessionCacheData{
+		UserID:          parts[0],
+		AccessTokenHash: parts[1],
+		Revoked:         parts[2] == "true",
+	}
+	expiresUnix, err := strconv.ParseInt(parts[3], 10, 64)
 	if err != nil {
-		// Parse error — treat as cache miss, delete bad entry
 		s.redis.Del(ctx, key)
 		return nil, nil
 	}

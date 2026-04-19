@@ -329,7 +329,9 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 
 // notifyMessageSent sends a WebSocket notification to the recipient
 func (s *ChatService) notifyMessageSent(message *models.Message, recipientID string) {
-	// Send WebSocket message to recipient if they're connected
+	if s.wsHub == nil {
+		return
+	}
 	wsMessage := models.WSMessage{
 		Type: "message",
 		Payload: models.WSMessagePayload{
