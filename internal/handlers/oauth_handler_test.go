@@ -27,6 +27,7 @@ func newOAuthRouter(t *testing.T) *gin.Engine {
 	jwtSvc := services.NewJWTService(&cfg.JWT)
 	authSvc := services.NewAuthService(
 		userRepo,
+		nil,
 		passwordSvc,
 		jwtSvc,
 		nil,

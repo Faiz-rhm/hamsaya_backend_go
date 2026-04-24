@@ -49,6 +49,7 @@ type UserRepository interface {
 	RevokeAllUserSessions(ctx context.Context, userID string) error
 	RevokeAllUserSessionsExcept(ctx context.Context, userID string, exceptSessionID string) error
 	GetActiveSessions(ctx context.Context, userID string) ([]*models.UserSession, error)
+	DeleteExpiredSessions(ctx context.Context) (int64, error)
 }
 
 type userRepository struct {
@@ -861,4 +862,16 @@ func (r *userRepository) RevokeAllUserSessionsExcept(ctx context.Context, userID
 	now := time.Now()
 	_, err := r.db.Pool.Exec(ctx, query, userID, exceptSessionID, now, now)
 	return err
+}
+
+// DeleteExpiredSessions removes sessions that are either revoked or past their expiry date.
+func (r *userRepository) DeleteExpiredSessions(ctx context.Context) (int64, error) {
+	tag, err := r.db.Pool.Exec(ctx, `
+		DELETE FROM user_sessions
+		WHERE revoked = true OR expires_at < NOW()
+	`)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
 }

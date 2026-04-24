@@ -56,7 +56,7 @@ func newTestAuthService(userRepo *mocks.MockUserRepository, tokenStorage *TokenS
 	jwtSvc := NewJWTService(&cfg.JWT)
 	passwordSvc := NewPasswordService()
 	emailSvc := NewEmailService(&config.EmailConfig{}, zap.NewNop())
-	return NewAuthService(userRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, nil, cfg, zap.NewNop())
+	return NewAuthService(userRepo, nil, passwordSvc, jwtSvc, emailSvc, tokenStorage, nil, cfg, zap.NewNop())
 }
 
 func TestAuthService_Login(t *testing.T) {
@@ -789,7 +789,7 @@ func TestAuthService_VerifyMFA(t *testing.T) {
 		mfaRepo := &mocks.MockMFARepository{}
 		mfaSvc := NewMFAService(mfaRepo, userRepo, NewPasswordService(), zap.NewNop())
 		cfg := getTestConfig()
-		svc := NewAuthService(userRepo, NewPasswordService(), NewJWTService(&cfg.JWT), nil, tokenStorage, mfaSvc, cfg, zap.NewNop())
+		svc := NewAuthService(userRepo, nil, NewPasswordService(), NewJWTService(&cfg.JWT), nil, tokenStorage, mfaSvc, cfg, zap.NewNop())
 
 		_, err := svc.VerifyMFA(context.Background(), &models.MFAVerifyChallengeRequest{
 			ChallengeID: "bad-challenge", Code: "123456",

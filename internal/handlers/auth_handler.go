@@ -573,12 +573,42 @@ func (h *AuthHandler) handleError(c *gin.Context, err error) {
 	}
 }
 
+// AcceptAdminInvite godoc
+// @Summary Accept admin invite
+// @Description Create an admin/moderator account using a valid invite token
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.AcceptAdminInviteRequest true "Invite acceptance"
+// @Success 201 {object} utils.Response{data=models.AuthResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 409 {object} utils.Response
+// @Router /auth/accept-invite [post]
+func (h *AuthHandler) AcceptAdminInvite(c *gin.Context) {
+	var req models.AcceptAdminInviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+	resp, err := h.authService.AcceptAdminInvite(c.Request.Context(), &req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusCreated, "Admin account created successfully", resp)
+}
+
 // RegisterRoutes registers auth routes. Pass RequireAuth() as second arg to enable protected routes (logout, change-password, sessions).
 func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware ...gin.HandlerFunc) {
 	auth := router.Group("/auth")
 	{
 		// Public routes
 		auth.POST("/register", h.Register)
+		auth.POST("/accept-invite", h.AcceptAdminInvite)
 		auth.POST("/login", h.Login)
 		auth.POST("/refresh", h.RefreshToken)
 		auth.POST("/verify-email", h.VerifyEmail)

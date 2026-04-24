@@ -180,6 +180,7 @@ func main() {
 	feedbackRepo := repositories.NewFeedbackRepository(db)
 	adminRepo := repositories.NewAdminRepository(db)
 	fanoutRepo := repositories.NewFanoutRepository(db)
+	helpChatRepo := repositories.NewHelpChatRepository(db)
 
 	// Initialize services
 	sugaredLogger.Info("Initializing services...")
@@ -200,12 +201,13 @@ func main() {
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
-	authService := services.NewAuthService(userRepo, passwordService, jwtService, emailService, tokenStorage, mfaService, cfg, logger)
+	authService := services.NewAuthService(userRepo, adminRepo, passwordService, jwtService, emailService, tokenStorage, mfaService, cfg, logger)
 	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, wsHub, logger)
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
 	adminService := services.NewAdminService(adminRepo, fcmClient, notificationService, logger)
+	helpChatService := services.NewHelpChatService(helpChatRepo, logger)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")
@@ -213,6 +215,7 @@ func main() {
 	// verifiedAuth requires email verification; use for create/update/delete (post, comment, follow, etc.)
 	verifiedAuth := authMiddleware.RequireVerifiedEmail()
 	rateLimiter := middleware.NewRateLimiter(redisClient, logger)
+	banMiddleware := middleware.NewBanMiddleware(adminRepo, logger)
 
 	// Set Gin mode
 	if cfg.Server.Env == "production" {
@@ -231,6 +234,7 @@ func main() {
 	router.Use(middleware.CORS(cfg.CORS))
 	router.Use(middleware.RequestID())
 	router.Use(middleware.SecurityHeaders())
+	router.Use(banMiddleware.Enforce())
 
 	// OpenTelemetry: in-flight count, request duration/count metrics, and tracing
 	router.Use(telem.MeterRequestsInFlight())
@@ -260,6 +264,7 @@ func main() {
 	reportHandler := handlers.NewReportHandler(reportService)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
 	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
+	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
 
 	// Health check routes (no versioning)
 	router.GET("/health", healthHandler.Health)
@@ -504,6 +509,14 @@ func main() {
 			feedback.GET("/status", authMiddleware.RequireAuth(), feedbackHandler.GetFeedbackStatus)
 		}
 
+		// Help chat routes (user ↔ support)
+		helpChat := v1.Group("/help-chat")
+		helpChat.Use(authMiddleware.RequireAuth())
+		{
+			helpChat.POST("/messages", helpChatHandler.SendMessage)
+			helpChat.GET("/messages", helpChatHandler.GetMessages)
+		}
+
 		// Admin routes (require admin role)
 		admin := v1.Group("/admin")
 		admin.Use(authMiddleware.RequireAdmin())
@@ -583,6 +596,11 @@ func main() {
 			admin.GET("/bans/devices", adminHandler.ListDeviceBans)
 			admin.POST("/bans/devices", adminHandler.CreateDeviceBan)
 			admin.DELETE("/bans/devices/:ban_id", adminHandler.DeleteDeviceBan)
+
+			// Help chat management
+			admin.GET("/help-chat", helpChatHandler.AdminGetThreads)
+			admin.GET("/help-chat/:user_id", helpChatHandler.AdminGetUserThread)
+			admin.POST("/help-chat/:user_id/reply", helpChatHandler.AdminReply)
 		}
 
 		// Placeholder for future routes
@@ -651,6 +669,31 @@ func main() {
 					sugaredLogger.Warnw("Sell expiry job failed", "error", err)
 				} else if count > 0 {
 					sugaredLogger.Infow("Sell expiry job completed", "expired_count", count)
+				}
+			case <-quit:
+				return
+			}
+		}
+	}()
+
+	// Background job: purge expired and revoked sessions (runs every 24 hours)
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		if count, err := userRepo.DeleteExpiredSessions(context.Background()); err != nil {
+			sugaredLogger.Warnw("Session cleanup job failed", "error", err)
+		} else if count > 0 {
+			sugaredLogger.Infow("Session cleanup completed", "deleted_count", count)
+		}
+
+		for {
+			select {
+			case <-ticker.C:
+				if count, err := userRepo.DeleteExpiredSessions(context.Background()); err != nil {
+					sugaredLogger.Warnw("Session cleanup job failed", "error", err)
+				} else if count > 0 {
+					sugaredLogger.Infow("Session cleanup completed", "deleted_count", count)
 				}
 			case <-quit:
 				return

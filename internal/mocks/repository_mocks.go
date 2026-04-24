@@ -158,6 +158,11 @@ func (m *MockUserRepository) GetActiveSessions(ctx context.Context, userID strin
 	return args.Get(0).([]*models.UserSession), args.Error(1)
 }
 
+func (m *MockUserRepository) DeleteExpiredSessions(ctx context.Context) (int64, error) {
+	args := m.Called(ctx)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 // MockPostRepository is a mock implementation of PostRepository
 type MockPostRepository struct {
 	mock.Mock

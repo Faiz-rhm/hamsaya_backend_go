@@ -54,7 +54,7 @@ func buildAuthHandler(t *testing.T, userRepo *mocks.MockUserRepository) *AuthHan
 	jwtSvc := services.NewJWTService(&cfg.JWT)
 	passwordSvc := services.NewPasswordService()
 	emailSvc := services.NewEmailService(&config.EmailConfig{}, zap.NewNop())
-	authSvc := services.NewAuthService(userRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, nil, cfg, zap.NewNop())
+	authSvc := services.NewAuthService(userRepo, nil, passwordSvc, jwtSvc, emailSvc, tokenStorage, nil, cfg, zap.NewNop())
 	return NewAuthHandler(authSvc, testutil.CreateTestValidator(), zap.NewNop())
 }
 
@@ -901,7 +901,7 @@ func newAuthRouterWithMFA(t *testing.T, userRepo *mocks.MockUserRepository, mfaR
 	passwordSvc := services.NewPasswordService()
 	emailSvc := services.NewEmailService(&config.EmailConfig{}, zap.NewNop())
 	mfaSvc := services.NewMFAService(mfaRepo, userRepo, passwordSvc, zap.NewNop())
-	authSvc := services.NewAuthService(userRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, mfaSvc, cfg, zap.NewNop())
+	authSvc := services.NewAuthService(userRepo, nil, passwordSvc, jwtSvc, emailSvc, tokenStorage, mfaSvc, cfg, zap.NewNop())
 	h := NewAuthHandler(authSvc, testutil.CreateTestValidator(), zap.NewNop())
 	r := gin.New()
 	v1 := r.Group("/api/v1")

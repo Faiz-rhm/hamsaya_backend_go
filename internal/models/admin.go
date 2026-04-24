@@ -537,6 +537,14 @@ type CreateAdminInviteRequest struct {
 	Role  string `json:"role" binding:"required,oneof=admin moderator"`
 }
 
+// AcceptAdminInviteRequest is submitted by the invited user to create their account.
+type AcceptAdminInviteRequest struct {
+	Token     string `json:"token" validate:"required"`
+	Password  string `json:"password" validate:"required,min=8"`
+	FirstName string `json:"first_name" validate:"required,min=2,max=100"`
+	LastName  string `json:"last_name" validate:"required,min=2,max=100"`
+}
+
 // IPBan represents a banned IP address
 type IPBan struct {
 	ID        string     `json:"id"`

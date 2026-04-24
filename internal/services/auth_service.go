@@ -24,6 +24,7 @@ const (
 // AuthService handles authentication operations
 type AuthService struct {
 	userRepo        repositories.UserRepository
+	adminRepo       repositories.AdminRepository
 	passwordService *PasswordService
 	jwtService      *JWTService
 	emailService    *EmailService
@@ -36,6 +37,7 @@ type AuthService struct {
 // NewAuthService creates a new authentication service
 func NewAuthService(
 	userRepo repositories.UserRepository,
+	adminRepo repositories.AdminRepository,
 	passwordService *PasswordService,
 	jwtService *JWTService,
 	emailService *EmailService,
@@ -46,6 +48,7 @@ func NewAuthService(
 ) *AuthService {
 	return &AuthService{
 		userRepo:        userRepo,
+		adminRepo:       adminRepo,
 		passwordService: passwordService,
 		jwtService:      jwtService,
 		emailService:    emailService,
@@ -1192,6 +1195,93 @@ func (s *AuthService) generateAuthResponse(
 			Neighborhood: profile.Neighborhood,
 			Country:      profile.Country,
 			IsComplete:   profile.IsComplete,
+		},
+		Tokens: tokenPair,
+	}, nil
+}
+
+// AcceptAdminInvite validates an invite token and creates the admin/moderator account.
+func (s *AuthService) AcceptAdminInvite(ctx context.Context, req *models.AcceptAdminInviteRequest) (*models.AuthResponse, error) {
+	invite, err := s.adminRepo.GetAdminInviteByToken(ctx, req.Token)
+	if err != nil {
+		return nil, utils.NewBadRequestError("Invalid or expired invite token", err)
+	}
+	if invite.UsedAt != nil {
+		return nil, utils.NewBadRequestError("Invite has already been used", nil)
+	}
+	if time.Now().After(invite.ExpiresAt) {
+		return nil, utils.NewBadRequestError("Invite has expired", nil)
+	}
+
+	if existing, _ := s.userRepo.GetByEmail(ctx, invite.Email); existing != nil {
+		return nil, utils.NewConflictError("An account with this email already exists", nil)
+	}
+
+	if err := s.passwordService.ValidatePasswordStrength(req.Password); err != nil {
+		return nil, utils.NewBadRequestError(err.Error(), err)
+	}
+	passwordHash, err := s.passwordService.Hash(req.Password)
+	if err != nil {
+		return nil, utils.NewInternalError("Failed to create account", err)
+	}
+
+	now := time.Now()
+	userID := uuid.New().String()
+	role := models.UserRole(invite.Role)
+	user := &models.User{
+		ID:                  userID,
+		Email:               invite.Email,
+		PasswordHash:        &passwordHash,
+		EmailVerified:       true,
+		PhoneVerified:       false,
+		MFAEnabled:          false,
+		Role:                role,
+		FailedLoginAttempts: 0,
+		CreatedAt:           now,
+		UpdatedAt:           now,
+	}
+	avatarColor := models.RandomAvatarColor()
+	profile := &models.Profile{
+		ID:          userID,
+		FirstName:   &req.FirstName,
+		LastName:    &req.LastName,
+		AvatarColor: &avatarColor,
+		IsComplete:  true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	if err := s.userRepo.CreateUserWithProfile(ctx, user, profile); err != nil {
+		s.logger.Error("AcceptAdminInvite: create user", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to create account", err)
+	}
+
+	if err := s.adminRepo.UseAdminInvite(ctx, req.Token); err != nil {
+		s.logger.Warn("AcceptAdminInvite: mark invite used", zap.Error(err))
+	}
+
+	sessionID := uuid.New().String()
+	tokenPair, err := s.jwtService.GenerateTokenPair(userID, invite.Email, models.AAL1, sessionID)
+	if err != nil {
+		return nil, utils.NewInternalError("Failed to generate tokens", err)
+	}
+
+	s.logger.Info("Admin account created via invite", zap.String("user_id", userID), zap.String("role", invite.Role))
+
+	return &models.AuthResponse{
+		User: &models.UserResponse{
+			ID:            userID,
+			Email:         invite.Email,
+			Role:          role,
+			EmailVerified: true,
+			CreatedAt:     now,
+		},
+		Profile: &models.ProfileResponse{
+			ID:          userID,
+			FirstName:   &req.FirstName,
+			LastName:    &req.LastName,
+			AvatarColor: &avatarColor,
+			IsComplete:  true,
 		},
 		Tokens: tokenPair,
 	}, nil
