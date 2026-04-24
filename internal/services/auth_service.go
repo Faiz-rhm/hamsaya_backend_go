@@ -623,6 +623,42 @@ func (s *AuthService) VerifyMFA(ctx context.Context, req *models.MFAVerifyChalle
 	return response, nil
 }
 
+// VerifyMFAWithBackupCode completes MFA login using a backup code instead of TOTP.
+func (s *AuthService) VerifyMFAWithBackupCode(ctx context.Context, req *models.MFABackupCodeRequest) (*models.AuthResponse, error) {
+	userID, err := s.tokenStorage.GetUserIDFromMFAChallenge(ctx, req.ChallengeID)
+	if err != nil {
+		s.logger.Warn("Invalid or expired MFA challenge", zap.Error(err))
+		return nil, utils.NewBadRequestError("Invalid or expired MFA challenge", err)
+	}
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		s.logger.Error("Failed to get user", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to verify backup code", err)
+	}
+
+	valid, err := s.mfaService.VerifyBackupCode(ctx, userID, req.BackupCode)
+	if err != nil {
+		return nil, err
+	}
+	if !valid {
+		s.logger.Warn("Invalid backup code", zap.String("user_id", userID))
+		return nil, utils.NewUnauthorizedError("Invalid backup code", nil)
+	}
+
+	if err := s.tokenStorage.DeleteMFAChallenge(ctx, req.ChallengeID); err != nil {
+		s.logger.Error("Failed to delete MFA challenge", zap.Error(err))
+	}
+
+	response, err := s.generateAuthResponse(ctx, user, models.AAL2, nil, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("MFA backup code verification successful", zap.String("user_id", userID))
+	return response, nil
+}
+
 // RefreshToken refreshes an access token using a refresh token
 func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshTokenRequest) (*models.TokenPair, error) {
 	// Look up session by refresh token hash for security.

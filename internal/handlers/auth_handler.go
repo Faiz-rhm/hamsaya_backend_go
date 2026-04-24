@@ -217,6 +217,35 @@ func (h *AuthHandler) VerifyMFA(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "MFA verification successful", response)
 }
 
+// VerifyMFAWithBackupCode godoc
+// @Summary Verify MFA with backup code
+// @Description Complete MFA login using a backup code instead of TOTP
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.MFABackupCodeRequest true "Backup code request"
+// @Success 200 {object} utils.Response{data=models.AuthResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /auth/mfa/verify-backup-code [post]
+func (h *AuthHandler) VerifyMFAWithBackupCode(c *gin.Context) {
+	var req models.MFABackupCodeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+	response, err := h.authService.VerifyMFAWithBackupCode(c.Request.Context(), &req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "MFA verification successful", response)
+}
+
 // RefreshToken godoc
 // @Summary Refresh access token
 // @Description Get a new access token using refresh token
@@ -557,6 +586,7 @@ func (h *AuthHandler) RegisterRoutes(router *gin.RouterGroup, authMiddleware ...
 		auth.POST("/verify-reset-code", h.VerifyResetCode)
 		auth.POST("/reset-password", h.ResetPassword)
 		auth.POST("/mfa/verify", h.VerifyMFA)
+		auth.POST("/mfa/verify-backup-code", h.VerifyMFAWithBackupCode)
 
 		// Protected routes (when authMiddleware is provided)
 		var mw gin.HandlerFunc

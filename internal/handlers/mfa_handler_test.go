@@ -49,8 +49,6 @@ func newMFARouter(
 	r.POST("/api/v1/mfa/disable", authed, h.DisableMFA)
 	r.POST("/api/v1/mfa/backup-codes/regenerate", authed, h.RegenerateBackupCodes)
 	r.GET("/api/v1/mfa/backup-codes/count", authed, h.GetBackupCodesCount)
-	r.POST("/api/v1/mfa/verify-backup-code", h.VerifyBackupCode)
-
 	r.POST("/api/v1/noauth/mfa/enroll", h.EnrollTOTP)
 	return r
 }
@@ -157,20 +155,6 @@ func TestMFAHandler_DisableMFA(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusBadRequest, w.Code)
-	})
-}
-
-// --- VerifyBackupCode (always 501) ---
-
-func TestMFAHandler_VerifyBackupCode(t *testing.T) {
-	t.Run("returns not implemented", func(t *testing.T) {
-		r := newMFARouter(t, &mocks.MockMFARepository{}, &mocks.MockUserRepository{})
-		w := httptest.NewRecorder()
-		req, _ := http.NewRequest(http.MethodPost, "/api/v1/mfa/verify-backup-code",
-			strings.NewReader(`{"challenge_id":"ch-001","backup_code":"ABCD1234"}`))
-		req.Header.Set("Content-Type", "application/json")
-		r.ServeHTTP(w, req)
-		assert.Equal(t, http.StatusNotImplemented, w.Code)
 	})
 }
 

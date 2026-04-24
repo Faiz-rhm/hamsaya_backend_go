@@ -889,3 +889,76 @@ func TestAuthHandler_HandleError_StatusMapping(t *testing.T) {
 
 	assert.Equal(t, http.StatusConflict, w.Code)
 }
+
+// --- VerifyMFAWithBackupCode ---
+
+func newAuthRouterWithMFA(t *testing.T, userRepo *mocks.MockUserRepository, mfaRepo *mocks.MockMFARepository, mr *miniredis.Miniredis) *gin.Engine {
+	t.Helper()
+	cfg := authTestConfig()
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	tokenStorage := services.NewTokenStorageService(rdb, zap.NewNop())
+	jwtSvc := services.NewJWTService(&cfg.JWT)
+	passwordSvc := services.NewPasswordService()
+	emailSvc := services.NewEmailService(&config.EmailConfig{}, zap.NewNop())
+	mfaSvc := services.NewMFAService(mfaRepo, userRepo, passwordSvc, zap.NewNop())
+	authSvc := services.NewAuthService(userRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, mfaSvc, cfg, zap.NewNop())
+	h := NewAuthHandler(authSvc, testutil.CreateTestValidator(), zap.NewNop())
+	r := gin.New()
+	v1 := r.Group("/api/v1")
+	h.RegisterRoutes(v1)
+	return r
+}
+
+func TestAuthHandler_VerifyMFAWithBackupCode(t *testing.T) {
+	t.Run("invalid JSON", func(t *testing.T) {
+		mr := miniredis.RunT(t)
+		r := newAuthRouterWithMFA(t, &mocks.MockUserRepository{}, &mocks.MockMFARepository{}, mr)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/mfa/verify-backup-code",
+			bytes.NewBufferString(`not-json`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("missing required fields", func(t *testing.T) {
+		mr := miniredis.RunT(t)
+		r := newAuthRouterWithMFA(t, &mocks.MockUserRepository{}, &mocks.MockMFARepository{}, mr)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/mfa/verify-backup-code",
+			bytes.NewBufferString(`{}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("invalid or expired challenge", func(t *testing.T) {
+		mr := miniredis.RunT(t)
+		r := newAuthRouterWithMFA(t, &mocks.MockUserRepository{}, &mocks.MockMFARepository{}, mr)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/mfa/verify-backup-code",
+			bytes.NewBufferString(`{"challenge_id":"nonexistent","backup_code":"ABCD1234"}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusBadRequest, w.Code)
+	})
+
+	t.Run("invalid backup code", func(t *testing.T) {
+		mr := miniredis.RunT(t)
+		userRepo := &mocks.MockUserRepository{}
+		mfaRepo := &mocks.MockMFARepository{}
+		user := testutil.CreateTestUser(authTestUserID, "test@test.com")
+		userRepo.On("GetByID", mock.Anything, authTestUserID).Return(user, nil)
+		mfaRepo.On("GetBackupCode", mock.Anything, authTestUserID, "WRONGCODE").Return(nil, fmt.Errorf("not found"))
+
+		mr.Set("mfa:challenge:ch-valid", authTestUserID)
+
+		r := newAuthRouterWithMFA(t, userRepo, mfaRepo, mr)
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/mfa/verify-backup-code",
+			bytes.NewBufferString(`{"challenge_id":"ch-valid","backup_code":"WRONGCODE"}`))
+		req.Header.Set("Content-Type", "application/json")
+		r.ServeHTTP(w, req)
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+}

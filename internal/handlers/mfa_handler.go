@@ -118,34 +118,6 @@ func (h *MFAHandler) VerifyEnrollment(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "MFA enabled successfully", nil)
 }
 
-// VerifyBackupCode godoc
-// @Summary Verify with backup code
-// @Description Verify MFA challenge with a backup code
-// @Tags mfa
-// @Accept json
-// @Produce json
-// @Param request body models.MFABackupCodeRequest true "Backup code request"
-// @Success 200 {object} utils.Response{data=models.AuthResponse}
-// @Failure 400 {object} utils.Response
-// @Failure 401 {object} utils.Response
-// @Router /mfa/verify-backup-code [post]
-func (h *MFAHandler) VerifyBackupCode(c *gin.Context) {
-	var req models.MFABackupCodeRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
-		return
-	}
-
-	if err := h.validator.Validate(&req); err != nil {
-		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
-		return
-	}
-
-	// Get user ID from challenge (similar to VerifyMFA in auth service)
-	// For now, this is handled in the auth service
-	utils.SendError(c, http.StatusNotImplemented, "Backup code verification via this endpoint is not yet implemented", nil)
-}
-
 // DisableMFA godoc
 // @Summary Disable MFA
 // @Description Disable multi-factor authentication for the user
