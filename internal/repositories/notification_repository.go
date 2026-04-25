@@ -118,7 +118,7 @@ func (r *notificationRepository) List(ctx context.Context, filter *models.GetNot
 
 	// Apply type filter
 	if filter.Type != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND type = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND type = $%d", argCount)
 		args = append(args, *filter.Type)
 		argCount++
 	}
@@ -131,7 +131,7 @@ func (r *notificationRepository) List(ctx context.Context, filter *models.GetNot
 	// Business scope: when filter.BusinessID is set, only that business's notifications;
 	// when not set (user feed), show user-level notifications AND NEW_POST (so "Faiz store posted" appears in main list).
 	if filter.BusinessID != nil && *filter.BusinessID != "" {
-		queryBuilder.WriteString(fmt.Sprintf(" AND data->>'business_id' = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND data->>'business_id' = $%d", argCount)
 		args = append(args, *filter.BusinessID)
 		argCount++
 	} else {
@@ -142,7 +142,7 @@ func (r *notificationRepository) List(ctx context.Context, filter *models.GetNot
 	queryBuilder.WriteString(" ORDER BY created_at DESC")
 
 	// Pagination
-	queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1))
+	fmt.Fprintf(&queryBuilder, " LIMIT $%d OFFSET $%d", argCount, argCount+1)
 	args = append(args, filter.Limit, filter.Offset)
 
 	rows, err := r.db.Pool.Query(ctx, queryBuilder.String(), args...)
