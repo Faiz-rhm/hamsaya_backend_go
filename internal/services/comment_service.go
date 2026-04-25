@@ -166,7 +166,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
 			}
-			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  *post.UserID,
 				Type:    models.NotificationTypeComment,
 				Title:   &title,
@@ -215,7 +215,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
 			}
-			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  parentComment.UserID,
 				Type:    models.NotificationTypeCommentReply,
 				Title:   &title,
@@ -268,7 +268,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				if post.BusinessID != nil && *post.BusinessID != "" {
 					data["business_id"] = *post.BusinessID
 				}
-				s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 					UserID:  taggedID,
 					Type:    models.NotificationTypeMention,
 					Title:   &title,
@@ -466,7 +466,7 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 				"post_id":            comment.PostID,
 				"comment_id":         commentID,
 			}
-			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  comment.UserID,
 				Type:    models.NotificationTypeCommentLike,
 				Title:   &title,

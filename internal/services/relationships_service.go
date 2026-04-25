@@ -94,7 +94,7 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 				"actor_avatar":       actor.Avatar,
 				"actor_avatar_color": actorAvatarColor,
 			}
-			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  followingID,
 				Type:    models.NotificationTypeFollow,
 				Title:   &title,

@@ -135,7 +135,7 @@ func (h *ProfileHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	// Validate location: both latitude and longitude must be provided together
-	if (req.Latitude != nil && req.Longitude == nil) || (req.Latitude == nil && req.Longitude != nil) {
+	if (req.Latitude != nil && req.Longitude == nil) || (req.Latitude == nil && req.Longitude != nil) { //nolint:staticcheck
 		utils.SendError(c, http.StatusBadRequest, "Both latitude and longitude must be provided together", utils.ErrValidation)
 		return
 	}
@@ -186,7 +186,7 @@ func (h *ProfileHandler) UploadAvatar(c *gin.Context) {
 		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Upload image
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeAvatar)
@@ -260,7 +260,7 @@ func (h *ProfileHandler) UploadCover(c *gin.Context) {
 		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Upload image
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeCover)

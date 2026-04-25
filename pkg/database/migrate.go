@@ -181,7 +181,7 @@ func (m *Migrator) Up(ctx context.Context) error {
 		}
 
 		if err := m.executeMigration(ctx, tx, migration); err != nil {
-			tx.Rollback(ctx)
+			_ = tx.Rollback(ctx)
 			return fmt.Errorf("failed to apply migration %d (%s): %w", migration.Version, migration.Name, err)
 		}
 
@@ -263,12 +263,12 @@ func (m *Migrator) Down(ctx context.Context) error {
 	}
 
 	if _, err := tx.Exec(ctx, migration.DownSQL); err != nil {
-		tx.Rollback(ctx)
+		_ = tx.Rollback(ctx)
 		return fmt.Errorf("failed to execute down migration: %w", err)
 	}
 
 	if _, err := tx.Exec(ctx, "DELETE FROM schema_migrations WHERE version = $1", version); err != nil {
-		tx.Rollback(ctx)
+		_ = tx.Rollback(ctx)
 		return fmt.Errorf("failed to remove migration record: %w", err)
 	}
 

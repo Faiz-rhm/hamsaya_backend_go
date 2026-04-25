@@ -193,7 +193,7 @@ func (c *Client) close() {
 		c.closed = true
 		close(c.Send)
 		if c.Conn != nil {
-			c.Conn.Close()
+			_ = c.Conn.Close()
 		}
 	}
 }

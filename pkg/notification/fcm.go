@@ -52,7 +52,7 @@ func NewFCMClient(cfg FCMConfig, logger *zap.Logger) (*FCMClient, error) {
 		}
 		opt = option.WithCredentialsJSON(credJSON)
 	} else {
-		return nil, fmt.Errorf("Firebase credentials not provided: set FIREBASE_CREDENTIALS_PATH or FIREBASE_PROJECT_ID + FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL")
+		return nil, fmt.Errorf("firebase credentials not provided: set FIREBASE_CREDENTIALS_PATH or FIREBASE_PROJECT_ID + FIREBASE_PRIVATE_KEY + FIREBASE_CLIENT_EMAIL")
 	}
 
 	app, err := firebase.NewApp(ctx, nil, opt)
@@ -197,7 +197,7 @@ func (f *FCMClient) SendMulticast(ctx context.Context, tokens []string, payload 
 	}
 
 	// Send to multiple devices
-	response, err := f.client.SendMulticast(ctx, message)
+	response, err := f.client.SendEachForMulticast(ctx, message)
 	if err != nil {
 		f.logger.Error("Failed to send multicast FCM notification",
 			zap.Error(err),

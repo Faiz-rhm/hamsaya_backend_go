@@ -89,8 +89,6 @@ func main() {
 	if err != nil {
 		sugaredLogger.Warnw("OpenTelemetry init failed, falling back to no-op", "error", err)
 		telem = observability.NewNoopTelemetry(otelCfg, logger)
-	} else if telem == nil {
-		telem = observability.NewNoopTelemetry(otelCfg, logger)
 	}
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -125,7 +123,7 @@ func main() {
 		Password: cfg.Redis.Password,
 		DB:       cfg.Redis.DB,
 	})
-	defer redisClient.Close()
+	defer func() { _ = redisClient.Close() }()
 
 	// Test Redis connection
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -282,7 +282,7 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID, userID
 	}
 
 	// Update categories if provided (category_ids and/or category_names)
-	if req.CategoryIDs != nil || (req.CategoryNames != nil && len(req.CategoryNames) > 0) {
+	if len(req.CategoryIDs) > 0 || len(req.CategoryNames) > 0 {
 		// Remove existing categories
 		if err := s.businessRepo.RemoveCategories(ctx, businessID); err != nil {
 			s.logger.Error("Failed to remove business categories", zap.String("business_id", businessID), zap.Error(err))

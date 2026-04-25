@@ -198,7 +198,7 @@ func TestOAuthService_VerifyGoogleToken(t *testing.T) {
 				Picture:       "https://example.com/pic.jpg",
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(info)
+			_ = json.NewEncoder(w).Encode(info)
 		}))
 		defer ts.Close()
 

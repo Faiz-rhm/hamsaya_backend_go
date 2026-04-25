@@ -355,9 +355,10 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 		argIndex++
 	}
 	
-	if filter.Status == "suspended" {
+	switch filter.Status {
+	case "suspended":
 		conditions = append(conditions, "u.locked_until > NOW()")
-	} else if filter.Status == "active" {
+	case "active":
 		conditions = append(conditions, "(u.locked_until IS NULL OR u.locked_until <= NOW())")
 	}
 	
@@ -383,9 +384,10 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 	}
 	
 	sortBy := "u.created_at"
-	if filter.SortBy == "email" {
+	switch filter.SortBy {
+	case "email":
 		sortBy = "u.email"
-	} else if filter.SortBy == "name" {
+	case "name":
 		sortBy = "p.first_name"
 	}
 	
@@ -1626,9 +1628,10 @@ func (r *adminRepository) ListUserReports(ctx context.Context, filter *models.Ad
 		argIndex++
 	}
 
-	if filter.Status == "RESOLVED" {
+	switch filter.Status {
+	case "RESOLVED":
 		conditions = append(conditions, "r.resolved = true")
-	} else if filter.Status == "PENDING" {
+	case "PENDING":
 		conditions = append(conditions, "r.resolved = false")
 	}
 

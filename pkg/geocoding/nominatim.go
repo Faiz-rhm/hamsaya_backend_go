@@ -68,7 +68,7 @@ func ReverseGeocode(ctx context.Context, lat, lng float64) (*ReverseResult, erro
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("nominatim returned %d", resp.StatusCode)

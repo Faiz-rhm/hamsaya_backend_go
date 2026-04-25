@@ -178,9 +178,6 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 	return photo, nil
 }
 
-// maxPostImageSize is the max size for post image uploads (10MB).
-const maxPostImageSize = 10 * 1024 * 1024
-
 // maxPostVideoSize is the max size for post video uploads (50MB).
 const maxPostVideoSize = 50 * 1024 * 1024
 

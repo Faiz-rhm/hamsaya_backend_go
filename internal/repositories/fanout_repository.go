@@ -79,7 +79,7 @@ func (r *fanoutRepository) InsertFeedEntries(ctx context.Context, postID string,
 		)
 	}
 	br := r.db.Pool.SendBatch(ctx, batch)
-	defer br.Close()
+	defer func() { _ = br.Close() }()
 	for range followerIDs {
 		if _, err := br.Exec(); err != nil {
 			return err

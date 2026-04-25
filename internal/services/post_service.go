@@ -1139,7 +1139,7 @@ func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, rec
 			data["business_id"] = *post.BusinessID
 		}
 	}
-	s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
+	_, _ = s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
 		UserID:  recipientUserID,
 		Type:    notifType,
 		Title:   &title,

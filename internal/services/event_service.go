@@ -123,7 +123,7 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
 			}
-			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  *post.UserID,
 				Type:    notifType,
 				Title:   &title,

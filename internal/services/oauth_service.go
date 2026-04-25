@@ -97,7 +97,7 @@ func (s *OAuthService) VerifyGoogleToken(ctx context.Context, idToken string) (*
 		s.logger.Error("Failed to verify Google token", zap.Error(err))
 		return nil, utils.NewUnauthorizedError("Failed to verify Google token", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -166,7 +166,7 @@ func (s *OAuthService) VerifyFacebookToken(ctx context.Context, accessToken stri
 		s.logger.Error("Failed to verify Facebook token", zap.Error(err))
 		return nil, utils.NewUnauthorizedError("Failed to verify Facebook token", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)

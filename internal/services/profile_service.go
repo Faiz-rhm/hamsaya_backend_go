@@ -155,9 +155,9 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 			P:     pgtype.Vec2{X: req.Location.Longitude, Y: req.Location.Latitude},
 			Valid: true,
 		}
-	} else if req.Latitude != nil && req.Longitude != nil {
+	} else if req.Latitude != nil && req.Longitude != nil { //nolint:staticcheck
 		profile.Location = &pgtype.Point{
-			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude},
+			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude}, //nolint:staticcheck
 			Valid: true,
 		}
 	}

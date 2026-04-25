@@ -37,7 +37,7 @@ func TestEmailService_SendEmailResend_Success(t *testing.T) {
 		assert.Equal(t, "Test Subject", body["subject"])
 
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"id":"msg-1"}`))
+		_, _ = w.Write([]byte(`{"id":"msg-1"}`))
 	}))
 	defer ts.Close()
 
@@ -57,7 +57,7 @@ func TestEmailService_SendEmailResend_Success(t *testing.T) {
 func TestEmailService_SendEmailResend_Error(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
-		w.Write([]byte(`{"error":"invalid api key"}`))
+		_, _ = w.Write([]byte(`{"error":"invalid api key"}`))
 	}))
 	defer ts.Close()
 
@@ -69,7 +69,7 @@ func TestEmailService_SendEmailResend_Error(t *testing.T) {
 
 	err := svc.sendEmailResend("to@example.com", "subject", "<p>body</p>")
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "401")
+	assert.Contains(t, err.Error(), "resend API returned status 401")
 }
 
 func TestEmailService_RenderTemplate(t *testing.T) {
@@ -146,7 +146,7 @@ func TestEmailService_SendPasswordChangedEmail_NoConfig(t *testing.T) {
 func TestEmailService_SendVerificationEmail_WithResend(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"id":"msg-1"}`))
+		_, _ = w.Write([]byte(`{"id":"msg-1"}`))
 	}))
 	defer ts.Close()
 
@@ -164,7 +164,6 @@ type rewriteTransport struct {
 }
 
 func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.URL.Host = req.URL.Host // keep path/query
 	parsedTarget, _ := http.NewRequest("GET", t.target, nil)
 	req.URL.Scheme = parsedTarget.URL.Scheme
 	req.URL.Host = parsedTarget.URL.Host

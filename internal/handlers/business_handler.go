@@ -461,7 +461,7 @@ func (h *BusinessHandler) UploadAvatar(c *gin.Context) {
 		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Upload and process the image via storage service
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeAvatar)
@@ -511,7 +511,7 @@ func (h *BusinessHandler) UploadCover(c *gin.Context) {
 		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Upload and process the image via storage service
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeCover)
@@ -584,7 +584,7 @@ func (h *BusinessHandler) AddGalleryImage(c *gin.Context) {
 		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Upload and process the image via storage service
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)

@@ -94,5 +94,5 @@ func Sync() {
 
 // SetLogLevel dynamically sets the log level
 func SetLogLevel(level string) {
-	os.Setenv("LOG_LEVEL", level)
+	_ = os.Setenv("LOG_LEVEL", level)
 }

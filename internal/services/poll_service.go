@@ -215,7 +215,7 @@ func (s *PollService) VotePoll(ctx context.Context, pollID, userID, optionID str
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
 			}
-			s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  *post.UserID,
 				Type:    models.NotificationTypePollVote,
 				Title:   &title,

@@ -916,7 +916,7 @@ func (h *PostHandler) UploadPostImage(c *gin.Context) {
 		utils.SendError(c, http.StatusBadRequest, "No file uploaded", err)
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	// Upload image or video to storage (images 10MB, videos 50MB)
 	photo, err := h.storageService.UploadPostAttachment(c.Request.Context(), file, header)

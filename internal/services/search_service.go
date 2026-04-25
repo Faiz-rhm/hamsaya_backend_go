@@ -138,10 +138,11 @@ func (s *SearchService) Discover(ctx context.Context, userID *string, req *model
 	// Fetch posts only when filter is all, event, or sell
 	if filter == models.DiscoverFilterAll || filter == models.DiscoverFilterEvent || filter == models.DiscoverFilterSell {
 		var postType *models.PostType
-		if filter == models.DiscoverFilterEvent {
+		switch filter {
+		case models.DiscoverFilterEvent:
 			pt := models.PostTypeEvent
 			postType = &pt
-		} else if filter == models.DiscoverFilterSell {
+		case models.DiscoverFilterSell:
 			pt := models.PostTypeSell
 			postType = &pt
 		}

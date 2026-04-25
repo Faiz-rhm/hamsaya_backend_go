@@ -191,7 +191,7 @@ func (s *EmailService) sendEmailResend(to, subject, htmlBody string) error {
 		s.logger.Error("Resend API request failed", zap.String("to", to), zap.Error(err))
 		return fmt.Errorf("failed to send email via Resend: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var errBody bytes.Buffer
@@ -201,7 +201,7 @@ func (s *EmailService) sendEmailResend(to, subject, htmlBody string) error {
 			zap.Int("status", resp.StatusCode),
 			zap.String("body", errBody.String()),
 		)
-		return fmt.Errorf("Resend API returned status %d: %s", resp.StatusCode, errBody.String())
+		return fmt.Errorf("resend API returned status %d: %s", resp.StatusCode, errBody.String())
 	}
 
 	s.logger.Info("Email sent via Resend", zap.String("to", to), zap.String("subject", subject))

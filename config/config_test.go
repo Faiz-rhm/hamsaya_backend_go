@@ -1,7 +1,6 @@
 package config
 
 import (
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,12 +8,12 @@ import (
 
 func TestLoad(t *testing.T) {
 	// Set environment variables for testing
-	os.Setenv("SERVER_PORT", "8080")
-	os.Setenv("DB_HOST", "localhost")
-	os.Setenv("DB_PORT", "5432")
-	os.Setenv("DB_NAME", "test")
-	os.Setenv("REDIS_HOST", "localhost")
-	os.Setenv("JWT_SECRET", "test-secret-key-at-least-32-characters-long")
+	t.Setenv("SERVER_PORT", "8080")
+	t.Setenv("DB_HOST", "localhost")
+	t.Setenv("DB_PORT", "5432")
+	t.Setenv("DB_NAME", "test")
+	t.Setenv("REDIS_HOST", "localhost")
+	t.Setenv("JWT_SECRET", "test-secret-key-at-least-32-characters-long")
 
 	cfg, err := Load()
 	assert.NoError(t, err)

@@ -759,7 +759,6 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 			)
 		`, argCount, argCount+1, argCount+2))
 		args = append(args, *filter.Longitude, *filter.Latitude, *filter.RadiusKm*1000)
-		argCount += 3
 	}
 
 	var count int64

@@ -27,8 +27,6 @@ import (
 // Source: auth_service_test.go testPasswordHash constant (verified by service tests).
 const authTestPasswordHash = "$2a$12$SK7HMTw9slXUVmPZtdMa6evdMIN5CBUFvQfwOBbLgcb.Tt8Bi9UpK"
 
-// authTestStrongHash is a known-good bcrypt hash for "CurrentPass1!" (cost=12).
-const authTestStrongHash = "$2a$12$9aomQGUJj.I5.pUMGQV0OuUpRy1Cz6j1TE6tuS3kFNLjwkZkRF5Gm"
 
 func authTestConfig() *config.Config {
 	return &config.Config{
@@ -951,7 +949,7 @@ func TestAuthHandler_VerifyMFAWithBackupCode(t *testing.T) {
 		userRepo.On("GetByID", mock.Anything, authTestUserID).Return(user, nil)
 		mfaRepo.On("GetBackupCode", mock.Anything, authTestUserID, "WRONGCODE").Return(nil, fmt.Errorf("not found"))
 
-		mr.Set("mfa:challenge:ch-valid", authTestUserID)
+		require.NoError(t, mr.Set("mfa:challenge:ch-valid", authTestUserID))
 
 		r := newAuthRouterWithMFA(t, userRepo, mfaRepo, mr)
 		w := httptest.NewRecorder()

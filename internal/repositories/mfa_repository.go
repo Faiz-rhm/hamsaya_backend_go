@@ -178,7 +178,7 @@ func (r *mfaRepository) CreateBackupCodes(ctx context.Context, codes []*models.B
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	query := `
 		INSERT INTO mfa_backup_codes (id, user_id, code, used, created_at)
