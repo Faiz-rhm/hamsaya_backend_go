@@ -555,32 +555,32 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 
 	// Apply filters
 	if filter.Type != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND type = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND type = $%d", argCount)
 		args = append(args, string(*filter.Type))
 		argCount++
 	}
 
 	if filter.UserID != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND user_id = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND user_id = $%d", argCount)
 		args = append(args, *filter.UserID)
 		argCount++
 	}
 
 	if filter.BusinessID != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND business_id = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND business_id = $%d", argCount)
 		args = append(args, *filter.BusinessID)
 		argCount++
 	}
 
 	if filter.CategoryID != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND category_id = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND category_id = $%d", argCount)
 		args = append(args, *filter.CategoryID)
 		argCount++
 	}
 
 	if filter.Province != nil {
 		// Filter by author's province (profiles.province); post-level province is often null for FEED/EVENT/PULL
-		queryBuilder.WriteString(fmt.Sprintf(" AND EXISTS (SELECT 1 FROM profiles pr WHERE pr.id = posts.user_id AND pr.province = $%d)", argCount))
+		fmt.Fprintf(&queryBuilder, " AND EXISTS (SELECT 1 FROM profiles pr WHERE pr.id = posts.user_id AND pr.province = $%d)", argCount)
 		args = append(args, *filter.Province)
 		argCount++
 	}
@@ -595,16 +595,14 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 
 	if filter.Search != nil && *filter.Search != "" {
 		searchPattern := "%" + *filter.Search + "%"
-		queryBuilder.WriteString(fmt.Sprintf(
-			` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d))`,
-			argCount, argCount+1, argCount+2,
-		))
+		fmt.Fprintf(&queryBuilder, ` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d)`,
+			argCount, argCount+1, argCount+2)
 		args = append(args, searchPattern, searchPattern, searchPattern)
 		argCount += 3
 	}
 
 	if filter.Sold != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND sold = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND sold = $%d", argCount)
 		args = append(args, *filter.Sold)
 		argCount++
 	} else {
@@ -616,13 +614,13 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	var locationSearchActive bool
 	if filter.Latitude != nil && filter.Longitude != nil && filter.RadiusKm != nil {
 		// PostGIS radius search: ST_DWithin expects geography and distance in meters
-		queryBuilder.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&queryBuilder, `
 			AND ST_DWithin(
 				address_location::geography,
 				ST_SetSRID(ST_MakePoint($%d, $%d), 4326)::geography,
 				$%d
 			)
-		`, argCount, argCount+1, argCount+2))
+		`, argCount, argCount+1, argCount+2)
 		args = append(args, *filter.Longitude, *filter.Latitude, *filter.RadiusKm*1000) // Convert km to meters
 		argCount += 3
 		locationSearchActive = true
@@ -631,7 +629,7 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	// Cursor-based pagination: when a cursor is provided, filter out older posts
 	// instead of using OFFSET (which degrades linearly with page depth).
 	if filter.Cursor != nil && filter.SortBy != "trending" && filter.SortBy != "nearby" {
-		queryBuilder.WriteString(fmt.Sprintf(" AND created_at < $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND created_at < $%d", argCount)
 		args = append(args, *filter.Cursor)
 		argCount++
 	}
@@ -648,12 +646,12 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		// Distance-based sorting when location is provided
 		if locationSearchActive && filter.Latitude != nil && filter.Longitude != nil {
 			// Sort by distance (nearest first)
-			queryBuilder.WriteString(fmt.Sprintf(`
+			fmt.Fprintf(&queryBuilder, `
 				ORDER BY ST_Distance(
 					address_location::geography,
 					ST_SetSRID(ST_MakePoint($%d, $%d), 4326)::geography
 				) ASC
-			`, argCount, argCount+1))
+			`, argCount, argCount+1)
 			args = append(args, *filter.Longitude, *filter.Latitude)
 			argCount += 2
 		} else {
@@ -666,10 +664,10 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 
 	// Use LIMIT only (cursor replaces OFFSET for default/recent sorting)
 	if filter.Cursor != nil && filter.SortBy != "trending" && filter.SortBy != "nearby" {
-		queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " LIMIT $%d", argCount)
 		args = append(args, filter.Limit)
 	} else {
-		queryBuilder.WriteString(fmt.Sprintf(" LIMIT $%d OFFSET $%d", argCount, argCount+1))
+		fmt.Fprintf(&queryBuilder, " LIMIT $%d OFFSET $%d", argCount, argCount+1)
 		args = append(args, filter.Limit, filter.Offset)
 	}
 
@@ -693,32 +691,32 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 
 	// Apply same filters as GetFeed
 	if filter.Type != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND type = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND type = $%d", argCount)
 		args = append(args, string(*filter.Type))
 		argCount++
 	}
 
 	if filter.UserID != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND user_id = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND user_id = $%d", argCount)
 		args = append(args, *filter.UserID)
 		argCount++
 	}
 
 	if filter.BusinessID != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND business_id = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND business_id = $%d", argCount)
 		args = append(args, *filter.BusinessID)
 		argCount++
 	}
 
 	if filter.CategoryID != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND category_id = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND category_id = $%d", argCount)
 		args = append(args, *filter.CategoryID)
 		argCount++
 	}
 
 	if filter.Province != nil {
 		// Filter by author's province (profiles.province); post-level province is often null for FEED/EVENT/PULL
-		queryBuilder.WriteString(fmt.Sprintf(" AND EXISTS (SELECT 1 FROM profiles pr WHERE pr.id = posts.user_id AND pr.province = $%d)", argCount))
+		fmt.Fprintf(&queryBuilder, " AND EXISTS (SELECT 1 FROM profiles pr WHERE pr.id = posts.user_id AND pr.province = $%d)", argCount)
 		args = append(args, *filter.Province)
 		argCount++
 	}
@@ -733,16 +731,14 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 
 	if filter.Search != nil && *filter.Search != "" {
 		searchPattern := "%" + *filter.Search + "%"
-		queryBuilder.WriteString(fmt.Sprintf(
-			` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d))`,
-			argCount, argCount+1, argCount+2,
-		))
+		fmt.Fprintf(&queryBuilder, ` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d)`,
+			argCount, argCount+1, argCount+2)
 		args = append(args, searchPattern, searchPattern, searchPattern)
 		argCount += 3
 	}
 
 	if filter.Sold != nil {
-		queryBuilder.WriteString(fmt.Sprintf(" AND sold = $%d", argCount))
+		fmt.Fprintf(&queryBuilder, " AND sold = $%d", argCount)
 		args = append(args, *filter.Sold)
 		argCount++
 	} else {
@@ -751,13 +747,13 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 
 	// Location-based filtering (radius search)
 	if filter.Latitude != nil && filter.Longitude != nil && filter.RadiusKm != nil {
-		queryBuilder.WriteString(fmt.Sprintf(`
+		fmt.Fprintf(&queryBuilder, `
 			AND ST_DWithin(
 				address_location::geography,
 				ST_SetSRID(ST_MakePoint($%d, $%d), 4326)::geography,
 				$%d
 			)
-		`, argCount, argCount+1, argCount+2))
+		`, argCount, argCount+1, argCount+2)
 		args = append(args, *filter.Longitude, *filter.Latitude, *filter.RadiusKm*1000)
 	}
 
