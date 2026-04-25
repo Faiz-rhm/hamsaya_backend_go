@@ -2036,15 +2036,8 @@ func (r *adminRepository) GetBusinessAnalytics(ctx context.Context, period strin
 	defer viewRows.Close()
 	for viewRows.Next() {
 		var item models.BusinessRankItem
-		var avatarJSON *[]byte
-		if err := viewRows.Scan(&item.ID, &item.Name, &avatarJSON, &item.Count); err != nil {
+		if err := viewRows.Scan(&item.ID, &item.Name, &item.Avatar, &item.Count); err != nil {
 			return nil, err
-		}
-		if avatarJSON != nil {
-			var photo models.Photo
-			if err := json.Unmarshal(*avatarJSON, &photo); err == nil {
-				item.Avatar = &photo
-			}
 		}
 		analytics.TopByViews = append(analytics.TopByViews, item)
 	}
@@ -2063,15 +2056,8 @@ func (r *adminRepository) GetBusinessAnalytics(ctx context.Context, period strin
 	defer followRows.Close()
 	for followRows.Next() {
 		var item models.BusinessRankItem
-		var avatarJSON *[]byte
-		if err := followRows.Scan(&item.ID, &item.Name, &avatarJSON, &item.Count); err != nil {
+		if err := followRows.Scan(&item.ID, &item.Name, &item.Avatar, &item.Count); err != nil {
 			return nil, err
-		}
-		if avatarJSON != nil {
-			var photo models.Photo
-			if err := json.Unmarshal(*avatarJSON, &photo); err == nil {
-				item.Avatar = &photo
-			}
 		}
 		analytics.TopByFollowers = append(analytics.TopByFollowers, item)
 	}
