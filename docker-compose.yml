@@ -87,7 +87,7 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=
       - REDIS_DB=0
-      - JWT_SECRET=dev-secret-change-in-production
+      - JWT_SECRET=dev-secret-change-in-production-x
       - JWT_ACCESS_TOKEN_DURATION=15m
       - JWT_REFRESH_TOKEN_DURATION=720h
       - STORAGE_ENDPOINT=minio:9000
