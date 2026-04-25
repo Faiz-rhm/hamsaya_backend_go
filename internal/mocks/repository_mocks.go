@@ -1763,3 +1763,36 @@ func (m *MockSearchRepository) GetDiscoverBusinesses(ctx context.Context, lat, l
 	}
 	return args.Get(0).([]*models.BusinessProfile), args.Error(1)
 }
+
+// MockHelpChatRepository is a mock implementation of HelpChatRepository.
+type MockHelpChatRepository struct {
+	mock.Mock
+}
+
+func (m *MockHelpChatRepository) CreateMessage(ctx context.Context, msg *models.HelpChatMessage) error {
+	return m.Called(ctx, msg).Error(0)
+}
+
+func (m *MockHelpChatRepository) GetMessages(ctx context.Context, userID string, limit, offset int) ([]*models.HelpChatMessage, int64, error) {
+	args := m.Called(ctx, userID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*models.HelpChatMessage), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *MockHelpChatRepository) GetAllUserThreads(ctx context.Context, limit, offset int) ([]*models.HelpChatThread, int64, error) {
+	args := m.Called(ctx, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*models.HelpChatThread), args.Get(1).(int64), args.Error(2)
+}
+
+func (m *MockHelpChatRepository) GetUserMessages(ctx context.Context, userID string, limit, offset int) ([]*models.HelpChatMessage, int64, error) {
+	args := m.Called(ctx, userID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Get(1).(int64), args.Error(2)
+	}
+	return args.Get(0).([]*models.HelpChatMessage), args.Get(1).(int64), args.Error(2)
+}
