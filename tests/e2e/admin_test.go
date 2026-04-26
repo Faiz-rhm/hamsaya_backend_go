@@ -96,8 +96,8 @@ func TestE2E_Admin_SuspendAndUnsuspendUser(t *testing.T) {
 	adminUser := register(t, env, adminEmail, "Password123!")
 	env.makeAdmin(t, adminUser.UserID)
 
-	// Suspend for 24 hours
-	suspendBody := `{"reason":"E2E test suspension","duration_hours":24}`
+	// Suspend for 1 day
+	suspendBody := `{"reason":"E2E test suspension","days":1}`
 	suspendResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/users/"+target.UserID+"/suspend"), adminUser.AccessToken, suspendBody))
 	defer func() { _ = suspendResp.Body.Close() }()

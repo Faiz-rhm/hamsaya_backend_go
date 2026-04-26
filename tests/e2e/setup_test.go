@@ -25,6 +25,7 @@ import (
 	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // testEnv holds all wired-up infrastructure for one E2E test run.
@@ -206,7 +207,7 @@ func buildRouter(
 
 	// Services
 	jwtSvc := services.NewJWTService(&cfg.JWT)
-	passwordSvc := services.NewPasswordService()
+	passwordSvc := services.NewPasswordServiceWithCost(bcrypt.MinCost)
 	tokenStorage := services.NewTokenStorageService(redisClient, logger)
 	emailSvc := services.NewEmailService(&cfg.Email, logger)
 	fanoutSvc := services.NewFanoutService(fanoutRepo, logger)

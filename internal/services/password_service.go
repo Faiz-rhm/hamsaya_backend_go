@@ -20,6 +20,12 @@ func NewPasswordService() *PasswordService {
 	}
 }
 
+// NewPasswordServiceWithCost creates a password service with a specific bcrypt cost.
+// Use bcrypt.MinCost (4) in tests to avoid multi-second hashes per register call.
+func NewPasswordServiceWithCost(cost int) *PasswordService {
+	return &PasswordService{cost: cost}
+}
+
 // Hash hashes a password using bcrypt
 func (s *PasswordService) Hash(password string) (string, error) {
 	bytes, err := bcrypt.GenerateFromPassword([]byte(password), s.cost)

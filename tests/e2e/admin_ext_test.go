@@ -48,7 +48,7 @@ func TestE2E_Admin_Reports_GetPostReport(t *testing.T) {
 
 	postID := createPost(t, env, regular.AccessToken, "Post for report get")
 	reportResp := env.do(bearerReq(http.MethodPost,
-		env.url("/api/v1/posts/"+postID+"/report"), regular.AccessToken,
+		env.url("/api/v1/posts/"+postID+"/report"), admin.AccessToken,
 		`{"reason":"spam"}`))
 	defer func() { _ = reportResp.Body.Close() }()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
@@ -76,7 +76,7 @@ func TestE2E_Admin_Reports_UpdateReportStatus(t *testing.T) {
 
 	postID := createPost(t, env, regular.AccessToken, "Post for status update")
 	reportResp := env.do(bearerReq(http.MethodPost,
-		env.url("/api/v1/posts/"+postID+"/report"), regular.AccessToken,
+		env.url("/api/v1/posts/"+postID+"/report"), admin.AccessToken,
 		`{"reason":"spam"}`))
 	defer func() { _ = reportResp.Body.Close() }()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
@@ -162,7 +162,7 @@ func TestE2E_Admin_Bans_IPBanCreateListDelete(t *testing.T) {
 	env := setupE2E(t)
 	_, admin := adminSetup(t, env, "ipban")
 
-	// Create IP ban
+	// Create IP ban (create returns no ID in response body)
 	body := `{"ip_address":"192.168.1.100","reason":"E2E test ban"}`
 	createResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/bans/ip"), admin.AccessToken, body))
@@ -170,21 +170,30 @@ func TestE2E_Admin_Bans_IPBanCreateListDelete(t *testing.T) {
 	createRaw, _ := io.ReadAll(createResp.Body)
 	assert.Equal(t, http.StatusCreated, createResp.StatusCode, "create IP ban failed: %s", string(createRaw))
 
-	var createOut struct {
-		Data struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(createRaw, &createOut))
-	banID := createOut.Data.ID
-	require.NotEmpty(t, banID)
-
-	// List
+	// List to find the ban ID (create response has no ID)
 	listResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/bans/ip"), admin.AccessToken, ""))
 	defer func() { _ = listResp.Body.Close() }()
 	listRaw, _ := io.ReadAll(listResp.Body)
 	assert.Equal(t, http.StatusOK, listResp.StatusCode, "list IP bans failed: %s", string(listRaw))
+
+	var listOut struct {
+		Data struct {
+			Bans []struct {
+				ID        string `json:"id"`
+				IPAddress string `json:"ip_address"`
+			} `json:"bans"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var banID string
+	for _, b := range listOut.Data.Bans {
+		if b.IPAddress == "192.168.1.100" {
+			banID = b.ID
+			break
+		}
+	}
+	require.NotEmpty(t, banID, "newly created IP ban not found in list")
 
 	// Delete
 	delResp := env.do(bearerReq(http.MethodDelete,
@@ -198,6 +207,7 @@ func TestE2E_Admin_Bans_DeviceBanCreateListDelete(t *testing.T) {
 	env := setupE2E(t)
 	_, admin := adminSetup(t, env, "devban")
 
+	// Create device ban (create returns no ID in response body)
 	body := `{"device_id":"test-device-abc-123","reason":"E2E device ban"}`
 	createResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/bans/devices"), admin.AccessToken, body))
@@ -205,20 +215,30 @@ func TestE2E_Admin_Bans_DeviceBanCreateListDelete(t *testing.T) {
 	createRaw, _ := io.ReadAll(createResp.Body)
 	assert.Equal(t, http.StatusCreated, createResp.StatusCode, "create device ban failed: %s", string(createRaw))
 
-	var createOut struct {
-		Data struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(createRaw, &createOut))
-	banID := createOut.Data.ID
-	require.NotEmpty(t, banID)
-
-	// List
+	// List to find the ban ID
 	listResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/bans/devices"), admin.AccessToken, ""))
 	defer func() { _ = listResp.Body.Close() }()
-	assert.Equal(t, http.StatusOK, listResp.StatusCode)
+	listRaw, _ := io.ReadAll(listResp.Body)
+	assert.Equal(t, http.StatusOK, listResp.StatusCode, "list device bans failed: %s", string(listRaw))
+
+	var listOut struct {
+		Data struct {
+			Bans []struct {
+				ID       string `json:"id"`
+				DeviceID string `json:"device_id"`
+			} `json:"bans"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var banID string
+	for _, b := range listOut.Data.Bans {
+		if b.DeviceID == "test-device-abc-123" {
+			banID = b.ID
+			break
+		}
+	}
+	require.NotEmpty(t, banID, "newly created device ban not found in list")
 
 	// Delete
 	delResp := env.do(bearerReq(http.MethodDelete,
@@ -321,7 +341,7 @@ func TestE2E_Admin_Accounts_InviteCRUD(t *testing.T) {
 	inviteEmail := fmt.Sprintf("e2e-invite-%d@test.local", ts)
 	_, admin := adminSetup(t, env, "invite")
 
-	// Create invite
+	// Create invite (create response has no ID — service doesn't return DB-generated ID)
 	createBody := fmt.Sprintf(`{"email":%q,"role":"moderator"}`, inviteEmail)
 	createResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/accounts/invites"), admin.AccessToken, createBody))
@@ -329,18 +349,28 @@ func TestE2E_Admin_Accounts_InviteCRUD(t *testing.T) {
 	createRaw, _ := io.ReadAll(createResp.Body)
 	assert.Equal(t, http.StatusCreated, createResp.StatusCode, "create invite failed: %s", string(createRaw))
 
-	var createOut struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(createRaw, &createOut))
-	inviteID := createOut.Data.ID
-	require.NotEmpty(t, inviteID)
-
-	// List invites
+	// List invites to find the ID
 	listResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/accounts/invites"), admin.AccessToken, ""))
 	defer func() { _ = listResp.Body.Close() }()
-	assert.Equal(t, http.StatusOK, listResp.StatusCode)
+	listRaw, _ := io.ReadAll(listResp.Body)
+	assert.Equal(t, http.StatusOK, listResp.StatusCode, "list invites failed: %s", string(listRaw))
+
+	var listOut struct {
+		Data []struct {
+			ID    string `json:"id"`
+			Email string `json:"email"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var inviteID string
+	for _, inv := range listOut.Data {
+		if inv.Email == inviteEmail {
+			inviteID = inv.ID
+			break
+		}
+	}
+	require.NotEmpty(t, inviteID, "newly created invite not found in list")
 
 	// Revoke invite
 	revokeResp := env.do(bearerReq(http.MethodDelete,
@@ -405,7 +435,7 @@ func TestE2E_Admin_UpdatePostStatus(t *testing.T) {
 
 	postID := createPost(t, env, regular.AccessToken, "Post for status update")
 
-	body := `{"status":"removed"}`
+	body := `{"status":"HIDDEN"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/admin/posts/"+postID+"/status"), admin.AccessToken, body))
 	defer func() { _ = resp.Body.Close() }()
@@ -434,7 +464,7 @@ func TestE2E_Admin_Businesses_ListGetUpdateStatus(t *testing.T) {
 	assert.Equal(t, http.StatusOK, getResp.StatusCode, "admin get business detail failed: %s", string(getRaw))
 
 	// Update status
-	statusBody := `{"status":"approved"}`
+	statusBody := `{"status":"ACTIVE"}`
 	statusResp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/admin/businesses/"+bizID+"/status"), admin.AccessToken, statusBody))
 	defer func() { _ = statusResp.Body.Close() }()

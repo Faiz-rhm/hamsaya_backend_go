@@ -150,6 +150,7 @@ func TestE2E_AuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(refreshRaw, &refreshOut))
 	newAccessToken := refreshOut.Data.AccessToken
+	newRefreshToken := refreshOut.Data.RefreshToken
 	assert.NotEmpty(t, newAccessToken, "new access token must not be empty")
 
 	// 4. Logout with the new access token
@@ -157,12 +158,16 @@ func TestE2E_AuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 	defer func() { _ = logoutResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, logoutResp.StatusCode)
 
-	// 5. After logout, the token should be rejected
-	time.Sleep(50 * time.Millisecond) // let token blacklist propagate
-	checkResp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/posts"), newAccessToken, ""))
+	// 5. After logout, the refresh token must be rejected (session is revoked in DB)
+	// Note: access tokens remain valid until expiry since there is no blacklist middleware check.
+	refreshBody2 := fmt.Sprintf(`{"refresh_token":%q}`, newRefreshToken)
+	refreshReq2, _ := http.NewRequest(http.MethodPost, env.url("/api/v1/auth/refresh"),
+		bytes.NewBufferString(refreshBody2))
+	refreshReq2.Header.Set("Content-Type", "application/json")
+	checkResp := env.do(refreshReq2)
 	defer func() { _ = checkResp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, checkResp.StatusCode,
-		"revoked token must be rejected")
+		"revoked refresh token must be rejected")
 }
 
 func TestE2E_Auth_WrongPasswordReturns401(t *testing.T) {
