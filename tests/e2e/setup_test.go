@@ -273,6 +273,7 @@ func buildRouter(
 	auth := v1.Group("/auth")
 	auth.POST("/register", authHandler.Register)
 	auth.POST("/login", authHandler.Login)
+	auth.POST("/unified", authHandler.UnifiedAuth)
 	auth.POST("/refresh", authHandler.RefreshToken)
 	auth.POST("/logout", requireAuth, authHandler.Logout)
 	auth.POST("/verify-email", authHandler.VerifyEmail)
@@ -362,6 +363,7 @@ func buildRouter(
 	businesses.GET("/:business_id/attachments", businessHandler.GetGallery)
 	businesses.POST("/:business_id/hours", businessHandler.SetBusinessHours)
 	businesses.POST("/:business_id/report", reportHandler.ReportBusiness)
+	businesses.DELETE("/:business_id/attachments/:attachment_id", businessHandler.DeleteGalleryImage)
 	businesses.POST("/:business_id/follow", businessHandler.FollowBusiness)
 	businesses.DELETE("/:business_id/follow", businessHandler.UnfollowBusiness)
 
