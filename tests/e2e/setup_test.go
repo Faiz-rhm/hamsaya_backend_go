@@ -215,6 +215,8 @@ func buildRouter(
 	go wsHub.Run()
 	t.Cleanup(wsHub.Shutdown)
 
+	oauthSvc := services.NewOAuthService(cfg, userRepo, logger)
+
 	notifSvc := services.NewNotificationService(
 		notificationRepo, notifSettingsRepo, userRepo, nil, redisClient, wsHub, logger,
 	)
@@ -262,6 +264,7 @@ func buildRouter(
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackSvc)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatSvc, validator, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, validator, logger)
+	oauthHandler := handlers.NewOAuthHandler(authSvc, oauthSvc, validator, logger)
 
 	// Router
 	r := gin.New()
@@ -275,6 +278,10 @@ func buildRouter(
 	auth.POST("/login", authHandler.Login)
 	auth.POST("/unified", authHandler.UnifiedAuth)
 	auth.POST("/refresh", authHandler.RefreshToken)
+	auth.POST("/mfa/verify", authHandler.VerifyMFA)
+	auth.POST("/oauth/google", oauthHandler.GoogleOAuth)
+	auth.POST("/oauth/facebook", oauthHandler.FacebookOAuth)
+	auth.POST("/oauth/apple", oauthHandler.AppleOAuth)
 	auth.POST("/logout", requireAuth, authHandler.Logout)
 	auth.POST("/verify-email", authHandler.VerifyEmail)
 	auth.POST("/forgot-password", authHandler.ForgotPassword)
@@ -295,6 +302,10 @@ func buildRouter(
 	users.GET("/me", profileHandler.GetMyProfile)
 	users.PUT("/me", profileHandler.UpdateProfile)
 	users.DELETE("/me", profileHandler.DeleteAccount)
+	users.POST("/me/avatar", profileHandler.UploadAvatar)
+	users.DELETE("/me/avatar", profileHandler.DeleteAvatar)
+	users.POST("/me/cover", profileHandler.UploadCover)
+	users.DELETE("/me/cover", profileHandler.DeleteCover)
 	users.GET("/:user_id", profileHandler.GetUserProfile)
 	users.POST("/:user_id/follow", relationshipsHandler.FollowUser)
 	users.DELETE("/:user_id/follow", relationshipsHandler.UnfollowUser)
@@ -320,6 +331,7 @@ func buildRouter(
 	posts.POST("/:post_id/share", postHandler.SharePost)
 	posts.PUT("/:post_id", postHandler.UpdatePost)
 	posts.POST("/:post_id/resell", postHandler.ResellPost)
+	posts.POST("/upload-image", postHandler.UploadPostImage)
 	posts.GET("/:post_id/comments", commentHandler.GetPostComments)
 	posts.POST("/:post_id/comments", commentHandler.CreateComment)
 	posts.POST("/:post_id/report", reportHandler.ReportPost)
@@ -364,6 +376,9 @@ func buildRouter(
 	businesses.POST("/:business_id/hours", businessHandler.SetBusinessHours)
 	businesses.POST("/:business_id/report", reportHandler.ReportBusiness)
 	businesses.DELETE("/:business_id/attachments/:attachment_id", businessHandler.DeleteGalleryImage)
+	businesses.POST("/:business_id/attachments", businessHandler.AddGalleryImage)
+	businesses.POST("/:business_id/avatar", businessHandler.UploadAvatar)
+	businesses.POST("/:business_id/cover", businessHandler.UploadCover)
 	businesses.POST("/:business_id/follow", businessHandler.FollowBusiness)
 	businesses.DELETE("/:business_id/follow", businessHandler.UnfollowBusiness)
 
@@ -384,6 +399,8 @@ func buildRouter(
 	notifications.DELETE("/:notification_id", notificationHandler.DeleteNotification)
 	notifications.GET("/settings", notificationHandler.GetNotificationSettings)
 	notifications.PUT("/settings", notificationHandler.UpdateNotificationSetting)
+	notifications.POST("/fcm-token", notificationHandler.RegisterFCMToken)
+	notifications.DELETE("/fcm-token", notificationHandler.UnregisterFCMToken)
 
 	// Public category listing
 	categories := v1.Group("/categories", requireAuth)

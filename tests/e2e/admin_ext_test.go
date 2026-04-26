@@ -460,3 +460,78 @@ func TestE2E_Admin_DeleteUser(t *testing.T) {
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "admin delete user failed: %s", string(raw))
 }
+
+func TestE2E_Admin_Reports_GetCommentReport(t *testing.T) {
+	env := setupE2E(t)
+	regular, admin := adminSetup(t, env, "cmtrptget")
+
+	postID := createPost(t, env, regular.AccessToken, "Post")
+	commentID := createComment(t, env, regular.AccessToken, postID, "Comment to report")
+	reportResp := env.do(bearerReq(http.MethodPost,
+		env.url("/api/v1/comments/"+commentID+"/report"), admin.AccessToken,
+		`{"reason":"harassment"}`))
+	defer reportResp.Body.Close()
+	reportRaw, _ := io.ReadAll(reportResp.Body)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+
+	var out struct {
+		Data struct{ ID string `json:"id"` } `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(reportRaw, &out))
+	require.NotEmpty(t, out.Data.ID)
+
+	resp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/comments/"+out.Data.ID), admin.AccessToken, ""))
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "get comment report failed: %s", string(raw))
+}
+
+func TestE2E_Admin_Reports_GetUserReport(t *testing.T) {
+	env := setupE2E(t)
+	regular, admin := adminSetup(t, env, "userrptget")
+
+	reportResp := env.do(bearerReq(http.MethodPost,
+		env.url("/api/v1/users/"+regular.UserID+"/report"), admin.AccessToken,
+		`{"reason":"fake_account"}`))
+	defer reportResp.Body.Close()
+	reportRaw, _ := io.ReadAll(reportResp.Body)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+
+	var out struct {
+		Data struct{ ID string `json:"id"` } `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(reportRaw, &out))
+	require.NotEmpty(t, out.Data.ID)
+
+	resp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/users/"+out.Data.ID), admin.AccessToken, ""))
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "get user report failed: %s", string(raw))
+}
+
+func TestE2E_Admin_Reports_GetBusinessReport(t *testing.T) {
+	env := setupE2E(t)
+	regular, admin := adminSetup(t, env, "bizrptget")
+
+	bizID := createBusiness(t, env, regular.AccessToken, "Reported Biz")
+	reportResp := env.do(bearerReq(http.MethodPost,
+		env.url("/api/v1/businesses/"+bizID+"/report"), admin.AccessToken,
+		`{"reason":"fake_business"}`))
+	defer reportResp.Body.Close()
+	reportRaw, _ := io.ReadAll(reportResp.Body)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+
+	var out struct {
+		Data struct{ ID string `json:"id"` } `json:"data"`
+	}
+	require.NoError(t, json.Unmarshal(reportRaw, &out))
+	require.NotEmpty(t, out.Data.ID)
+
+	resp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/businesses/"+out.Data.ID), admin.AccessToken, ""))
+	defer resp.Body.Close()
+	raw, _ := io.ReadAll(resp.Body)
+	assert.Equal(t, http.StatusOK, resp.StatusCode, "get business report failed: %s", string(raw))
+}
