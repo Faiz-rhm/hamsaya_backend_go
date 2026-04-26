@@ -290,7 +290,7 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 
 	// Check ownership
 	if post.UserID == nil || *post.UserID != userID {
-		return nil, utils.NewUnauthorizedError("You don't have permission to update this post", nil)
+		return nil, utils.NewForbiddenError("You don't have permission to update this post", nil)
 	}
 	// VIEW_ONLY visibility is only allowed for FEED posts
 	if req.Visibility != nil && *req.Visibility == models.VisibilityViewOnly && post.Type != models.PostTypeFeed {
@@ -484,7 +484,7 @@ func (s *PostService) DeletePost(ctx context.Context, postID, userID string) err
 
 	// Check ownership
 	if post.UserID == nil || *post.UserID != userID {
-		return utils.NewUnauthorizedError("You don't have permission to delete this post", nil)
+		return utils.NewForbiddenError("You don't have permission to delete this post", nil)
 	}
 
 	// Delete post

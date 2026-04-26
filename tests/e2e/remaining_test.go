@@ -159,7 +159,7 @@ func TestE2E_Search_Unified(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 
 	resp := env.do(bearerReq(http.MethodGet,
-		env.url("/api/v1/search?q=test"), tokens.AccessToken, ""))
+		env.url("/api/v1/search?query=test"), tokens.AccessToken, ""))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "unified search failed: %s", string(raw))
@@ -184,7 +184,7 @@ func TestE2E_Admin_HelpChat_ThreadsAndReply(t *testing.T) {
 	// User sends help message
 	_ = env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/help-chat/messages"), user.AccessToken,
-		`{"message":"Need help with login"}`)).Body.Close()
+		`{"content":"Need help with login"}`)).Body.Close()
 
 	// Admin lists threads
 	threadsResp := env.do(bearerReq(http.MethodGet,
@@ -205,7 +205,7 @@ func TestE2E_Admin_HelpChat_ThreadsAndReply(t *testing.T) {
 	// Admin replies
 	replyResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/help-chat/"+user.UserID+"/reply"),
-		adminUser.AccessToken, `{"message":"We can help!"}`))
+		adminUser.AccessToken, `{"content":"We can help!"}`))
 	defer func() { _ = replyResp.Body.Close() }()
 	replyRaw, _ := io.ReadAll(replyResp.Body)
 	assert.Equal(t, http.StatusCreated, replyResp.StatusCode,

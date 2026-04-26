@@ -52,16 +52,32 @@ func TestE2E_Admin_Reports_GetPostReport(t *testing.T) {
 		`{"reason":"spam"}`))
 	defer func() { _ = reportResp.Body.Close() }()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
-	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode, "create report failed: %s", string(reportRaw))
 
-	var reportOut struct {
+	// Create response has no ID — list and find by post_id
+	listResp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/posts"), admin.AccessToken, ""))
+	defer func() { _ = listResp.Body.Close() }()
+	listRaw, _ := io.ReadAll(listResp.Body)
+	require.Equal(t, http.StatusOK, listResp.StatusCode)
+
+	var listOut struct {
 		Data struct {
-			ID string `json:"id"`
+			Items []struct {
+				ID     string `json:"id"`
+				PostID string `json:"post_id"`
+			} `json:"items"`
 		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(reportRaw, &reportOut))
-	reportID := reportOut.Data.ID
-	require.NotEmpty(t, reportID)
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var reportID string
+	for _, r := range listOut.Data.Items {
+		if r.PostID == postID {
+			reportID = r.ID
+			break
+		}
+	}
+	require.NotEmpty(t, reportID, "created report not found in list")
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/reports/posts/"+reportID), admin.AccessToken, ""))
@@ -82,15 +98,34 @@ func TestE2E_Admin_Reports_UpdateReportStatus(t *testing.T) {
 	reportRaw, _ := io.ReadAll(reportResp.Body)
 	require.Equal(t, http.StatusCreated, reportResp.StatusCode, "create report failed: %s", string(reportRaw))
 
-	var reportOut struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+	// Create response has no ID — list and find by post_id
+	listResp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/posts"), admin.AccessToken, ""))
+	defer func() { _ = listResp.Body.Close() }()
+	listRaw, _ := io.ReadAll(listResp.Body)
+	require.Equal(t, http.StatusOK, listResp.StatusCode)
+
+	var listOut struct {
+		Data struct {
+			Items []struct {
+				ID     string `json:"id"`
+				PostID string `json:"post_id"`
+			} `json:"items"`
+		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(reportRaw, &reportOut))
-	require.NotEmpty(t, reportOut.Data.ID)
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var reportID string
+	for _, r := range listOut.Data.Items {
+		if r.PostID == postID {
+			reportID = r.ID
+			break
+		}
+	}
+	require.NotEmpty(t, reportID, "created report not found in list")
 
 	body := `{"status":"RESOLVED"}`
 	resp := env.do(bearerReq(http.MethodPut,
-		env.url("/api/v1/admin/reports/posts/"+reportOut.Data.ID+"/status"),
+		env.url("/api/v1/admin/reports/posts/"+reportID+"/status"),
 		admin.AccessToken, body))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
@@ -504,16 +539,35 @@ func TestE2E_Admin_Reports_GetCommentReport(t *testing.T) {
 		`{"reason":"harassment"}`))
 	defer func() { _ = reportResp.Body.Close() }()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
-	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode, "create report failed: %s", string(reportRaw))
 
-	var out struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+	// Create response has no ID — list and find by comment_id
+	listResp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/comments"), admin.AccessToken, ""))
+	defer func() { _ = listResp.Body.Close() }()
+	listRaw, _ := io.ReadAll(listResp.Body)
+	require.Equal(t, http.StatusOK, listResp.StatusCode)
+
+	var listOut struct {
+		Data struct {
+			Items []struct {
+				ID        string `json:"id"`
+				CommentID string `json:"comment_id"`
+			} `json:"items"`
+		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(reportRaw, &out))
-	require.NotEmpty(t, out.Data.ID)
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var reportID string
+	for _, r := range listOut.Data.Items {
+		if r.CommentID == commentID {
+			reportID = r.ID
+			break
+		}
+	}
+	require.NotEmpty(t, reportID, "created comment report not found in list")
 
 	resp := env.do(bearerReq(http.MethodGet,
-		env.url("/api/v1/admin/reports/comments/"+out.Data.ID), admin.AccessToken, ""))
+		env.url("/api/v1/admin/reports/comments/"+reportID), admin.AccessToken, ""))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get comment report failed: %s", string(raw))
@@ -528,16 +582,35 @@ func TestE2E_Admin_Reports_GetUserReport(t *testing.T) {
 		`{"reason":"fake_account"}`))
 	defer func() { _ = reportResp.Body.Close() }()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
-	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode, "create report failed: %s", string(reportRaw))
 
-	var out struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+	// Create response has no ID — list and find by reported_user_id
+	listResp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/users"), admin.AccessToken, ""))
+	defer func() { _ = listResp.Body.Close() }()
+	listRaw, _ := io.ReadAll(listResp.Body)
+	require.Equal(t, http.StatusOK, listResp.StatusCode)
+
+	var listOut struct {
+		Data struct {
+			Items []struct {
+				ID             string `json:"id"`
+				ReportedUserID string `json:"reported_user_id"`
+			} `json:"items"`
+		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(reportRaw, &out))
-	require.NotEmpty(t, out.Data.ID)
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var reportID string
+	for _, r := range listOut.Data.Items {
+		if r.ReportedUserID == regular.UserID {
+			reportID = r.ID
+			break
+		}
+	}
+	require.NotEmpty(t, reportID, "created user report not found in list")
 
 	resp := env.do(bearerReq(http.MethodGet,
-		env.url("/api/v1/admin/reports/users/"+out.Data.ID), admin.AccessToken, ""))
+		env.url("/api/v1/admin/reports/users/"+reportID), admin.AccessToken, ""))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get user report failed: %s", string(raw))
@@ -553,16 +626,35 @@ func TestE2E_Admin_Reports_GetBusinessReport(t *testing.T) {
 		`{"reason":"fake_business"}`))
 	defer func() { _ = reportResp.Body.Close() }()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
-	require.Equal(t, http.StatusCreated, reportResp.StatusCode)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode, "create report failed: %s", string(reportRaw))
 
-	var out struct {
-		Data struct{ ID string `json:"id"` } `json:"data"`
+	// Create response has no ID — list and find by business_id
+	listResp := env.do(bearerReq(http.MethodGet,
+		env.url("/api/v1/admin/reports/businesses"), admin.AccessToken, ""))
+	defer func() { _ = listResp.Body.Close() }()
+	listRaw, _ := io.ReadAll(listResp.Body)
+	require.Equal(t, http.StatusOK, listResp.StatusCode)
+
+	var listOut struct {
+		Data struct {
+			Items []struct {
+				ID         string `json:"id"`
+				BusinessID string `json:"business_id"`
+			} `json:"items"`
+		} `json:"data"`
 	}
-	require.NoError(t, json.Unmarshal(reportRaw, &out))
-	require.NotEmpty(t, out.Data.ID)
+	require.NoError(t, json.Unmarshal(listRaw, &listOut))
+	var reportID string
+	for _, r := range listOut.Data.Items {
+		if r.BusinessID == bizID {
+			reportID = r.ID
+			break
+		}
+	}
+	require.NotEmpty(t, reportID, "created business report not found in list")
 
 	resp := env.do(bearerReq(http.MethodGet,
-		env.url("/api/v1/admin/reports/businesses/"+out.Data.ID), admin.AccessToken, ""))
+		env.url("/api/v1/admin/reports/businesses/"+reportID), admin.AccessToken, ""))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get business report failed: %s", string(raw))

@@ -20,7 +20,7 @@ func TestE2E_HelpChat_SendAndGetMessages(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 
 	// Send a help message
-	body := `{"message":"I need help with my account"}`
+	body := `{"content":"I need help with my account"}`
 	sendResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/help-chat/messages"), tokens.AccessToken, body))
 	defer func() { _ = sendResp.Body.Close() }()
@@ -59,7 +59,7 @@ func TestE2E_HelpChat_AdminCanSeeAndReplyToThreads(t *testing.T) {
 	env.makeAdmin(t, adminUser.UserID)
 
 	// User sends help message
-	body := `{"message":"Please help me with my post"}`
+	body := `{"content":"Please help me with my post"}`
 	_ = env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/help-chat/messages"), user.AccessToken, body)).Body.Close()
 
@@ -80,7 +80,7 @@ func TestE2E_HelpChat_AdminCanSeeAndReplyToThreads(t *testing.T) {
 		"admin get user thread failed: %s", string(threadRaw))
 
 	// Admin replies
-	replyBody := `{"message":"We are here to help you"}`
+	replyBody := `{"content":"We are here to help you"}`
 	replyResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/help-chat/"+user.UserID+"/reply"), adminUser.AccessToken, replyBody))
 	defer func() { _ = replyResp.Body.Close() }()

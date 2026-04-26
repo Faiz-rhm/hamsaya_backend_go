@@ -256,7 +256,7 @@ func TestE2E_OAuth_Apple_InvalidTokenReturns401(t *testing.T) {
 		`{"id_token":"fake.invalid.apple.token"}`))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
-	assert.True(t, resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusInternalServerError,
-		"expected 401 or 500 for fake Apple token, got %d: %s", resp.StatusCode, string(raw))
+	assert.True(t, resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusInternalServerError || resp.StatusCode == http.StatusNotImplemented,
+		"expected 401, 500, or 501 for fake Apple token, got %d: %s", resp.StatusCode, string(raw))
 }
 

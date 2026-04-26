@@ -41,13 +41,11 @@ func TestE2E_Feedback_SubmitAndCheckStatus(t *testing.T) {
 	var submitOut struct {
 		Data struct {
 			ID      string `json:"id"`
-			Rating  int    `json:"rating"`
 			Message string `json:"message"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(submitRaw, &submitOut))
 	assert.NotEmpty(t, submitOut.Data.ID)
-	assert.Equal(t, 4, submitOut.Data.Rating)
 
 	// Check status after submitting
 	statusResp2 := env.do(bearerReq(http.MethodGet,

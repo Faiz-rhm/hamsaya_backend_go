@@ -364,7 +364,7 @@ func (s *CommentService) UpdateComment(ctx context.Context, commentID, userID st
 
 	// Check ownership
 	if comment.UserID != userID {
-		return nil, utils.NewUnauthorizedError("You don't have permission to update this comment", nil)
+		return nil, utils.NewForbiddenError("You don't have permission to update this comment", nil)
 	}
 
 	// Update comment text
@@ -416,7 +416,7 @@ func (s *CommentService) DeleteComment(ctx context.Context, commentID, userID st
 
 	// Check ownership
 	if comment.UserID != userID {
-		return utils.NewUnauthorizedError("You don't have permission to delete this comment", nil)
+		return utils.NewForbiddenError("You don't have permission to delete this comment", nil)
 	}
 
 	// Delete comment

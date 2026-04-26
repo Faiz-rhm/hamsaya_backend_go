@@ -26,16 +26,15 @@ func TestE2E_Profile_GetMyProfile(t *testing.T) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get profile failed: %s", string(raw))
 
 	var out struct {
-		Data struct {
-			ID        string `json:"id"`
-			Email     string `json:"email"`
-			FirstName string `json:"first_name"`
-		} `json:"data"`
+		ID        string  `json:"id"`
+		Email     string  `json:"email"`
+		FirstName *string `json:"first_name"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &out))
-	assert.Equal(t, tokens.UserID, out.Data.ID)
-	assert.Equal(t, email, out.Data.Email)
-	assert.Equal(t, "Test", out.Data.FirstName)
+	assert.Equal(t, tokens.UserID, out.ID)
+	assert.Equal(t, email, out.Email)
+	require.NotNil(t, out.FirstName)
+	assert.Equal(t, "Test", *out.FirstName)
 }
 
 func TestE2E_Profile_UpdateProfile(t *testing.T) {

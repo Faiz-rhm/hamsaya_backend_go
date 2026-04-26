@@ -22,7 +22,7 @@ func TestE2E_Auth_UnifiedAuth_Register(t *testing.T) {
 
 	fn := "Test"
 	ln := "Unified"
-	body := fmt.Sprintf(`{"email":%q,"password":"Password123!","first_name":%q,"last_name":%q}`, email, fn, ln)
+	body := fmt.Sprintf(`{"email":%q,"password":"Password123!","first_name":%q,"last_name":%q,"latitude":34.5553,"longitude":69.2075}`, email, fn, ln)
 	resp := env.do(mustPost(env.url("/api/v1/auth/unified"), body))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
@@ -47,11 +47,14 @@ func TestE2E_Auth_UnifiedAuth_Login(t *testing.T) {
 
 	var out struct {
 		Data struct {
-			AccessToken string `json:"access_token"`
+			Tokens *struct {
+				AccessToken string `json:"access_token"`
+			} `json:"tokens"`
 		} `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(raw, &out))
-	assert.NotEmpty(t, out.Data.AccessToken)
+	require.NotNil(t, out.Data.Tokens, "no tokens in unified login response")
+	assert.NotEmpty(t, out.Data.Tokens.AccessToken)
 }
 
 // ---- Auth: verify-email with invalid token ----
@@ -104,7 +107,7 @@ func TestE2E_Post_ResellSellPost(t *testing.T) {
 
 	// Create a SELL post
 	price := 50.0
-	body := fmt.Sprintf(`{"type":"SELL","description":"Item for sale","price":%v,"currency":"USD","visibility":"PUBLIC"}`, price)
+	body := fmt.Sprintf(`{"type":"SELL","title":"Item Title","description":"Item for sale","price":%v,"currency":"USD","visibility":"PUBLIC"}`, price)
 	createResp := env.do(bearerReq(http.MethodPost, env.url("/api/v1/posts"), tokens.AccessToken, body))
 	defer func() { _ = createResp.Body.Close() }()
 	createRaw, _ := io.ReadAll(createResp.Body)
