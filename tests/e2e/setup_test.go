@@ -203,6 +203,7 @@ func buildRouter(
 	reportRepo := repositories.NewReportRepository(db)
 	feedbackRepo := repositories.NewFeedbackRepository(db)
 	helpChatRepo := repositories.NewHelpChatRepository(db)
+	mfaRepo := repositories.NewMFARepository(db)
 
 	// Services
 	jwtSvc := services.NewJWTService(&cfg.JWT)
@@ -216,12 +217,13 @@ func buildRouter(
 	t.Cleanup(wsHub.Shutdown)
 
 	oauthSvc := services.NewOAuthService(cfg, userRepo, logger)
+	mfaSvc := services.NewMFAService(mfaRepo, userRepo, passwordSvc, logger)
 
 	notifSvc := services.NewNotificationService(
 		notificationRepo, notifSettingsRepo, userRepo, nil, redisClient, wsHub, logger,
 	)
 	authSvc := services.NewAuthService(
-		userRepo, adminRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, nil, cfg, logger,
+		userRepo, adminRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, mfaSvc, cfg, logger,
 	)
 	postSvc := services.NewPostService(
 		postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo,
@@ -265,6 +267,7 @@ func buildRouter(
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatSvc, validator, logger)
 	adminHandler := handlers.NewAdminHandler(adminSvc, validator, logger)
 	oauthHandler := handlers.NewOAuthHandler(authSvc, oauthSvc, validator, logger)
+	mfaHandler := handlers.NewMFAHandler(mfaSvc, validator, logger)
 
 	// Router
 	r := gin.New()
@@ -279,6 +282,7 @@ func buildRouter(
 	auth.POST("/unified", authHandler.UnifiedAuth)
 	auth.POST("/refresh", authHandler.RefreshToken)
 	auth.POST("/mfa/verify", authHandler.VerifyMFA)
+	mfaHandler.RegisterRoutes(v1, requireAuth)
 	auth.POST("/oauth/google", oauthHandler.GoogleOAuth)
 	auth.POST("/oauth/facebook", oauthHandler.FacebookOAuth)
 	auth.POST("/oauth/apple", oauthHandler.AppleOAuth)

@@ -80,15 +80,17 @@ func TestE2E_Admin_Reports_UpdateReportStatus(t *testing.T) {
 		`{"reason":"spam"}`))
 	defer reportResp.Body.Close()
 	reportRaw, _ := io.ReadAll(reportResp.Body)
+	require.Equal(t, http.StatusCreated, reportResp.StatusCode, "create report failed: %s", string(reportRaw))
 
 	var reportOut struct {
 		Data struct{ ID string `json:"id"` } `json:"data"`
 	}
 	require.NoError(t, json.Unmarshal(reportRaw, &reportOut))
+	require.NotEmpty(t, reportOut.Data.ID)
 
 	body := `{"status":"RESOLVED"}`
 	resp := env.do(bearerReq(http.MethodPut,
-		env.url("/api/v1/admin/reports/post/"+reportOut.Data.ID+"/status"),
+		env.url("/api/v1/admin/reports/posts/"+reportOut.Data.ID+"/status"),
 		admin.AccessToken, body))
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(resp.Body)
