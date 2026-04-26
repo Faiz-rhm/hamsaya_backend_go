@@ -1,0 +1,57 @@
+name: Fuzz
+
+# Runs Go's native fuzz harness on a curated list of targets to grow the
+# corpus and surface panic-inducing inputs. New seeds discovered by the run
+# are uploaded as an artifact; commit them under testdata/fuzz/ to make the
+# regression permanent.
+on:
+  schedule:
+    - cron: '0 3 * * 0'   # weekly, Sunday 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      fuzztime:
+        description: Total fuzz time per target (Go duration string)
+        default: 5m
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  fuzz:
+    name: Native fuzz targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { pkg: ./internal/handlers, name: FuzzAuthHandler_Register }
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.9'
+          cache: true
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libwebp-dev
+
+      - name: Run fuzzer ${{ matrix.target.name }}
+        env:
+          FUZZTIME: ${{ github.event.inputs.fuzztime || '5m' }}
+        run: |
+          go test -run=^$ -fuzz=^${{ matrix.target.name }}$ \
+            -fuzztime=$FUZZTIME ${{ matrix.target.pkg }}
+
+      - name: Upload fuzz corpus on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-corpus-${{ matrix.target.name }}
+          path: |
+            ${{ matrix.target.pkg }}/testdata/fuzz/**
+          if-no-files-found: ignore
+          retention-days: 30

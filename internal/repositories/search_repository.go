@@ -33,9 +33,19 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 	args := []interface{}{}
 	argCount := 1
 
-	// Build SELECT clause
+	// Explicit column list (mirrors scanArgs order). Avoids `p.*` so adding
+	// columns to the posts table — e.g. the search_vector tsvector — does not
+	// break this query without a corresponding scan-target update.
 	query := `
-		SELECT DISTINCT p.*,
+		SELECT DISTINCT
+			p.id, p.user_id, p.business_id, p.original_post_id, p.category_id,
+			p.title, p.description, p.type, p.status, p.visibility,
+			p.currency, p.price, p.discount, p.free, p.sold, p.is_promoted, p.country_code, p.contact_no, p.is_location,
+			p.start_date, p.start_time, p.end_date, p.end_time, p.event_state, p.interested_count, p.going_count, p.expired_at,
+			p.address_location, p.user_location,
+			p.country, p.province, p.district, p.neighborhood,
+			p.total_comments, p.total_likes, p.total_shares,
+			p.created_at, p.updated_at, p.deleted_at,
 			ST_Y(p.address_location::geometry) as latitude,
 			ST_X(p.address_location::geometry) as longitude
 	`

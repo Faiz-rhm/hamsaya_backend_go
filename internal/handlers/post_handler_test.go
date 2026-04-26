@@ -210,7 +210,8 @@ func TestPostHandler_DeletePost(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodDelete, "/api/v1/posts/"+postTestPostID, nil)
 		r.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		// Authenticated but not the post's author → 403 Forbidden.
+		assert.Equal(t, http.StatusForbidden, w.Code)
 		postRepo.AssertExpectations(t)
 	})
 

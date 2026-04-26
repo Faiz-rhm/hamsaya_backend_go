@@ -48,16 +48,19 @@ func (s *JWTService) GenerateTokenPair(userID, email string, aal int, sessionID 
 	}, nil
 }
 
-// GenerateAccessToken generates a new JWT access token
+// GenerateAccessToken generates a new JWT access token. Each token includes
+// a unique JTI so it can be individually revoked via the access-token denylist.
 func (s *JWTService) GenerateAccessToken(userID, email string, aal int, sessionID string) (string, time.Time, error) {
 	now := time.Now()
 	expiresAt := now.Add(s.cfg.AccessTokenDuration)
+	jti := uuid.New().String()
 
 	claims := jwt.MapClaims{
 		"user_id":    userID,
 		"email":      email,
 		"aal":        aal,
 		"session_id": sessionID,
+		"jti":        jti,
 		"iat":        now.Unix(),
 		"exp":        expiresAt.Unix(),
 		"iss":        "hamsaya",
@@ -105,12 +108,16 @@ func (s *JWTService) ValidateAccessToken(tokenString string) (*models.JWTClaims,
 		return nil, utils.NewUnauthorizedError("Invalid token claims", nil)
 	}
 
-	// Extract claims
+	// Extract claims. JTI is optional for backwards compatibility with tokens
+	// issued before the denylist feature shipped — the middleware treats an
+	// empty JTI as "cannot be denylisted" and skips the check.
+	jti, _ := claims["jti"].(string)
 	jwtClaims := &models.JWTClaims{
 		UserID:    claims["user_id"].(string),
 		Email:     claims["email"].(string),
 		AAL:       int(claims["aal"].(float64)),
 		SessionID: claims["session_id"].(string),
+		JTI:       jti,
 		IssuedAt:  int64(claims["iat"].(float64)),
 		ExpiresAt: int64(claims["exp"].(float64)),
 		Issuer:    claims["iss"].(string),

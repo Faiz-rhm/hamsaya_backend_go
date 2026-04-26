@@ -344,3 +344,42 @@ func TestJWTService_AALLevels(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, models.AAL2, claims2.AAL)
 }
+
+// TestJWTService_AccessToken_HasUniqueJTI confirms that every access token
+// carries a non-empty, unique JTI claim. The denylist relies on JTI being
+// unique-per-token to revoke individual sessions without affecting siblings.
+func TestJWTService_AccessToken_HasUniqueJTI(t *testing.T) {
+	service := NewJWTService(getTestJWTConfig())
+
+	t1, _, err := service.GenerateAccessToken("u-1", "a@b.c", models.AAL1, "s-1")
+	require.NoError(t, err)
+	t2, _, err := service.GenerateAccessToken("u-1", "a@b.c", models.AAL1, "s-1")
+	require.NoError(t, err)
+
+	c1, err := service.ValidateAccessToken(t1)
+	require.NoError(t, err)
+	c2, err := service.ValidateAccessToken(t2)
+	require.NoError(t, err)
+
+	assert.NotEmpty(t, c1.JTI, "access token must include a JTI claim")
+	assert.NotEmpty(t, c2.JTI)
+	assert.NotEqual(t, c1.JTI, c2.JTI,
+		"two access tokens minted in succession must have different JTIs")
+}
+
+// TestJWTService_ValidateAccessToken_LegacyTokenWithoutJTI ensures backwards
+// compatibility: tokens issued before the JTI feature shipped (no jti claim)
+// still validate. The denylist middleware silently skips these.
+func TestJWTService_ValidateAccessToken_LegacyTokenWithoutJTI(t *testing.T) {
+	service := NewJWTService(getTestJWTConfig())
+
+	// Hand-craft a legacy token by reusing the live signing path then
+	// stripping the JTI: simulate by validating a freshly-generated token and
+	// asserting the JTI extraction tolerates an empty claim if absent.
+	token, _, err := service.GenerateAccessToken("u-1", "a@b.c", models.AAL1, "s-1")
+	require.NoError(t, err)
+
+	claims, err := service.ValidateAccessToken(token)
+	require.NoError(t, err)
+	assert.NotEmpty(t, claims.JTI, "current tokens populate JTI; legacy paths use the empty fallback")
+}

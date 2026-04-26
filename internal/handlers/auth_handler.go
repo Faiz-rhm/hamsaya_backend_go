@@ -296,7 +296,14 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	if err := h.authService.Logout(c.Request.Context(), sessionID.(string)); err != nil {
+	// JTI + token expiry propagated by auth middleware so the active access
+	// token can be added to the denylist for its remaining lifetime.
+	jtiVal, _ := c.Get("jti")
+	expVal, _ := c.Get("token_exp")
+	jti, _ := jtiVal.(string)
+	tokenExp, _ := expVal.(int64)
+
+	if err := h.authService.Logout(c.Request.Context(), sessionID.(string), jti, tokenExp); err != nil {
 		h.handleError(c, err)
 		return
 	}

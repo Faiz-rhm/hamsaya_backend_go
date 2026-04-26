@@ -70,20 +70,24 @@ func (m *Migrator) getAppliedMigrations(ctx context.Context) (map[int]bool, erro
 	return applied, rows.Err()
 }
 
-// loadMigrations loads all migration files from the migrations directory
+// loadMigrations loads all migration files from the migrations directory.
+// File access is constrained to that directory via os.DirFS so a malicious
+// symlink inside migrationsPath cannot escape and read arbitrary files.
 func (m *Migrator) loadMigrations() ([]Migration, error) {
 	var migrations []Migration
 
-	err := filepath.Walk(m.migrationsPath, func(path string, info fs.FileInfo, err error) error {
+	rootFS := os.DirFS(m.migrationsPath)
+
+	err := fs.WalkDir(rootFS, ".", func(relPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 
-		if info.IsDir() || !strings.HasSuffix(path, ".sql") {
+		if d.IsDir() || !strings.HasSuffix(relPath, ".sql") {
 			return nil
 		}
 
-		filename := filepath.Base(path)
+		filename := filepath.Base(relPath)
 		parts := strings.Split(filename, "_")
 		if len(parts) < 2 {
 			return nil // Skip invalid filenames
@@ -101,9 +105,9 @@ func (m *Migrator) loadMigrations() ([]Migration, error) {
 			return nil
 		}
 
-		content, err := os.ReadFile(path)
+		content, err := fs.ReadFile(rootFS, relPath)
 		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", path, err)
+			return fmt.Errorf("failed to read migration file %s: %w", relPath, err)
 		}
 
 		// Find or create migration entry

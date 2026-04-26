@@ -71,7 +71,7 @@ var postDefaultBusinessAvatarColors = []string{
 
 func defaultAvatarColorForBusinessID(businessID string) string {
 	h := fnv.New32a()
-	h.Write([]byte(businessID))
+	_, _ = h.Write([]byte(businessID)) // fnv.Hash.Write is documented never to error
 	return postDefaultBusinessAvatarColors[int(h.Sum32())%len(postDefaultBusinessAvatarColors)]
 }
 

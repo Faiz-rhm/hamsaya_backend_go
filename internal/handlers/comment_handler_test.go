@@ -209,7 +209,8 @@ func TestCommentHandler_DeleteComment(t *testing.T) {
 		req, _ := http.NewRequest(http.MethodDelete, "/api/v1/comments/"+commentTestCommentID, nil)
 		r.ServeHTTP(w, req)
 
-		assert.Equal(t, http.StatusUnauthorized, w.Code)
+		// Authenticated but lacks ownership → 403 Forbidden, not 401 Unauthorized.
+		assert.Equal(t, http.StatusForbidden, w.Code)
 	})
 
 	t.Run("success", func(t *testing.T) {

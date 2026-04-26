@@ -40,7 +40,7 @@ func NewFCMClient(cfg FCMConfig, logger *zap.Logger) (*FCMClient, error) {
 		// Build a service-account JSON from individual env vars so no file is needed.
 		// Replace literal "\n" sequences (common when storing PEM in env vars) with real newlines.
 		privateKey := strings.ReplaceAll(cfg.PrivateKey, `\n`, "\n")
-		credJSON, err := json.Marshal(map[string]string{
+		credJSON, err := json.Marshal(map[string]string{ //#nosec G101 -- credential field names, not values
 			"type":                        "service_account",
 			"project_id":                  cfg.ProjectID,
 			"private_key":                 privateKey,

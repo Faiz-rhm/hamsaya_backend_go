@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -220,17 +219,14 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 
 	// USER EXISTS - Login flow
 	if err == nil && existingUser != nil {
-		// Check if account is locked
+		// Check if account is locked. Return the same generic message as wrong-password
+		// so attackers cannot distinguish locked accounts from non-existent ones.
 		if existingUser.IsLocked() {
 			s.logger.Warn("Login attempt for locked account",
 				zap.String("user_id", existingUser.ID),
 				zap.Time("locked_until", *existingUser.LockedUntil),
 			)
-			return nil, utils.NewUnauthorizedError(
-				fmt.Sprintf("Account is locked until %s due to too many failed login attempts",
-					existingUser.LockedUntil.Format(time.RFC3339)),
-				nil,
-			)
+			return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
 		}
 
 		// Verify password
@@ -514,18 +510,15 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		}
 	}
 
-	// USER EXISTS (or was just reactivated) - Normal login flow
-	// Check if account is locked
+	// USER EXISTS (or was just reactivated) - Normal login flow.
+	// Locked accounts return the same generic message as wrong-password to prevent
+	// account enumeration via distinct error responses.
 	if user.IsLocked() {
 		s.logger.Warn("Login attempt for locked account",
 			zap.String("user_id", user.ID),
 			zap.Time("locked_until", *user.LockedUntil),
 		)
-		return nil, utils.NewUnauthorizedError(
-			fmt.Sprintf("Account is locked until %s due to too many failed login attempts",
-				user.LockedUntil.Format(time.RFC3339)),
-			nil,
-		)
+		return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
 	}
 
 	// Verify password
@@ -751,10 +744,25 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshToken
 }
 
 // Logout revokes the current session
-func (s *AuthService) Logout(ctx context.Context, sessionID string) error {
+// Logout revokes the session and adds the active access token to the denylist
+// for the remainder of its TTL. jti / accessTokenExpiresAt may be empty/zero
+// for legacy callers — in which case only the session and refresh token are
+// revoked (access token remains valid until natural expiry, the previous
+// behavior).
+func (s *AuthService) Logout(ctx context.Context, sessionID, jti string, accessTokenExpiresAt int64) error {
 	if err := s.userRepo.RevokeSession(ctx, sessionID); err != nil {
 		s.logger.Error("Failed to revoke session", zap.Error(err))
 		return utils.NewInternalError("Failed to logout", err)
+	}
+
+	if jti != "" && accessTokenExpiresAt > 0 && s.tokenStorage != nil {
+		ttl := time.Until(time.Unix(accessTokenExpiresAt, 0))
+		if ttl > 0 {
+			if err := s.tokenStorage.BlacklistToken(ctx, jti, ttl); err != nil {
+				s.logger.Warn("Failed to blacklist access token on logout (session still revoked)",
+					zap.String("session_id", sessionID), zap.Error(err))
+			}
+		}
 	}
 
 	s.logger.Info("User logged out", zap.String("session_id", sessionID))

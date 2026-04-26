@@ -48,8 +48,10 @@ var AvatarColors = []string{
 }
 
 // RandomAvatarColor returns a random hex color from AvatarColors for new profiles.
+// Avatar color is a UI-only attribute; weak randomness is intentional and not a
+// security concern. The crypto/rand path would be wasteful here.
 func RandomAvatarColor() string {
-	return AvatarColors[rand.Intn(len(AvatarColors))]
+	return AvatarColors[rand.Intn(len(AvatarColors))] //#nosec G404 -- non-security UI choice
 }
 
 // Profile represents extended user profile information

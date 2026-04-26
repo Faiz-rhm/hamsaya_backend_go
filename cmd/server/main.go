@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/notification"
 	"github.com/hamsaya/backend/pkg/observability"
+	"github.com/hamsaya/backend/pkg/redislock"
 	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -85,10 +87,26 @@ func main() {
 	}
 
 	var telem observability.TelemetryProvider
-	telem, err = observability.NewTelemetry(context.Background(), otelCfg, logger)
-	if err != nil {
-		sugaredLogger.Warnw("OpenTelemetry init failed, falling back to no-op", "error", err)
+	concrete, err := observability.NewTelemetry(context.Background(), otelCfg, logger)
+	switch {
+	case err != nil:
+		sugaredLogger.Warnw("OpenTelemetry init failed, falling back to no-op",
+			"error", err, "endpoint", otelCfg.OTLPEndpoint, "enabled", otelCfg.Enabled)
 		telem = observability.NewNoopTelemetry(otelCfg, logger)
+	case concrete == nil:
+		// Init returned (nil, nil) — observability disabled or endpoint unreachable.
+		// Emit a clear startup signal instead of silently degrading.
+		if otelCfg.Enabled {
+			sugaredLogger.Warnw("OpenTelemetry enabled but exporter unreachable, falling back to no-op",
+				"endpoint", otelCfg.OTLPEndpoint)
+		} else {
+			sugaredLogger.Infow("OpenTelemetry disabled (set OBSERVABILITY_ENABLED=true to enable)")
+		}
+		telem = observability.NewNoopTelemetry(otelCfg, logger)
+	default:
+		telem = concrete
+		sugaredLogger.Infow("OpenTelemetry initialized",
+			"endpoint", otelCfg.OTLPEndpoint, "sampling_rate", otelCfg.SamplingRate)
 	}
 	defer func() {
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -232,6 +250,8 @@ func main() {
 	router.Use(middleware.CORS(cfg.CORS))
 	router.Use(middleware.RequestID())
 	router.Use(middleware.SecurityHeaders())
+	router.Use(middleware.BodyLimit(middleware.DefaultMaxBodyBytes))
+	router.Use(middleware.Timeout(middleware.DefaultRequestTimeout))
 	router.Use(banMiddleware.Enforce())
 
 	// OpenTelemetry: in-flight count, request duration/count metrics, and tracing
@@ -365,8 +385,8 @@ func main() {
 			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
 
 			// Protected routes (require verified email)
-			posts.POST("", verifiedAuth, postHandler.CreatePost)
-			posts.POST("/upload-image", verifiedAuth, postHandler.UploadPostImage)
+			posts.POST("", verifiedAuth, rateLimiter.LimitPostsCreate(), postHandler.CreatePost)
+			posts.POST("/upload-image", verifiedAuth, rateLimiter.LimitPostsCreate(), postHandler.UploadPostImage)
 			posts.PUT("/:post_id", verifiedAuth, postHandler.UpdatePost)
 			posts.DELETE("/:post_id", verifiedAuth, postHandler.DeletePost)
 
@@ -648,51 +668,81 @@ func main() {
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
-	// Background job: expire unsold SELL posts and notify owners (runs every hour)
+	// runIfLeader executes fn only when this instance holds the named Redis lock.
+	// Lock TTL is shorter than the job interval, so a crashed leader's lock expires
+	// before the next tick and another instance can take over.
+	runIfLeader := func(jobName, lockKey string, lockTTL time.Duration, fn func(context.Context) error) {
+		runCtx, cancel := context.WithTimeout(context.Background(), lockTTL)
+		defer cancel()
+		lock, err := redislock.Acquire(runCtx, redisClient, lockKey, lockTTL)
+		if err != nil {
+			if errors.Is(err, redislock.ErrNotAcquired) {
+				return // another instance is running the job
+			}
+			sugaredLogger.Warnw("Background job lock error", "job", jobName, "error", err)
+			return
+		}
+		defer func() {
+			if err := lock.Release(context.Background()); err != nil {
+				sugaredLogger.Warnw("Background job lock release error", "job", jobName, "error", err)
+			}
+		}()
+		if err := fn(runCtx); err != nil {
+			sugaredLogger.Warnw("Background job failed", "job", jobName, "error", err)
+		}
+	}
+
+	// Background job: expire unsold SELL posts and notify owners (runs every hour).
+	// Leader-elected via Redis lock so only one instance executes per tick.
 	go func() {
 		ticker := time.NewTicker(1 * time.Hour)
 		defer ticker.Stop()
 
-		// Run once immediately on startup to catch any posts that expired while server was down
-		if count, err := postService.ProcessExpiredSellPosts(context.Background()); err != nil {
-			sugaredLogger.Warnw("Sell expiry job failed", "error", err)
-		} else if count > 0 {
-			sugaredLogger.Infow("Sell expiry job completed", "expired_count", count)
+		expireSellPosts := func(ctx context.Context) error {
+			count, err := postService.ProcessExpiredSellPosts(ctx)
+			if err != nil {
+				return err
+			}
+			if count > 0 {
+				sugaredLogger.Infow("Sell expiry job completed", "expired_count", count)
+			}
+			return nil
 		}
+
+		runIfLeader("sell-expiry", "lock:job:sell-expiry", 30*time.Minute, expireSellPosts)
 
 		for {
 			select {
 			case <-ticker.C:
-				if count, err := postService.ProcessExpiredSellPosts(context.Background()); err != nil {
-					sugaredLogger.Warnw("Sell expiry job failed", "error", err)
-				} else if count > 0 {
-					sugaredLogger.Infow("Sell expiry job completed", "expired_count", count)
-				}
+				runIfLeader("sell-expiry", "lock:job:sell-expiry", 30*time.Minute, expireSellPosts)
 			case <-quit:
 				return
 			}
 		}
 	}()
 
-	// Background job: purge expired and revoked sessions (runs every 24 hours)
+	// Background job: purge expired and revoked sessions (runs every 24 hours).
 	go func() {
 		ticker := time.NewTicker(24 * time.Hour)
 		defer ticker.Stop()
 
-		if count, err := userRepo.DeleteExpiredSessions(context.Background()); err != nil {
-			sugaredLogger.Warnw("Session cleanup job failed", "error", err)
-		} else if count > 0 {
-			sugaredLogger.Infow("Session cleanup completed", "deleted_count", count)
+		purgeSessions := func(ctx context.Context) error {
+			count, err := userRepo.DeleteExpiredSessions(ctx)
+			if err != nil {
+				return err
+			}
+			if count > 0 {
+				sugaredLogger.Infow("Session cleanup completed", "deleted_count", count)
+			}
+			return nil
 		}
+
+		runIfLeader("session-cleanup", "lock:job:session-cleanup", 12*time.Hour, purgeSessions)
 
 		for {
 			select {
 			case <-ticker.C:
-				if count, err := userRepo.DeleteExpiredSessions(context.Background()); err != nil {
-					sugaredLogger.Warnw("Session cleanup job failed", "error", err)
-				} else if count > 0 {
-					sugaredLogger.Infow("Session cleanup completed", "deleted_count", count)
-				}
+				runIfLeader("session-cleanup", "lock:job:session-cleanup", 12*time.Hour, purgeSessions)
 			case <-quit:
 				return
 			}

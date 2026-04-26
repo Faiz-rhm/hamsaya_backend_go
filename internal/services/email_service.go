@@ -303,6 +303,7 @@ const verificationEmailTemplate = `
 </html>
 `
 
+//#nosec G101 -- HTML email template; "password" appears in copy, not as a credential
 const passwordResetEmailTemplate = `
 <!DOCTYPE html>
 <html lang="en">
@@ -407,6 +408,7 @@ const welcomeEmailTemplate = `
 </html>
 `
 
+//#nosec G101 -- HTML email template; "password" appears in copy, not as a credential
 const passwordChangedEmailTemplate = `
 <!DOCTYPE html>
 <html lang="en">

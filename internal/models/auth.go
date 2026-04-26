@@ -2,24 +2,28 @@ package models
 
 import "time"
 
+// Password capped at 128 chars: bcrypt truncates beyond 72 bytes, so anything
+// larger only serves as a DoS vector. Tokens capped at 4096 chars — well above
+// any JWT/OAuth ID token we expect, but bounded enough to reject payload bombs.
+
 // RegisterRequest represents a user registration request
 type RegisterRequest struct {
-	Email      string   `json:"email" validate:"required,email"`
-	Password   string   `json:"password" validate:"required,min=8"`
+	Email      string   `json:"email" validate:"required,email,max=320"`
+	Password   string   `json:"password" validate:"required,min=8,max=128"`
 	FirstName  string   `json:"first_name" validate:"required,min=2,max=100"`
 	LastName   string   `json:"last_name" validate:"required,min=2,max=100"`
 	Latitude   float64  `json:"latitude" validate:"required,latitude"`
 	Longitude  float64  `json:"longitude" validate:"required,longitude"`
-	DeviceInfo *string  `json:"device_info,omitempty"`
+	DeviceInfo *string  `json:"device_info,omitempty" validate:"omitempty,max=512"`
 	IPAddress  *string  `json:"-"` // Set from request context
 	UserAgent  *string  `json:"-"` // Set from request context
 }
 
 // LoginRequest represents a login request
 type LoginRequest struct {
-	Email      string  `json:"email" validate:"required,email"`
-	Password   string  `json:"password" validate:"required"`
-	DeviceInfo *string `json:"device_info,omitempty"`
+	Email      string  `json:"email" validate:"required,email,max=320"`
+	Password   string  `json:"password" validate:"required,max=128"`
+	DeviceInfo *string `json:"device_info,omitempty" validate:"omitempty,max=512"`
 	IPAddress  *string `json:"-"` // Set from request context
 	UserAgent  *string `json:"-"` // Set from request context
 }
@@ -27,25 +31,25 @@ type LoginRequest struct {
 // UnifiedAuthRequest represents a unified authentication request (login or register)
 // If user exists, it logs them in. If not, it registers them.
 type UnifiedAuthRequest struct {
-	Email      string   `json:"email" validate:"required,email"`
-	Password   string   `json:"password" validate:"required,min=8"`
+	Email      string   `json:"email" validate:"required,email,max=320"`
+	Password   string   `json:"password" validate:"required,min=8,max=128"`
 	FirstName  *string  `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
 	LastName   *string  `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
 	Latitude   *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
 	Longitude  *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
-	DeviceInfo *string  `json:"device_info,omitempty"`
+	DeviceInfo *string  `json:"device_info,omitempty" validate:"omitempty,max=512"`
 	IPAddress  *string  `json:"-"` // Set from request context
 	UserAgent  *string  `json:"-"` // Set from request context
 }
 
 // RefreshTokenRequest represents a refresh token request
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required,max=4096"`
 }
 
 // ForgotPasswordRequest represents a forgot password request
 type ForgotPasswordRequest struct {
-	Email string `json:"email" validate:"required,email"`
+	Email string `json:"email" validate:"required,email,max=320"`
 }
 
 // VerifyResetCodeRequest represents a request to verify the password reset OTP/code
@@ -55,24 +59,24 @@ type VerifyResetCodeRequest struct {
 
 // ResetPasswordRequest represents a reset password request
 type ResetPasswordRequest struct {
-	Token       string `json:"token" validate:"required"`
-	NewPassword string `json:"new_password" validate:"required,min=8"`
+	Token       string `json:"token" validate:"required,max=4096"`
+	NewPassword string `json:"new_password" validate:"required,min=8,max=128"`
 }
 
 // ChangePasswordRequest represents a change password request
 type ChangePasswordRequest struct {
-	CurrentPassword string `json:"current_password" validate:"required"`
-	NewPassword     string `json:"new_password" validate:"required,min=8"`
+	CurrentPassword string `json:"current_password" validate:"required,max=128"`
+	NewPassword     string `json:"new_password" validate:"required,min=8,max=128"`
 }
 
 // VerifyEmailRequest represents an email verification request
 type VerifyEmailRequest struct {
-	Token string `json:"token" validate:"required"`
+	Token string `json:"token" validate:"required,max=4096"`
 }
 
 // OAuthRequest represents an OAuth login request
 type OAuthRequest struct {
-	IDToken  string `json:"id_token" validate:"required"`
+	IDToken  string `json:"id_token" validate:"required,max=4096"`
 	Provider string `json:"provider" validate:"required,oneof=google apple facebook"`
 }
 
@@ -134,12 +138,15 @@ type LoginResponse struct {
 	MFAChallenge *MFAChallenge `json:"mfa_challenge,omitempty"`
 }
 
-// JWTClaims represents the claims in a JWT token
+// JWTClaims represents the claims in a JWT token.
+// JTI is the unique token identifier used by the access-token denylist
+// (set on /auth/logout so the access token cannot be replayed before expiry).
 type JWTClaims struct {
 	UserID    string `json:"user_id"`
 	Email     string `json:"email"`
 	AAL       int    `json:"aal"` // Authentication Assurance Level (1 or 2)
 	SessionID string `json:"session_id"`
+	JTI       string `json:"jti"`
 	IssuedAt  int64  `json:"iat"`
 	ExpiresAt int64  `json:"exp"`
 	Issuer    string `json:"iss"`

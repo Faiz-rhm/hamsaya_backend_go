@@ -10,7 +10,8 @@ import (
 // CreateTestUser creates a test user with default values
 func CreateTestUser(id, email string) *models.User {
 	now := time.Now()
-	passwordHash := "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5d8dBx7gBZ.v2" // "password"
+	//#nosec G101 -- bcrypt hash of literal "password" used only in unit tests
+	passwordHash := "$2a$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5d8dBx7gBZ.v2"
 	return &models.User{
 		ID:            id,
 		Email:         email,

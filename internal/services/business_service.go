@@ -155,10 +155,13 @@ func (s *BusinessService) GetBusiness(ctx context.Context, businessID string, vi
 		}
 	}
 
-	// Increment view count for non-owner viewers
+	// Increment view count for non-owner viewers.
+	// Intentionally uses context.Background so the count update outlives the
+	// request — the user does not need to wait for it, and a request-scoped
+	// context would cancel mid-write whenever the client disconnects.
 	isOwner := viewerID != nil && *viewerID == business.UserID
 	if !isOwner {
-		go func() {
+		go func() { // #nosec G118 -- detached on purpose; see comment above
 			_ = s.businessRepo.IncrementViews(context.Background(), businessID)
 		}()
 	}
@@ -687,7 +690,7 @@ var defaultBusinessAvatarColors = []string{
 
 func defaultAvatarColorForBusiness(businessID string) string {
 	h := fnv.New32a()
-	h.Write([]byte(businessID))
+	_, _ = h.Write([]byte(businessID)) // fnv.Hash.Write is documented never to error
 	return defaultBusinessAvatarColors[int(h.Sum32())%len(defaultBusinessAvatarColors)]
 }
 

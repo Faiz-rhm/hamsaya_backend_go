@@ -8,14 +8,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/hamsaya/backend/config"
 	"github.com/hamsaya/backend/internal/mocks"
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/testutil"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
 )
 
@@ -692,4 +696,101 @@ func TestRequireAuth_ContextValues(t *testing.T) {
 	assert.Equal(t, models.AAL1, ctxAAL)
 
 	userRepo.AssertExpectations(t)
+}
+
+// TestRequireAuth_DenylistedTokenRejected verifies the access-token denylist
+// path: a token whose JTI is present in the Redis-backed blacklist must be
+// rejected with 401, even though its signature is valid and its session row
+// is still active. This exercises the branch added to extractAndValidateToken.
+func TestRequireAuth_DenylistedTokenRejected(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const (
+		userID    = "user-deny-1"
+		email     = "deny@example.com"
+		sessionID = "session-deny-1"
+	)
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	tokenStorage := services.NewTokenStorageService(rdb, zap.NewNop())
+
+	jwtSvc := services.NewJWTService(getTestJWTConfig())
+	token, _, err := jwtSvc.GenerateAccessToken(userID, email, models.AAL1, sessionID)
+	require := require.New(t)
+	require.NoError(err)
+
+	// Pre-validate to grab the JTI we need to denylist.
+	claims, err := jwtSvc.ValidateAccessToken(token)
+	require.NoError(err)
+	require.NotEmpty(claims.JTI)
+
+	// Add JTI to the denylist with a TTL longer than the test takes to run.
+	require.NoError(tokenStorage.BlacklistToken(t.Context(), claims.JTI, time.Minute))
+
+	userRepo := &mocks.MockUserRepository{}
+	user := testutil.CreateTestUser(userID, email)
+	// GetByID may or may not be called depending on short-circuit order; mark Maybe.
+	userRepo.On("GetByID", mock.Anything, userID).Maybe().Return(user, nil)
+
+	mw := NewAuthMiddleware(jwtSvc, userRepo, tokenStorage, zap.NewNop())
+	r := gin.New()
+	r.GET("/protected", mw.RequireAuth(), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	w := performRequest(r, http.MethodGet, "/protected", token)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code,
+		"denylisted token must be rejected with 401")
+}
+
+// TestRequireAuth_LegacyTokenWithoutJTIStillValid documents the backwards
+// compatibility branch: tokens missing a JTI claim (issued before the feature
+// shipped) skip the denylist check and pass through the rest of the auth chain
+// normally.
+func TestRequireAuth_LegacyTokenWithoutJTIStillValid(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const (
+		userID    = "user-legacy-1"
+		email     = "legacy@example.com"
+		sessionID = "session-legacy-1"
+	)
+
+	mr := miniredis.RunT(t)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	tokenStorage := services.NewTokenStorageService(rdb, zap.NewNop())
+
+	// Hand-mint a token without a jti claim to simulate the legacy issuance path.
+	cfg := getTestJWTConfig()
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"user_id":    userID,
+		"email":      email,
+		"aal":        models.AAL1,
+		"session_id": sessionID,
+		"iat":        now.Unix(),
+		"exp":        now.Add(cfg.AccessTokenDuration).Unix(),
+		"iss":        "hamsaya",
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	signed, err := tok.SignedString([]byte(cfg.Secret))
+	require.NoError(t, err)
+
+	userRepo := &mocks.MockUserRepository{}
+	user := testutil.CreateTestUser(userID, email)
+	userRepo.On("GetByID", mock.Anything, userID).Return(user, nil)
+
+	jwtSvc := services.NewJWTService(cfg)
+	mw := NewAuthMiddleware(jwtSvc, userRepo, tokenStorage, zap.NewNop())
+
+	// Stand up a minimal session row so verifySession passes.
+	session := buildValidSession(sessionID, userID, signed)
+	userRepo.On("GetSessionByID", mock.Anything, sessionID).Return(session, nil)
+
+	r := gin.New()
+	r.GET("/protected", mw.RequireAuth(), func(c *gin.Context) { c.Status(http.StatusOK) })
+
+	w := performRequest(r, http.MethodGet, "/protected", signed)
+	assert.Equal(t, http.StatusOK, w.Code,
+		"token without JTI must still validate (legacy compat); only denylist check is skipped")
 }

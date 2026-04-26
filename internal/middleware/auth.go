@@ -72,6 +72,8 @@ func (m *AuthMiddleware) RequireAuth() gin.HandlerFunc {
 		c.Set("email", claims.Email)
 		c.Set("session_id", claims.SessionID)
 		c.Set("aal", claims.AAL)
+		c.Set("jti", claims.JTI)
+		c.Set("token_exp", claims.ExpiresAt)
 
 		c.Next()
 	}
@@ -107,6 +109,8 @@ func (m *AuthMiddleware) RequireAAL2() gin.HandlerFunc {
 		c.Set("email", claims.Email)
 		c.Set("session_id", claims.SessionID)
 		c.Set("aal", claims.AAL)
+		c.Set("jti", claims.JTI)
+		c.Set("token_exp", claims.ExpiresAt)
 
 		c.Next()
 	}
@@ -173,6 +177,8 @@ func (m *AuthMiddleware) OptionalAuth() gin.HandlerFunc {
 		c.Set("email", claims.Email)
 		c.Set("session_id", claims.SessionID)
 		c.Set("aal", claims.AAL)
+		c.Set("jti", claims.JTI)
+		c.Set("token_exp", claims.ExpiresAt)
 
 		c.Next()
 	}
@@ -290,6 +296,16 @@ func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTCla
 	claims, err := m.jwtService.ValidateAccessToken(token)
 	if err != nil {
 		return nil, err
+	}
+
+	// Access-token denylist: tokens revoked via /auth/logout are stored in Redis
+	// keyed by JTI for the remainder of their natural TTL. Skipped when the
+	// token has no JTI (legacy tokens issued before this feature shipped).
+	if claims.JTI != "" && m.tokenStorage != nil {
+		denied, derr := m.tokenStorage.IsTokenBlacklisted(c.Request.Context(), claims.JTI)
+		if derr == nil && denied {
+			return nil, utils.NewUnauthorizedError("Token has been revoked", nil)
+		}
 	}
 
 	// Verify session is still active

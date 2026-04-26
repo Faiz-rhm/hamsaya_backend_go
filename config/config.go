@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -21,6 +22,21 @@ func parseStringSlice(s string) []string {
 		}
 	}
 	return result
+}
+
+// getInt32 reads an integer config key and clamps it to int32 range, defending
+// against G115 (integer overflow conversion) when an env var supplies a value
+// larger than math.MaxInt32 or smaller than math.MinInt32.
+func getInt32(key string) int32 {
+	v := viper.GetInt(key)
+	switch {
+	case v > math.MaxInt32:
+		return math.MaxInt32
+	case v < math.MinInt32:
+		return math.MinInt32
+	default:
+		return int32(v)
+	}
 }
 
 // Config holds all configuration for the application
@@ -185,8 +201,8 @@ func Load() (*Config, error) {
 			User:            viper.GetString("DB_USER"),
 			Password:        viper.GetString("DB_PASSWORD"),
 			SSLMode:         viper.GetString("DB_SSL_MODE"),
-			MaxConns:        int32(viper.GetInt("DB_MAX_CONNS")),
-			MinConns:        int32(viper.GetInt("DB_MIN_CONNS")),
+			MaxConns:        getInt32("DB_MAX_CONNS"),
+			MinConns:        getInt32("DB_MIN_CONNS"),
 			MaxConnLifetime: viper.GetDuration("DB_MAX_CONN_LIFETIME"),
 			MaxConnIdleTime: viper.GetDuration("DB_MAX_CONN_IDLE_TIME"),
 		},

@@ -47,6 +47,13 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      10 * time.Minute,
 		KeyPrefix:   "ratelimit:pwreset:",
 	},
+	// posts-create: per-user cap on POST /posts. Auth alone is not enough — a
+	// compromised account or bot could otherwise flood the feed. Use with LimitByUser.
+	"posts-create": {
+		MaxRequests: 30,
+		Window:      time.Hour,
+		KeyPrefix:   "ratelimit:posts-create:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
@@ -129,6 +136,13 @@ func (rl *RateLimiter) LimitStrict() gin.HandlerFunc {
 // Limits users to 10 reports per 24 hours to prevent spam
 func (rl *RateLimiter) LimitReports() gin.HandlerFunc {
 	config := DefaultRateLimits["reports"]
+	return rl.LimitByUser(config)
+}
+
+// LimitPostsCreate caps how many posts a single authenticated user can create
+// per hour. Falls back to per-IP limiting for unauthenticated callers.
+func (rl *RateLimiter) LimitPostsCreate() gin.HandlerFunc {
+	config := DefaultRateLimits["posts-create"]
 	return rl.LimitByUser(config)
 }
 

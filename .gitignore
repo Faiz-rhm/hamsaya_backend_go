@@ -52,6 +52,7 @@ temp/
 # Build artifacts
 main
 server
+server_bin
 hamsaya-backend
 
 # Database
