@@ -18,7 +18,7 @@ func TestE2E_Search_Users(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/search/users?q=Test"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -32,7 +32,7 @@ func TestE2E_Search_Posts(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/search/posts?q=Searchable"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -45,7 +45,7 @@ func TestE2E_Search_Businesses(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/search/businesses?q=Test"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -58,7 +58,7 @@ func TestE2E_Search_Discover(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/discover"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 }
 
@@ -66,6 +66,6 @@ func TestE2E_Search_Unauthenticated(t *testing.T) {
 	env := setupE2E(t)
 	req, _ := http.NewRequest(http.MethodGet, env.url("/api/v1/search/users?q=test"), nil)
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

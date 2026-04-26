@@ -29,7 +29,7 @@ func TestE2E_Chat_MarkConversationAsRead(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/chat/conversations/"+convID+"/read"), user2.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "mark conversation read failed: %s", string(raw))
 }
@@ -51,7 +51,7 @@ func TestE2E_Chat_DeleteMessage(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/chat/messages/"+msgID), user1.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "delete message failed: %s", string(raw))
 }
@@ -74,7 +74,7 @@ func TestE2E_Chat_DeleteMessageByNonSenderReturns403(t *testing.T) {
 	// user2 tries to delete user1's message
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/chat/messages/"+msgID), user2.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
@@ -89,7 +89,7 @@ func TestE2E_Chat_GetPollByID(t *testing.T) {
 	// Get poll via post endpoint to retrieve poll ID
 	pollResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/posts/"+postID+"/polls"), tokens.AccessToken, ""))
-	defer pollResp.Body.Close()
+	defer func() { _ = pollResp.Body.Close() }()
 	pollRaw, _ := io.ReadAll(pollResp.Body)
 	require.Equal(t, http.StatusOK, pollResp.StatusCode)
 
@@ -105,7 +105,7 @@ func TestE2E_Chat_GetPollByID(t *testing.T) {
 	// Get poll directly by ID
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/polls/"+pollID), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get poll by ID failed: %s", string(raw))
 

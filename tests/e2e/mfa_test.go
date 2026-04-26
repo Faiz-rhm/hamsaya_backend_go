@@ -22,7 +22,7 @@ func TestE2E_MFA_EnrollTOTP(t *testing.T) {
 	body := `{"type":"TOTP"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/enroll"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "MFA enroll failed: %s", string(raw))
 
@@ -45,7 +45,7 @@ func TestE2E_MFA_EnrollTOTP_InvalidTypeReturns400(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/enroll"), tokens.AccessToken, `{"type":"SMS"}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// SMS is not supported — handler returns 400 before calling service
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
@@ -60,7 +60,7 @@ func TestE2E_MFA_VerifyEnrollment_InvalidCodeReturns4xx(t *testing.T) {
 	// Enroll first to get a real factor_id
 	enrollResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/enroll"), tokens.AccessToken, `{"type":"TOTP"}`))
-	defer enrollResp.Body.Close()
+	defer func() { _ = enrollResp.Body.Close() }()
 	enrollRaw, _ := io.ReadAll(enrollResp.Body)
 	require.Equal(t, http.StatusOK, enrollResp.StatusCode)
 
@@ -74,7 +74,7 @@ func TestE2E_MFA_VerifyEnrollment_InvalidCodeReturns4xx(t *testing.T) {
 	body := fmt.Sprintf(`{"factor_id":%q,"code":"000000"}`, enrollOut.Data.FactorID)
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/verify-enrollment"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.True(t, resp.StatusCode >= 400 && resp.StatusCode < 500,
 		"expected 4xx for invalid TOTP code, got %d", resp.StatusCode)
 }
@@ -90,7 +90,7 @@ func TestE2E_MFA_DisableMFA(t *testing.T) {
 	body := `{"password":"Password123!"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/disable"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "MFA disable failed: %s", string(raw))
 }
@@ -104,7 +104,7 @@ func TestE2E_MFA_DisableMFA_WrongPasswordReturns401(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/disable"), tokens.AccessToken, `{"password":"WrongPass!"}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
@@ -117,7 +117,7 @@ func TestE2E_MFA_RegenerateBackupCodes(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/backup-codes/regenerate"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "regenerate backup codes failed: %s", string(raw))
 
@@ -138,12 +138,12 @@ func TestE2E_MFA_GetBackupCodesCount(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 
 	// Generate codes first so count > 0
-	env.do(bearerReq(http.MethodPost,
+	_ = env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/mfa/backup-codes/regenerate"), tokens.AccessToken, "")).Body.Close()
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/mfa/backup-codes/count"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get backup codes count failed: %s", string(raw))
 }

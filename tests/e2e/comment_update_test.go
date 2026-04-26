@@ -22,7 +22,7 @@ func TestE2E_Comment_UpdateComment(t *testing.T) {
 	body := `{"text":"Updated comment text"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/comments/"+commentID), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "update comment failed: %s", string(raw))
 }
@@ -46,6 +46,6 @@ func TestE2E_Comment_UpdateByNonOwnerReturns403(t *testing.T) {
 	body := `{"text":"Trying to edit someone else's comment"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/comments/"+commentID), other.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }

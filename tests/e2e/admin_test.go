@@ -22,7 +22,7 @@ func TestE2E_Admin_GetStats(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/stats"), adminUser.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "admin stats failed: %s", string(raw))
@@ -46,7 +46,7 @@ func TestE2E_Admin_ListUsers(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/users"), adminUser.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "admin list users failed: %s", string(raw))
@@ -68,7 +68,7 @@ func TestE2E_Admin_GetUser(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/users/"+target.UserID), adminUser.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "admin get user failed: %s", string(raw))
@@ -100,14 +100,14 @@ func TestE2E_Admin_SuspendAndUnsuspendUser(t *testing.T) {
 	suspendBody := `{"reason":"E2E test suspension","duration_hours":24}`
 	suspendResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/users/"+target.UserID+"/suspend"), adminUser.AccessToken, suspendBody))
-	defer suspendResp.Body.Close()
+	defer func() { _ = suspendResp.Body.Close() }()
 	suspendRaw, _ := io.ReadAll(suspendResp.Body)
 	assert.Equal(t, http.StatusOK, suspendResp.StatusCode, "suspend failed: %s", string(suspendRaw))
 
 	// Unsuspend
 	unsuspendResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/users/"+target.UserID+"/unsuspend"), adminUser.AccessToken, ""))
-	defer unsuspendResp.Body.Close()
+	defer func() { _ = unsuspendResp.Body.Close() }()
 	unsuspendRaw, _ := io.ReadAll(unsuspendResp.Body)
 	assert.Equal(t, http.StatusOK, unsuspendResp.StatusCode, "unsuspend failed: %s", string(unsuspendRaw))
 }
@@ -131,14 +131,14 @@ func TestE2E_Admin_ListAndDeletePost(t *testing.T) {
 	// List all posts
 	listResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/posts"), adminUser.AccessToken, ""))
-	defer listResp.Body.Close()
+	defer func() { _ = listResp.Body.Close() }()
 	listRaw, _ := io.ReadAll(listResp.Body)
 	assert.Equal(t, http.StatusOK, listResp.StatusCode, "admin list posts failed: %s", string(listRaw))
 
 	// Admin delete the post
 	delResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/admin/posts/"+postID), adminUser.AccessToken, ""))
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 	delRaw, _ := io.ReadAll(delResp.Body)
 	assert.Equal(t, http.StatusOK, delResp.StatusCode, "admin delete post failed: %s", string(delRaw))
 }
@@ -152,7 +152,7 @@ func TestE2E_Admin_NonAdminGetsForbidden(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/stats"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
@@ -173,7 +173,7 @@ func TestE2E_Admin_UpdateUserRole(t *testing.T) {
 	body := `{"role":"moderator"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/admin/users/"+target.UserID+"/role"), adminUser.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "update role failed: %s", string(raw))
 }
@@ -195,7 +195,7 @@ func TestE2E_Admin_CategoryCRUD(t *testing.T) {
 	}`
 	createResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/categories"), adminUser.AccessToken, createBody))
-	defer createResp.Body.Close()
+	defer func() { _ = createResp.Body.Close() }()
 	createRaw, _ := io.ReadAll(createResp.Body)
 	assert.Equal(t, http.StatusCreated, createResp.StatusCode, "create category failed: %s", string(createRaw))
 
@@ -211,21 +211,21 @@ func TestE2E_Admin_CategoryCRUD(t *testing.T) {
 	// List categories
 	listResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/categories"), adminUser.AccessToken, ""))
-	defer listResp.Body.Close()
+	defer func() { _ = listResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, listResp.StatusCode)
 
 	// Update category
 	updateBody := `{"name":"E2E Category Updated"}`
 	updateResp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/admin/categories/"+categoryID), adminUser.AccessToken, updateBody))
-	defer updateResp.Body.Close()
+	defer func() { _ = updateResp.Body.Close() }()
 	updateRaw, _ := io.ReadAll(updateResp.Body)
 	assert.Equal(t, http.StatusOK, updateResp.StatusCode, "update category failed: %s", string(updateRaw))
 
 	// Delete category
 	delResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/admin/categories/"+categoryID), adminUser.AccessToken, ""))
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 	delRaw, _ := io.ReadAll(delResp.Body)
 	assert.Equal(t, http.StatusOK, delResp.StatusCode, "delete category failed: %s", string(delRaw))
 }

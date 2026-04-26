@@ -20,7 +20,7 @@ func createPost(t *testing.T, env *testEnv, accessToken, description string) str
 	req := bearerReq(http.MethodPost, env.url("/api/v1/posts"), accessToken, body)
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode,
@@ -50,12 +50,12 @@ func TestE2E_PostLifecycle_CreateFeedLikeCommentDelete(t *testing.T) {
 
 	// 3. GET /posts returns 200 (feed endpoint accessible)
 	feedResp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/posts"), tokens.AccessToken, ""))
-	defer feedResp.Body.Close()
+	defer func() { _ = feedResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, feedResp.StatusCode, "feed must be accessible")
 
 	// 4. GET /posts/:post_id returns the post
 	getResp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/posts/"+postID), tokens.AccessToken, ""))
-	defer getResp.Body.Close()
+	defer func() { _ = getResp.Body.Close() }()
 	getRaw, _ := io.ReadAll(getResp.Body)
 	assert.Equal(t, http.StatusOK, getResp.StatusCode,
 		"get post failed: %s", string(getRaw))
@@ -71,7 +71,7 @@ func TestE2E_PostLifecycle_CreateFeedLikeCommentDelete(t *testing.T) {
 	// 5. Like the post
 	likeResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/like"), tokens.AccessToken, ""))
-	defer likeResp.Body.Close()
+	defer func() { _ = likeResp.Body.Close() }()
 	likeRaw, _ := io.ReadAll(likeResp.Body)
 	assert.Equal(t, http.StatusOK, likeResp.StatusCode,
 		"like post failed: %s", string(likeRaw))
@@ -80,7 +80,7 @@ func TestE2E_PostLifecycle_CreateFeedLikeCommentDelete(t *testing.T) {
 	commentBody := `{"text":"Great post!"}`
 	commentResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/comments"), tokens.AccessToken, commentBody))
-	defer commentResp.Body.Close()
+	defer func() { _ = commentResp.Body.Close() }()
 	commentRaw, _ := io.ReadAll(commentResp.Body)
 	assert.Equal(t, http.StatusCreated, commentResp.StatusCode,
 		"create comment failed: %s", string(commentRaw))
@@ -96,13 +96,13 @@ func TestE2E_PostLifecycle_CreateFeedLikeCommentDelete(t *testing.T) {
 	// 7. GET comments for the post
 	commentsResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/posts/"+postID+"/comments"), tokens.AccessToken, ""))
-	defer commentsResp.Body.Close()
+	defer func() { _ = commentsResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, commentsResp.StatusCode)
 
 	// 8. Delete the post
 	delResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/posts/"+postID), tokens.AccessToken, ""))
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 	delRaw, _ := io.ReadAll(delResp.Body)
 	assert.Equal(t, http.StatusOK, delResp.StatusCode,
 		"delete post failed: %s", string(delRaw))
@@ -110,7 +110,7 @@ func TestE2E_PostLifecycle_CreateFeedLikeCommentDelete(t *testing.T) {
 	// 9. GET after delete should return 404
 	gone := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/posts/"+postID), tokens.AccessToken, ""))
-	defer gone.Body.Close()
+	defer func() { _ = gone.Body.Close() }()
 	assert.Equal(t, http.StatusNotFound, gone.StatusCode,
 		"deleted post must return 404")
 }
@@ -127,7 +127,7 @@ func TestE2E_Post_UnauthorizedLike(t *testing.T) {
 	req, _ := http.NewRequest(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/like"), bytes.NewBufferString(""))
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
@@ -149,7 +149,7 @@ func TestE2E_Post_DeleteByNonOwnerReturns403(t *testing.T) {
 	// Other user tries to delete owner's post
 	delResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/posts/"+postID), other.AccessToken, ""))
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, delResp.StatusCode,
 		"non-owner delete must be rejected")
 }

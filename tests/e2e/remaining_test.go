@@ -25,7 +25,7 @@ func TestE2E_Post_UpdatePost(t *testing.T) {
 	body := `{"description":"Updated description","visibility":"PUBLIC"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/posts/"+postID), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "update post failed: %s", string(raw))
 }
@@ -47,7 +47,7 @@ func TestE2E_Post_UpdateByNonOwnerReturns403(t *testing.T) {
 	body := `{"description":"Unauthorized update"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/posts/"+postID), other.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }
 
@@ -67,7 +67,7 @@ func TestE2E_Business_SetBusinessHours(t *testing.T) {
 	]}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/businesses/"+bizID+"/hours"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "set business hours failed: %s", string(raw))
 }
@@ -92,7 +92,7 @@ func TestE2E_Report_ReportBusiness(t *testing.T) {
 	body := `{"reason":"fake_business"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/businesses/"+bizID+"/report"), reporter.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode, "report business failed: %s", string(raw))
 }
@@ -108,7 +108,7 @@ func TestE2E_Categories_ListPublic(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/categories"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "list categories failed: %s", string(raw))
 }
@@ -131,7 +131,7 @@ func TestE2E_Categories_GetByID(t *testing.T) {
 	createBody := `{"name":"GetByID Cat","icon":{"name":"star","library":"ionicons"},"color":"#123456","status":"ACTIVE"}`
 	createResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/categories"), adminUser.AccessToken, createBody))
-	defer createResp.Body.Close()
+	defer func() { _ = createResp.Body.Close() }()
 	createRaw, _ := io.ReadAll(createResp.Body)
 	require.Equal(t, http.StatusCreated, createResp.StatusCode)
 
@@ -144,7 +144,7 @@ func TestE2E_Categories_GetByID(t *testing.T) {
 	// Get it via public endpoint
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/categories/"+catID), userTokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get category by ID failed: %s", string(raw))
 }
@@ -160,7 +160,7 @@ func TestE2E_Search_Unified(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/search?q=test"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "unified search failed: %s", string(raw))
 }
@@ -182,14 +182,14 @@ func TestE2E_Admin_HelpChat_ThreadsAndReply(t *testing.T) {
 	env.makeAdmin(t, adminUser.UserID)
 
 	// User sends help message
-	env.do(bearerReq(http.MethodPost,
+	_ = env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/help-chat/messages"), user.AccessToken,
 		`{"message":"Need help with login"}`)).Body.Close()
 
 	// Admin lists threads
 	threadsResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/help-chat"), adminUser.AccessToken, ""))
-	defer threadsResp.Body.Close()
+	defer func() { _ = threadsResp.Body.Close() }()
 	threadsRaw, _ := io.ReadAll(threadsResp.Body)
 	assert.Equal(t, http.StatusOK, threadsResp.StatusCode,
 		"admin list threads failed: %s", string(threadsRaw))
@@ -197,7 +197,7 @@ func TestE2E_Admin_HelpChat_ThreadsAndReply(t *testing.T) {
 	// Admin gets specific thread
 	threadResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/help-chat/"+user.UserID), adminUser.AccessToken, ""))
-	defer threadResp.Body.Close()
+	defer func() { _ = threadResp.Body.Close() }()
 	threadRaw, _ := io.ReadAll(threadResp.Body)
 	assert.Equal(t, http.StatusOK, threadResp.StatusCode,
 		"admin get user thread failed: %s", string(threadRaw))
@@ -206,7 +206,7 @@ func TestE2E_Admin_HelpChat_ThreadsAndReply(t *testing.T) {
 	replyResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/help-chat/"+user.UserID+"/reply"),
 		adminUser.AccessToken, `{"message":"We can help!"}`))
-	defer replyResp.Body.Close()
+	defer func() { _ = replyResp.Body.Close() }()
 	replyRaw, _ := io.ReadAll(replyResp.Body)
 	assert.Equal(t, http.StatusCreated, replyResp.StatusCode,
 		"admin reply failed: %s", string(replyRaw))

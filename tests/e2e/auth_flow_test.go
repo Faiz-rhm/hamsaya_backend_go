@@ -37,7 +37,7 @@ func register(t *testing.T, env *testEnv, email, password string) authTokens {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode,
@@ -73,7 +73,7 @@ func login(t *testing.T, env *testEnv, email, password string) authTokens {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	require.Equal(t, http.StatusOK, resp.StatusCode,
@@ -137,7 +137,7 @@ func TestE2E_AuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 	refreshReq.Header.Set("Content-Type", "application/json")
 
 	refreshResp := env.do(refreshReq)
-	defer refreshResp.Body.Close()
+	defer func() { _ = refreshResp.Body.Close() }()
 	refreshRaw, _ := io.ReadAll(refreshResp.Body)
 	assert.Equal(t, http.StatusOK, refreshResp.StatusCode,
 		"refresh failed: %s", string(refreshRaw))
@@ -154,13 +154,13 @@ func TestE2E_AuthFlow_RegisterLoginRefreshLogout(t *testing.T) {
 
 	// 4. Logout with the new access token
 	logoutResp := env.do(bearerReq(http.MethodPost, env.url("/api/v1/auth/logout"), newAccessToken, ""))
-	defer logoutResp.Body.Close()
+	defer func() { _ = logoutResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, logoutResp.StatusCode)
 
 	// 5. After logout, the token should be rejected
 	time.Sleep(50 * time.Millisecond) // let token blacklist propagate
 	checkResp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/posts"), newAccessToken, ""))
-	defer checkResp.Body.Close()
+	defer func() { _ = checkResp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, checkResp.StatusCode,
 		"revoked token must be rejected")
 }
@@ -178,7 +178,7 @@ func TestE2E_Auth_WrongPasswordReturns401(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
@@ -203,7 +203,7 @@ func TestE2E_Auth_DuplicateRegisterReturns409(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
 }
 
@@ -211,6 +211,6 @@ func TestE2E_Auth_UnauthenticatedRequestReturns401(t *testing.T) {
 	env := setupE2E(t)
 	req, _ := http.NewRequest(http.MethodGet, env.url("/api/v1/posts"), nil)
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

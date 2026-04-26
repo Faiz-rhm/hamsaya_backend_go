@@ -23,7 +23,7 @@ func createPullPost(t *testing.T, env *testEnv, accessToken string) string {
 		"poll_options": ["Option A", "Option B", "Option C"]
 	}`
 	resp := env.do(bearerReq(http.MethodPost, env.url("/api/v1/posts"), accessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "createPullPost failed: %s", string(raw))
 
@@ -48,7 +48,7 @@ func TestE2E_Poll_CreateAndGetPoll(t *testing.T) {
 	// Get the poll for the post
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/posts/"+postID+"/polls"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get poll failed: %s", string(raw))
 
@@ -82,7 +82,7 @@ func TestE2E_Poll_VoteOnPoll(t *testing.T) {
 	// Get poll to find poll ID and option IDs
 	pollResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/posts/"+postID+"/polls"), voter.AccessToken, ""))
-	defer pollResp.Body.Close()
+	defer func() { _ = pollResp.Body.Close() }()
 	pollRaw, _ := io.ReadAll(pollResp.Body)
 	require.Equal(t, http.StatusOK, pollResp.StatusCode)
 
@@ -105,14 +105,14 @@ func TestE2E_Poll_VoteOnPoll(t *testing.T) {
 	voteBody := fmt.Sprintf(`{"poll_option_id":%q}`, optionID)
 	voteResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/polls/"+pollID+"/vote"), voter.AccessToken, voteBody))
-	defer voteResp.Body.Close()
+	defer func() { _ = voteResp.Body.Close() }()
 	voteRaw, _ := io.ReadAll(voteResp.Body)
 	assert.Equal(t, http.StatusOK, voteResp.StatusCode, "vote failed: %s", string(voteRaw))
 
 	// Delete vote
 	delResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/polls/"+pollID+"/vote"), voter.AccessToken, ""))
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 	delRaw, _ := io.ReadAll(delResp.Body)
 	assert.Equal(t, http.StatusOK, delResp.StatusCode, "delete vote failed: %s", string(delRaw))
 }

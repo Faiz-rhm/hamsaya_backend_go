@@ -24,7 +24,7 @@ func TestE2E_Auth_UnifiedAuth_Register(t *testing.T) {
 	ln := "Unified"
 	body := fmt.Sprintf(`{"email":%q,"password":"Password123!","first_name":%q,"last_name":%q}`, email, fn, ln)
 	resp := env.do(mustPost(env.url("/api/v1/auth/unified"), body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	// Returns 200 for both login and register per handler docs
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "unified register failed: %s", string(raw))
@@ -41,7 +41,7 @@ func TestE2E_Auth_UnifiedAuth_Login(t *testing.T) {
 	// Now unified should log in the existing user
 	body := fmt.Sprintf(`{"email":%q,"password":"Password123!"}`, email)
 	resp := env.do(mustPost(env.url("/api/v1/auth/unified"), body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "unified login failed: %s", string(raw))
 
@@ -61,7 +61,7 @@ func TestE2E_Auth_VerifyEmail_InvalidTokenReturns4xx(t *testing.T) {
 
 	body := `{"token":"000000"}`
 	resp := env.do(mustPost(env.url("/api/v1/auth/verify-email"), body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.True(t, resp.StatusCode >= 400 && resp.StatusCode < 500,
 		"expected 4xx for invalid verify-email token, got %d", resp.StatusCode)
 }
@@ -79,7 +79,7 @@ func TestE2E_Comment_GetSingle(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/comments/"+commentID), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get single comment failed: %s", string(raw))
 
@@ -106,7 +106,7 @@ func TestE2E_Post_ResellSellPost(t *testing.T) {
 	price := 50.0
 	body := fmt.Sprintf(`{"type":"SELL","description":"Item for sale","price":%v,"currency":"USD","visibility":"PUBLIC"}`, price)
 	createResp := env.do(bearerReq(http.MethodPost, env.url("/api/v1/posts"), tokens.AccessToken, body))
-	defer createResp.Body.Close()
+	defer func() { _ = createResp.Body.Close() }()
 	createRaw, _ := io.ReadAll(createResp.Body)
 	require.Equal(t, http.StatusCreated, createResp.StatusCode, "create sell post failed: %s", string(createRaw))
 
@@ -120,7 +120,7 @@ func TestE2E_Post_ResellSellPost(t *testing.T) {
 	// Resell the post (reactivate it)
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/resell"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "resell post failed: %s", string(raw))
 }
@@ -135,7 +135,7 @@ func TestE2E_Post_ResellNonSellPostReturns400(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/resell"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode, "expected 400 for reselling a non-SELL post")
 }
 
@@ -170,7 +170,7 @@ func TestE2E_Business_DeleteGalleryImage(t *testing.T) {
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/businesses/"+bizID+"/attachments/"+attachmentID),
 		tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "delete gallery image failed: %s", string(raw))
 }
@@ -193,6 +193,6 @@ func TestE2E_Business_DeleteGalleryImageByNonOwnerReturns403(t *testing.T) {
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/businesses/"+bizID+"/attachments/"+attachmentID),
 		other.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

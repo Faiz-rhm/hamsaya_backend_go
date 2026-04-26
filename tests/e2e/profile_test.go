@@ -20,7 +20,7 @@ func TestE2E_Profile_GetMyProfile(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 
 	resp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/users/me"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get profile failed: %s", string(raw))
@@ -47,7 +47,7 @@ func TestE2E_Profile_UpdateProfile(t *testing.T) {
 
 	body := `{"first_name":"Updated","last_name":"Name","bio":"E2E test bio"}`
 	resp := env.do(bearerReq(http.MethodPut, env.url("/api/v1/users/me"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "update profile failed: %s", string(raw))
@@ -78,7 +78,7 @@ func TestE2E_Profile_GetOtherUserProfile(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/users/"+target.UserID), viewer.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get other profile failed: %s", string(raw))
@@ -96,6 +96,6 @@ func TestE2E_Profile_GetMyProfile_Unauthenticated(t *testing.T) {
 	env := setupE2E(t)
 	req, _ := http.NewRequest(http.MethodGet, env.url("/api/v1/users/me"), nil)
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

@@ -29,7 +29,7 @@ func TestReverseGeocode_Disabled(t *testing.T) {
 }
 
 func TestReverseGeocode_Disabled_False(t *testing.T) {
-	os.Unsetenv("DISABLE_REVERSE_GEOCODE")
+	_ = os.Unsetenv("DISABLE_REVERSE_GEOCODE")
 	// Without a real network we can't test the full call — only that the
 	// env gate is unset. Integration test would need real HTTP.
 	// Verifying strFromMap helper logic instead:

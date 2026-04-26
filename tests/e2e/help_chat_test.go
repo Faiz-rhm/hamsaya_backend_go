@@ -23,7 +23,7 @@ func TestE2E_HelpChat_SendAndGetMessages(t *testing.T) {
 	body := `{"message":"I need help with my account"}`
 	sendResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/help-chat/messages"), tokens.AccessToken, body))
-	defer sendResp.Body.Close()
+	defer func() { _ = sendResp.Body.Close() }()
 	sendRaw, _ := io.ReadAll(sendResp.Body)
 	assert.Equal(t, http.StatusCreated, sendResp.StatusCode, "send help message failed: %s", string(sendRaw))
 
@@ -39,7 +39,7 @@ func TestE2E_HelpChat_SendAndGetMessages(t *testing.T) {
 	// Get messages
 	getResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/help-chat/messages"), tokens.AccessToken, ""))
-	defer getResp.Body.Close()
+	defer func() { _ = getResp.Body.Close() }()
 	getRaw, _ := io.ReadAll(getResp.Body)
 	assert.Equal(t, http.StatusOK, getResp.StatusCode, "get help messages failed: %s", string(getRaw))
 }
@@ -60,13 +60,13 @@ func TestE2E_HelpChat_AdminCanSeeAndReplyToThreads(t *testing.T) {
 
 	// User sends help message
 	body := `{"message":"Please help me with my post"}`
-	env.do(bearerReq(http.MethodPost,
+	_ = env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/help-chat/messages"), user.AccessToken, body)).Body.Close()
 
 	// Admin gets all threads
 	threadsResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/help-chat"), adminUser.AccessToken, ""))
-	defer threadsResp.Body.Close()
+	defer func() { _ = threadsResp.Body.Close() }()
 	threadsRaw, _ := io.ReadAll(threadsResp.Body)
 	assert.Equal(t, http.StatusOK, threadsResp.StatusCode,
 		"admin get threads failed: %s", string(threadsRaw))
@@ -74,7 +74,7 @@ func TestE2E_HelpChat_AdminCanSeeAndReplyToThreads(t *testing.T) {
 	// Admin gets specific user thread
 	threadResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/help-chat/"+user.UserID), adminUser.AccessToken, ""))
-	defer threadResp.Body.Close()
+	defer func() { _ = threadResp.Body.Close() }()
 	threadRaw, _ := io.ReadAll(threadResp.Body)
 	assert.Equal(t, http.StatusOK, threadResp.StatusCode,
 		"admin get user thread failed: %s", string(threadRaw))
@@ -83,7 +83,7 @@ func TestE2E_HelpChat_AdminCanSeeAndReplyToThreads(t *testing.T) {
 	replyBody := `{"message":"We are here to help you"}`
 	replyResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/admin/help-chat/"+user.UserID+"/reply"), adminUser.AccessToken, replyBody))
-	defer replyResp.Body.Close()
+	defer func() { _ = replyResp.Body.Close() }()
 	replyRaw, _ := io.ReadAll(replyResp.Body)
 	assert.Equal(t, http.StatusCreated, replyResp.StatusCode,
 		"admin reply failed: %s", string(replyRaw))
@@ -98,6 +98,6 @@ func TestE2E_HelpChat_NonAdminCannotAccessAdminEndpoints(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/admin/help-chat"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 }

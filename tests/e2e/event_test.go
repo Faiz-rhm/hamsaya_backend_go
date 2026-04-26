@@ -24,7 +24,7 @@ func createEventPost(t *testing.T, env *testEnv, accessToken string) string {
 		"start_date": %q
 	}`, startDate)
 	resp := env.do(bearerReq(http.MethodPost, env.url("/api/v1/posts"), accessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "createEventPost failed: %s", string(raw))
 
@@ -57,7 +57,7 @@ func TestE2E_Event_SetGetRemoveInterest(t *testing.T) {
 	setBody := `{"event_state":"interested"}`
 	setResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/events/"+postID+"/interest"), attendee.AccessToken, setBody))
-	defer setResp.Body.Close()
+	defer func() { _ = setResp.Body.Close() }()
 	setRaw, _ := io.ReadAll(setResp.Body)
 	assert.Equal(t, http.StatusOK, setResp.StatusCode, "set interest failed: %s", string(setRaw))
 
@@ -74,34 +74,34 @@ func TestE2E_Event_SetGetRemoveInterest(t *testing.T) {
 	// Get interest status
 	getResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/events/"+postID+"/interest"), attendee.AccessToken, ""))
-	defer getResp.Body.Close()
+	defer func() { _ = getResp.Body.Close() }()
 	getRaw, _ := io.ReadAll(getResp.Body)
 	assert.Equal(t, http.StatusOK, getResp.StatusCode, "get interest failed: %s", string(getRaw))
 
 	// Get interested users list
 	interestedResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/events/"+postID+"/interested"), attendee.AccessToken, ""))
-	defer interestedResp.Body.Close()
+	defer func() { _ = interestedResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, interestedResp.StatusCode)
 
 	// Update to going
 	goingBody := `{"event_state":"going"}`
 	goingResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/events/"+postID+"/interest"), attendee.AccessToken, goingBody))
-	defer goingResp.Body.Close()
+	defer func() { _ = goingResp.Body.Close() }()
 	goingRaw, _ := io.ReadAll(goingResp.Body)
 	assert.Equal(t, http.StatusOK, goingResp.StatusCode, "set going failed: %s", string(goingRaw))
 
 	// Get going users list
 	goingListResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/events/"+postID+"/going"), attendee.AccessToken, ""))
-	defer goingListResp.Body.Close()
+	defer func() { _ = goingListResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, goingListResp.StatusCode)
 
 	// Remove interest
 	removeResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/events/"+postID+"/interest"), attendee.AccessToken, ""))
-	defer removeResp.Body.Close()
+	defer func() { _ = removeResp.Body.Close() }()
 	removeRaw, _ := io.ReadAll(removeResp.Body)
 	assert.Equal(t, http.StatusOK, removeResp.StatusCode, "remove interest failed: %s", string(removeRaw))
 }
@@ -117,7 +117,7 @@ func TestE2E_Event_NonEventPostReturnsError(t *testing.T) {
 	setBody := `{"event_state":"interested"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/events/"+feedPostID+"/interest"), tokens.AccessToken, setBody))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	// Setting interest on a FEED post should fail
 	assert.NotEqual(t, http.StatusOK, resp.StatusCode)
 }

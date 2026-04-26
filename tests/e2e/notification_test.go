@@ -20,7 +20,7 @@ func TestE2E_Notification_GetNotifications(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 
 	resp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/notifications"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get notifications failed: %s", string(raw))
@@ -35,7 +35,7 @@ func TestE2E_Notification_GetUnreadCount(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/notifications/unread-count"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "unread count failed: %s", string(raw))
@@ -58,7 +58,7 @@ func TestE2E_Notification_MarkAllAsRead(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/notifications/read-all"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "mark all read failed: %s", string(raw))
@@ -73,7 +73,7 @@ func TestE2E_Notification_GetSettings(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/notifications/settings"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	// Settings may return 200 with empty or initialized list
@@ -84,6 +84,6 @@ func TestE2E_Notification_Unauthenticated(t *testing.T) {
 	env := setupE2E(t)
 	req, _ := http.NewRequest(http.MethodGet, env.url("/api/v1/notifications"), nil)
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

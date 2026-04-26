@@ -23,7 +23,7 @@ func TestE2E_Auth_ForgotPasswordFlow(t *testing.T) {
 	// 1. Request password reset (no email configured → code printed to logs, not actually sent)
 	forgotBody := fmt.Sprintf(`{"email":%q}`, email)
 	forgotResp := env.do(mustPost(env.url("/api/v1/auth/forgot-password"), forgotBody))
-	defer forgotResp.Body.Close()
+	defer func() { _ = forgotResp.Body.Close() }()
 	forgotRaw, _ := io.ReadAll(forgotResp.Body)
 	// Endpoint should return 200 regardless of email delivery
 	assert.Equal(t, http.StatusOK, forgotResp.StatusCode,
@@ -38,7 +38,7 @@ func TestE2E_Auth_ForgotPasswordFlow(t *testing.T) {
 	// 3. Verify the reset code
 	verifyBody := fmt.Sprintf(`{"email":%q,"code":%q}`, email, code)
 	verifyResp := env.do(mustPost(env.url("/api/v1/auth/verify-reset-code"), verifyBody))
-	defer verifyResp.Body.Close()
+	defer func() { _ = verifyResp.Body.Close() }()
 	verifyRaw, _ := io.ReadAll(verifyResp.Body)
 	assert.Equal(t, http.StatusOK, verifyResp.StatusCode,
 		"verify-reset-code failed: %s", string(verifyRaw))
@@ -55,7 +55,7 @@ func TestE2E_Auth_ForgotPasswordFlow(t *testing.T) {
 	resetBody := fmt.Sprintf(`{"reset_token":%q,"new_password":"NewPassword456!"}`,
 		verifyOut.Data.ResetToken)
 	resetResp := env.do(mustPost(env.url("/api/v1/auth/reset-password"), resetBody))
-	defer resetResp.Body.Close()
+	defer func() { _ = resetResp.Body.Close() }()
 	resetRaw, _ := io.ReadAll(resetResp.Body)
 	assert.Equal(t, http.StatusOK, resetResp.StatusCode,
 		"reset-password failed: %s", string(resetRaw))
@@ -68,7 +68,7 @@ func TestE2E_Auth_ForgotPasswordFlow(t *testing.T) {
 	oldBody := fmt.Sprintf(`{"email":%q,"password":"OldPassword123!"}`, email)
 	oldReq := mustPost(env.url("/api/v1/auth/login"), oldBody)
 	oldResp := env.do(oldReq)
-	defer oldResp.Body.Close()
+	defer func() { _ = oldResp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, oldResp.StatusCode)
 }
 

@@ -21,7 +21,7 @@ func sendChatMessage(t *testing.T, env *testEnv, accessToken, recipientID, text 
 	req := bearerReq(http.MethodPost, env.url("/api/v1/chat/messages"), accessToken, body)
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 
 	require.Equal(t, http.StatusCreated, resp.StatusCode,
@@ -65,7 +65,7 @@ func TestE2E_ChatFlow_SendFetchConversationsGetHistory(t *testing.T) {
 	// 4. GET /chat/conversations for user1 — conversation must appear
 	convsResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/chat/conversations"), user1.AccessToken, ""))
-	defer convsResp.Body.Close()
+	defer func() { _ = convsResp.Body.Close() }()
 	convsRaw, _ := io.ReadAll(convsResp.Body)
 	assert.Equal(t, http.StatusOK, convsResp.StatusCode,
 		"get conversations failed: %s", string(convsRaw))
@@ -90,13 +90,13 @@ func TestE2E_ChatFlow_SendFetchConversationsGetHistory(t *testing.T) {
 	// 5. GET /chat/conversations for user2 — same conversation must appear
 	convsResp2 := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/chat/conversations"), user2.AccessToken, ""))
-	defer convsResp2.Body.Close()
+	defer func() { _ = convsResp2.Body.Close() }()
 	assert.Equal(t, http.StatusOK, convsResp2.StatusCode)
 
 	// 6. GET /chat/conversations/:id/messages — history must contain both messages
 	histURL := env.url("/api/v1/chat/conversations/" + convID + "/messages")
 	histResp := env.do(bearerReq(http.MethodGet, histURL, user1.AccessToken, ""))
-	defer histResp.Body.Close()
+	defer func() { _ = histResp.Body.Close() }()
 	histRaw, _ := io.ReadAll(histResp.Body)
 	assert.Equal(t, http.StatusOK, histResp.StatusCode,
 		"get message history failed: %s", string(histRaw))
@@ -132,7 +132,7 @@ func TestE2E_Chat_NonParticipantCannotReadMessages(t *testing.T) {
 	// Outsider tries to read the conversation history
 	histURL := env.url("/api/v1/chat/conversations/" + convID + "/messages")
 	resp := env.do(bearerReq(http.MethodGet, histURL, outsider.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusForbidden, resp.StatusCode,
 		"non-participant must be denied access to conversation messages")
 }
@@ -150,6 +150,6 @@ func TestE2E_Chat_UnauthenticatedCannotSendMessage(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 
 	resp := env.do(req)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }

@@ -18,21 +18,21 @@ func TestE2E_OAuth_Google_MissingTokenReturns400(t *testing.T) {
 	env := setupE2E(t)
 	// empty id_token fails "required" validation before any network call
 	resp := env.do(mustPost(env.url("/api/v1/auth/oauth/google"), `{"id_token":""}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestE2E_OAuth_Facebook_MissingTokenReturns400(t *testing.T) {
 	env := setupE2E(t)
 	resp := env.do(mustPost(env.url("/api/v1/auth/oauth/facebook"), `{"access_token":""}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
 func TestE2E_OAuth_Apple_MissingTokenReturns400(t *testing.T) {
 	env := setupE2E(t)
 	resp := env.do(mustPost(env.url("/api/v1/auth/oauth/apple"), `{"id_token":""}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -43,7 +43,7 @@ func TestE2E_MFA_VerifyInvalidChallengeReturns400(t *testing.T) {
 	// challenge_id not found in Redis (miniredis empty) → 400
 	body := `{"challenge_id":"nonexistent-challenge-id","code":"123456"}`
 	resp := env.do(mustPost(env.url("/api/v1/auth/mfa/verify"), body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -59,7 +59,7 @@ func TestE2E_Notifications_RegisterFCMToken(t *testing.T) {
 	body := `{"token":"fake-fcm-token-for-testing-12345"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/notifications/fcm-token"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "register FCM token failed: %s", string(raw))
 }
@@ -72,14 +72,14 @@ func TestE2E_Notifications_UnregisterFCMToken(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 
 	// Register first
-	env.do(bearerReq(http.MethodPost,
+	_ = env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/notifications/fcm-token"), tokens.AccessToken,
 		`{"token":"fake-fcm-token-for-testing-12345"}`)).Body.Close()
 
 	// Then unregister
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/notifications/fcm-token"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "unregister FCM token failed: %s", string(raw))
 }
@@ -104,7 +104,7 @@ func TestE2E_Profile_UploadAvatarNoFileReturns400(t *testing.T) {
 
 	tokens := register(t, env, email, "Password123!")
 	resp := env.do(noFileReq(http.MethodPost, env.url("/api/v1/users/me/avatar"), tokens.AccessToken))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -115,7 +115,7 @@ func TestE2E_Profile_UploadCoverNoFileReturns400(t *testing.T) {
 
 	tokens := register(t, env, email, "Password123!")
 	resp := env.do(noFileReq(http.MethodPost, env.url("/api/v1/users/me/cover"), tokens.AccessToken))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -126,7 +126,7 @@ func TestE2E_Post_UploadImageNoFileReturns400(t *testing.T) {
 
 	tokens := register(t, env, email, "Password123!")
 	resp := env.do(noFileReq(http.MethodPost, env.url("/api/v1/posts/upload-image"), tokens.AccessToken))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -139,7 +139,7 @@ func TestE2E_Business_UploadAvatarNoFileReturns400(t *testing.T) {
 	bizID := createBusiness(t, env, tokens.AccessToken, "Avatar Upload Biz")
 	resp := env.do(noFileReq(http.MethodPost,
 		env.url("/api/v1/businesses/"+bizID+"/avatar"), tokens.AccessToken))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -152,7 +152,7 @@ func TestE2E_Business_UploadCoverNoFileReturns400(t *testing.T) {
 	bizID := createBusiness(t, env, tokens.AccessToken, "Cover Upload Biz")
 	resp := env.do(noFileReq(http.MethodPost,
 		env.url("/api/v1/businesses/"+bizID+"/cover"), tokens.AccessToken))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -165,7 +165,7 @@ func TestE2E_Business_AddGalleryImageNoFileReturns400(t *testing.T) {
 	bizID := createBusiness(t, env, tokens.AccessToken, "Gallery Upload Biz")
 	resp := env.do(noFileReq(http.MethodPost,
 		env.url("/api/v1/businesses/"+bizID+"/attachments"), tokens.AccessToken))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
@@ -179,7 +179,7 @@ func TestE2E_Profile_DeleteAvatar(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/users/me/avatar"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "delete avatar failed: %s", string(raw))
 }
@@ -192,7 +192,7 @@ func TestE2E_Profile_DeleteCover(t *testing.T) {
 	tokens := register(t, env, email, "Password123!")
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/users/me/cover"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "delete cover failed: %s", string(raw))
 }
@@ -217,7 +217,7 @@ func TestE2E_Upload_UnauthenticatedReturns401(t *testing.T) {
 			req, _ := http.NewRequest(http.MethodPost, env.url(endpoint), &buf)
 			req.Header.Set("Content-Type", w.FormDataContentType())
 			resp := env.do(req)
-			defer resp.Body.Close()
+			defer func() { _ = resp.Body.Close() }()
 			assert.Equal(t, http.StatusUnauthorized, resp.StatusCode,
 				"expected 401 for unauthenticated upload to %s", endpoint)
 		})
@@ -232,7 +232,7 @@ func TestE2E_OAuth_Google_InvalidTokenReturns401(t *testing.T) {
 	// Skip gracefully if no network (timeout or connection refused)
 	resp := env.do(mustPost(env.url("/api/v1/auth/oauth/google"),
 		`{"id_token":"fake.invalid.token"}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	// Google rejects the token → our service returns 401
 	// Accept 401 or 500 (in case of network timeout in CI)
@@ -244,7 +244,7 @@ func TestE2E_OAuth_Facebook_InvalidTokenReturns401(t *testing.T) {
 	env := setupE2E(t)
 	resp := env.do(mustPost(env.url("/api/v1/auth/oauth/facebook"),
 		`{"access_token":"fake-invalid-facebook-token"}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.True(t, resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusInternalServerError,
 		"expected 401 or 500 for fake Facebook token, got %d: %s", resp.StatusCode, string(raw))
@@ -254,7 +254,7 @@ func TestE2E_OAuth_Apple_InvalidTokenReturns401(t *testing.T) {
 	env := setupE2E(t)
 	resp := env.do(mustPost(env.url("/api/v1/auth/oauth/apple"),
 		`{"id_token":"fake.invalid.apple.token"}`))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.True(t, resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusInternalServerError,
 		"expected 401 or 500 for fake Apple token, got %d: %s", resp.StatusCode, string(raw))

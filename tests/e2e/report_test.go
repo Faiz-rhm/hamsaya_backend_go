@@ -28,7 +28,7 @@ func TestE2E_Report_ReportPost(t *testing.T) {
 	body := `{"reason":"spam"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/report"), reporter.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode, "report post failed: %s", string(raw))
 }
@@ -52,7 +52,7 @@ func TestE2E_Report_ReportComment(t *testing.T) {
 	body := `{"reason":"harassment"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/comments/"+commentID+"/report"), reporter.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode, "report comment failed: %s", string(raw))
 }
@@ -73,7 +73,7 @@ func TestE2E_Report_ReportUser(t *testing.T) {
 	body := `{"reason":"fake_account"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/users/"+target.UserID+"/report"), reporter.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusCreated, resp.StatusCode, "report user failed: %s", string(raw))
 }

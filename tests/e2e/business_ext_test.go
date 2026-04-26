@@ -21,7 +21,7 @@ func TestE2E_Business_UpdateBusiness(t *testing.T) {
 	body := `{"name":"Updated Name","description":"New description"}`
 	resp := env.do(bearerReq(http.MethodPut,
 		env.url("/api/v1/businesses/"+bizID), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "update business failed: %s", string(raw))
 }
@@ -36,7 +36,7 @@ func TestE2E_Business_SearchBusinesses(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/businesses/search?q=Searchable"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "search businesses failed: %s", string(raw))
 }
@@ -50,7 +50,7 @@ func TestE2E_Business_GetCategories(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/businesses/categories"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get categories failed: %s", string(raw))
 }
@@ -65,7 +65,7 @@ func TestE2E_Business_GetHours(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/businesses/"+bizID+"/hours"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get hours failed: %s", string(raw))
 }
@@ -80,7 +80,7 @@ func TestE2E_Business_GetGallery(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/businesses/"+bizID+"/attachments"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get gallery failed: %s", string(raw))
 }

@@ -22,14 +22,14 @@ func TestE2E_Auth_ChangePassword(t *testing.T) {
 	body := `{"current_password":"OldPass123!","new_password":"NewPass456!"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/auth/change-password"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "change-password failed: %s", string(raw))
 
 	// Old password must no longer work
 	oldResp := env.do(mustPost(env.url("/api/v1/auth/login"),
 		fmt.Sprintf(`{"email":%q,"password":"OldPass123!"}`, email)))
-	defer oldResp.Body.Close()
+	defer func() { _ = oldResp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, oldResp.StatusCode)
 
 	// New password must work
@@ -47,7 +47,7 @@ func TestE2E_Auth_ChangePasswordWrongCurrentReturns401(t *testing.T) {
 	body := `{"current_password":"WrongCurrent!","new_password":"NewPass456!"}`
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/auth/change-password"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 }
 
@@ -60,7 +60,7 @@ func TestE2E_Auth_GetActiveSessions(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/auth/sessions"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get sessions failed: %s", string(raw))
 }
@@ -74,7 +74,7 @@ func TestE2E_Auth_SendVerificationEmail(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/auth/send-verification-email"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	// Returns 200 regardless of email delivery (no email configured in tests)
 	assert.Equal(t, http.StatusOK, resp.StatusCode,
@@ -92,14 +92,14 @@ func TestE2E_Auth_DeleteAccount(t *testing.T) {
 	body := `{"password":"Password123!"}`
 	resp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/users/me"), tokens.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "delete account failed: %s", string(raw))
 
 	// Subsequent login must fail
 	loginResp := env.do(mustPost(env.url("/api/v1/auth/login"),
 		fmt.Sprintf(`{"email":%q,"password":"Password123!"}`, email)))
-	defer loginResp.Body.Close()
+	defer func() { _ = loginResp.Body.Close() }()
 	assert.Equal(t, http.StatusUnauthorized, loginResp.StatusCode,
 		"deleted account must not be able to login")
 }
@@ -113,7 +113,7 @@ func TestE2E_Auth_LogoutAll(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/auth/logout-all"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "logout-all failed: %s", string(raw))
 }
@@ -128,7 +128,7 @@ func TestE2E_Auth_GetMyPosts(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/users/me/posts"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get my posts failed: %s", string(raw))
 }
@@ -142,7 +142,7 @@ func TestE2E_Auth_GetMyBookmarks(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/users/me/bookmarks"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get my bookmarks failed: %s", string(raw))
 }
@@ -156,7 +156,7 @@ func TestE2E_Auth_GetMyEvents(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/users/me/events"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get my events failed: %s", string(raw))
 }
@@ -170,7 +170,7 @@ func TestE2E_Auth_GetPersonalizedFeed(t *testing.T) {
 
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/posts/feed"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "personalized feed failed: %s", string(raw))
 }
@@ -186,20 +186,20 @@ func TestE2E_Post_BookmarkUnbookmark(t *testing.T) {
 	// Bookmark
 	bookResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/bookmark"), tokens.AccessToken, ""))
-	defer bookResp.Body.Close()
+	defer func() { _ = bookResp.Body.Close() }()
 	bookRaw, _ := io.ReadAll(bookResp.Body)
 	assert.Equal(t, http.StatusOK, bookResp.StatusCode, "bookmark failed: %s", string(bookRaw))
 
 	// Verify in bookmarks list
 	listResp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/users/me/bookmarks"), tokens.AccessToken, ""))
-	defer listResp.Body.Close()
+	defer func() { _ = listResp.Body.Close() }()
 	assert.Equal(t, http.StatusOK, listResp.StatusCode)
 
 	// Unbookmark
 	unbookResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/posts/"+postID+"/bookmark"), tokens.AccessToken, ""))
-	defer unbookResp.Body.Close()
+	defer func() { _ = unbookResp.Body.Close() }()
 	unbookRaw, _ := io.ReadAll(unbookResp.Body)
 	assert.Equal(t, http.StatusOK, unbookResp.StatusCode, "unbookmark failed: %s", string(unbookRaw))
 }
@@ -222,7 +222,7 @@ func TestE2E_Post_SharePost(t *testing.T) {
 	body := fmt.Sprintf(`{"share_text":"Check this out!","original_post_id":%q}`, postID)
 	resp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/posts/"+postID+"/share"), sharer.AccessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "share post failed: %s", string(raw))
 

@@ -17,7 +17,7 @@ func createBusiness(t *testing.T, env *testEnv, accessToken, name string) string
 	t.Helper()
 	body := fmt.Sprintf(`{"name":%q}`, name)
 	resp := env.do(bearerReq(http.MethodPost, env.url("/api/v1/businesses"), accessToken, body))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	require.Equal(t, http.StatusCreated, resp.StatusCode, "createBusiness failed: %s", string(raw))
 
@@ -43,7 +43,7 @@ func TestE2E_Business_CreateAndGet(t *testing.T) {
 	// Get the business
 	resp := env.do(bearerReq(http.MethodGet,
 		env.url("/api/v1/businesses/"+bizID), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get business failed: %s", string(raw))
 
@@ -67,7 +67,7 @@ func TestE2E_Business_GetMyBusinesses(t *testing.T) {
 	createBusiness(t, env, tokens.AccessToken, "My Business")
 
 	resp := env.do(bearerReq(http.MethodGet, env.url("/api/v1/businesses"), tokens.AccessToken, ""))
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
 	assert.Equal(t, http.StatusOK, resp.StatusCode, "get my businesses failed: %s", string(raw))
 }
@@ -90,14 +90,14 @@ func TestE2E_Business_FollowUnfollow(t *testing.T) {
 	// Follow
 	followResp := env.do(bearerReq(http.MethodPost,
 		env.url("/api/v1/businesses/"+bizID+"/follow"), follower.AccessToken, ""))
-	defer followResp.Body.Close()
+	defer func() { _ = followResp.Body.Close() }()
 	followRaw, _ := io.ReadAll(followResp.Body)
 	assert.Equal(t, http.StatusOK, followResp.StatusCode, "follow business failed: %s", string(followRaw))
 
 	// Unfollow
 	unfollowResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/businesses/"+bizID+"/follow"), follower.AccessToken, ""))
-	defer unfollowResp.Body.Close()
+	defer func() { _ = unfollowResp.Body.Close() }()
 	unfollowRaw, _ := io.ReadAll(unfollowResp.Body)
 	assert.Equal(t, http.StatusOK, unfollowResp.StatusCode, "unfollow business failed: %s", string(unfollowRaw))
 }
@@ -112,7 +112,7 @@ func TestE2E_Business_DeleteBusiness(t *testing.T) {
 
 	delResp := env.do(bearerReq(http.MethodDelete,
 		env.url("/api/v1/businesses/"+bizID), tokens.AccessToken, ""))
-	defer delResp.Body.Close()
+	defer func() { _ = delResp.Body.Close() }()
 	delRaw, _ := io.ReadAll(delResp.Body)
 	assert.Equal(t, http.StatusOK, delResp.StatusCode, "delete business failed: %s", string(delRaw))
 }

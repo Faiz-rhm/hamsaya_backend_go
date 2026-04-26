@@ -23,7 +23,6 @@ import (
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/websocket"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -488,15 +487,3 @@ func buildRouter(
 	return r
 }
 
-// newPool creates a raw pgxpool for schema-level operations (creating test db, etc.)
-func newPool(t *testing.T, dsn string) *pgxpool.Pool {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	pool, err := pgxpool.New(ctx, dsn)
-	if err != nil {
-		t.Skipf("E2E: cannot connect to postgres: %v", err)
-	}
-	t.Cleanup(pool.Close)
-	return pool
-}
