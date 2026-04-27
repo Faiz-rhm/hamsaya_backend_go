@@ -17,7 +17,7 @@ import (
 )
 
 func newMFARepo(pool *testutil.MockPool) repositories.MFARepository {
-	return repositories.NewMFARepository(testutil.NewTestDB(pool))
+	return repositories.NewMFARepository(testutil.NewTestDB(pool), nil)
 }
 
 func TestMFARepository_CreateFactor_Success(t *testing.T) {

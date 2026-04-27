@@ -23,12 +23,30 @@ type Pool interface {
 	Close()
 }
 
-// DB holds the database connection pool
+// DB holds the database connection pools.
+//
+// Pool is the canonical writer pool (every write + every read by default).
+// ReplicaPool, when non-nil, is an additional read-only pool routed to
+// a Postgres read replica for hot read paths (feed, search, profile).
+// Repository methods opt in by reading from [DB.Reader] which falls back
+// to the writer when no replica is configured.
 type DB struct {
-	Pool Pool
+	Pool        Pool
+	ReplicaPool Pool
 }
 
-// New creates a new database connection
+// Reader returns the pool that should be used for read-only queries.
+// Falls back to the writer when DB_REPLICA_HOST is unset.
+func (db *DB) Reader() Pool {
+	if db.ReplicaPool != nil {
+		return db.ReplicaPool
+	}
+	return db.Pool
+}
+
+// New creates a new database connection. When cfg.ReplicaHost is non-empty,
+// also opens a separate replica pool. Replica failures are non-fatal —
+// the system degrades to writer-only and logs a warning via the caller.
 func New(cfg *config.DatabaseConfig) (*DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -59,12 +77,37 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 		return nil, fmt.Errorf("unable to ping database: %w", err)
 	}
 
-	return &DB{Pool: pool}, nil
+	db := &DB{Pool: pool}
+
+	// Open optional read-replica pool. We tolerate failures: an unhealthy
+	// replica must not block server start; reads will go to the writer.
+	if replicaDSN := cfg.GetReplicaDSN(); replicaDSN != "" {
+		replicaConfig, rErr := pgxpool.ParseConfig(replicaDSN)
+		if rErr == nil {
+			replicaConfig.MaxConns = cfg.MaxConns
+			replicaConfig.MinConns = cfg.MinConns
+			replicaConfig.MaxConnLifetime = cfg.MaxConnLifetime
+			replicaConfig.MaxConnIdleTime = cfg.MaxConnIdleTime
+			replicaPool, rErr := pgxpool.NewWithConfig(ctx, replicaConfig)
+			if rErr == nil {
+				if pingErr := replicaPool.Ping(ctx); pingErr == nil {
+					db.ReplicaPool = replicaPool
+				} else {
+					replicaPool.Close()
+				}
+			}
+		}
+	}
+
+	return db, nil
 }
 
 // Close closes the database connection
 func (db *DB) Close() {
 	db.Pool.Close()
+	if db.ReplicaPool != nil {
+		db.ReplicaPool.Close()
+	}
 }
 
 // Health checks database health

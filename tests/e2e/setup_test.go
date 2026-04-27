@@ -203,7 +203,7 @@ func buildRouter(
 	reportRepo := repositories.NewReportRepository(db)
 	feedbackRepo := repositories.NewFeedbackRepository(db)
 	helpChatRepo := repositories.NewHelpChatRepository(db)
-	mfaRepo := repositories.NewMFARepository(db)
+	mfaRepo := repositories.NewMFARepository(db, nil)
 
 	// Services
 	jwtSvc := services.NewJWTService(&cfg.JWT)

@@ -53,6 +53,15 @@ type Config struct {
 	Email     EmailConfig
 	CORS      CORSConfig
 	Monitoring MonitoringConfig
+	Crypto    CryptoConfig
+}
+
+// CryptoConfig holds at-rest encryption configuration. MFASecretKey is a
+// 32-byte key encoded as 64 hex chars (generate with `openssl rand -hex 32`).
+// When empty, MFA secrets fall back to plaintext storage — functional but
+// non-compliant; flag warns at boot.
+type CryptoConfig struct {
+	MFASecretKey string
 }
 
 // ServerConfig holds server configuration
@@ -75,6 +84,15 @@ type DatabaseConfig struct {
 	MinConns        int32
 	MaxConnLifetime time.Duration
 	MaxConnIdleTime time.Duration
+
+	// Optional read replica. When ReplicaHost is non-empty, repositories
+	// can route hot reads (feed, search, profile lookups) to the replica
+	// to keep the primary's CPU + IO headroom for writes. Replica
+	// password / port / db default to the primary's when empty.
+	ReplicaHost     string
+	ReplicaPort     string
+	ReplicaUser     string
+	ReplicaPassword string
 }
 
 // RedisConfig holds Redis configuration
@@ -205,6 +223,10 @@ func Load() (*Config, error) {
 			MinConns:        getInt32("DB_MIN_CONNS"),
 			MaxConnLifetime: viper.GetDuration("DB_MAX_CONN_LIFETIME"),
 			MaxConnIdleTime: viper.GetDuration("DB_MAX_CONN_IDLE_TIME"),
+			ReplicaHost:     viper.GetString("DB_REPLICA_HOST"),
+			ReplicaPort:     viper.GetString("DB_REPLICA_PORT"),
+			ReplicaUser:     viper.GetString("DB_REPLICA_USER"),
+			ReplicaPassword: viper.GetString("DB_REPLICA_PASSWORD"),
 		},
 		Redis: RedisConfig{
 			Host:     viper.GetString("REDIS_HOST"),
@@ -279,6 +301,9 @@ func Load() (*Config, error) {
 			OTLPEndpoint:         viper.GetString("OTLP_ENDPOINT"),
 			TraceSamplingRate:    viper.GetFloat64("TRACE_SAMPLING_RATE"),
 		},
+		Crypto: CryptoConfig{
+			MFASecretKey: viper.GetString("MFA_SECRET_ENCRYPTION_KEY"),
+		},
 	}
 
 	// Default observability settings
@@ -321,6 +346,28 @@ func Load() (*Config, error) {
 // GetDSN returns the PostgreSQL connection string
 func (c *DatabaseConfig) GetDSN() string {
 	return "postgres://" + c.User + ":" + c.Password + "@" + c.Host + ":" + c.Port + "/" + c.Name + "?sslmode=" + c.SSLMode
+}
+
+// GetReplicaDSN returns the read-replica connection string, or "" when no
+// replica is configured. Falls back to the primary's port/user/password
+// when the replica-specific overrides are empty.
+func (c *DatabaseConfig) GetReplicaDSN() string {
+	if c.ReplicaHost == "" {
+		return ""
+	}
+	port := c.ReplicaPort
+	if port == "" {
+		port = c.Port
+	}
+	user := c.ReplicaUser
+	if user == "" {
+		user = c.User
+	}
+	password := c.ReplicaPassword
+	if password == "" {
+		password = c.Password
+	}
+	return "postgres://" + user + ":" + password + "@" + c.ReplicaHost + ":" + port + "/" + c.Name + "?sslmode=" + c.SSLMode
 }
 
 // GetRedisAddr returns Redis address

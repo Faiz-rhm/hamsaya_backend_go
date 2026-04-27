@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/hamsaya/backend/internal/models"
+	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/jackc/pgx/v5"
 )
@@ -29,12 +30,34 @@ type MFARepository interface {
 }
 
 type mfaRepository struct {
-	db *database.DB
+	db     *database.DB
+	cipher *pkgcrypto.SecretCipher // nil = at-rest encryption disabled (legacy mode)
 }
 
-// NewMFARepository creates a new MFA repository
-func NewMFARepository(db *database.DB) MFARepository {
-	return &mfaRepository{db: db}
+// NewMFARepository creates a new MFA repository.
+//
+// When cipher is non-nil, secret_key values are encrypted on insert and
+// decrypted on read. Pass nil to operate in plaintext mode (e.g. when
+// MFA_SECRET_ENCRYPTION_KEY isn't configured — the system stays functional
+// but secrets remain at rest in the clear).
+func NewMFARepository(db *database.DB, cipher *pkgcrypto.SecretCipher) MFARepository {
+	return &mfaRepository{db: db, cipher: cipher}
+}
+
+// encryptIfEnabled wraps the secret for storage. No-op when cipher is nil.
+func (r *mfaRepository) encryptIfEnabled(secret string) (string, error) {
+	if r.cipher == nil || pkgcrypto.IsEncrypted(secret) {
+		return secret, nil
+	}
+	return r.cipher.Encrypt(secret)
+}
+
+// decryptIfEnabled unwraps a stored secret. No-op for legacy plaintext.
+func (r *mfaRepository) decryptIfEnabled(stored string) (string, error) {
+	if r.cipher == nil {
+		return stored, nil
+	}
+	return r.cipher.Decrypt(stored)
 }
 
 // CreateFactor creates a new MFA factor
@@ -44,11 +67,20 @@ func (r *mfaRepository) CreateFactor(ctx context.Context, factor *models.MFAFact
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
-	_, err := r.db.Pool.Exec(ctx, query,
+	plaintext := ""
+	if factor.SecretKey != nil {
+		plaintext = *factor.SecretKey
+	}
+	encryptedSecret, err := r.encryptIfEnabled(plaintext)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt MFA secret: %w", err)
+	}
+
+	_, err = r.db.Pool.Exec(ctx, query,
 		factor.ID,
 		factor.UserID,
 		factor.Type,
-		factor.SecretKey,
+		encryptedSecret,
 		factor.FactorID,
 		factor.Status,
 		factor.CreatedAt,
@@ -89,6 +121,13 @@ func (r *mfaRepository) GetFactorByID(ctx context.Context, factorID string) (*mo
 		}
 		return nil, fmt.Errorf("failed to get MFA factor: %w", err)
 	}
+	if factor.SecretKey != nil {
+		decrypted, dErr := r.decryptIfEnabled(*factor.SecretKey)
+		if dErr != nil {
+			return nil, fmt.Errorf("failed to decrypt MFA secret: %w", dErr)
+		}
+		factor.SecretKey = &decrypted
+	}
 
 	return factor, nil
 }
@@ -124,6 +163,13 @@ func (r *mfaRepository) GetFactorsByUserID(ctx context.Context, userID string) (
 		)
 		if err != nil {
 			return nil, err
+		}
+		if factor.SecretKey != nil {
+			decrypted, dErr := r.decryptIfEnabled(*factor.SecretKey)
+			if dErr != nil {
+				return nil, fmt.Errorf("failed to decrypt MFA secret: %w", dErr)
+			}
+			factor.SecretKey = &decrypted
 		}
 		factors = append(factors, factor)
 	}

@@ -18,6 +18,7 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
+	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/notification"
 	"github.com/hamsaya/backend/pkg/observability"
@@ -176,10 +177,23 @@ func main() {
 		sugaredLogger.Info("Firebase credentials not provided, push notifications will be disabled")
 	}
 
+	// At-rest encryption for MFA secrets. Plaintext fallback is logged loudly.
+	var mfaCipher *pkgcrypto.SecretCipher
+	if cfg.Crypto.MFASecretKey != "" {
+		c, cErr := pkgcrypto.NewSecretCipher(cfg.Crypto.MFASecretKey)
+		if cErr != nil {
+			sugaredLogger.Fatalf("invalid MFA_SECRET_ENCRYPTION_KEY: %v", cErr)
+		}
+		mfaCipher = c
+		sugaredLogger.Info("MFA secret at-rest encryption: enabled")
+	} else {
+		sugaredLogger.Warn("MFA_SECRET_ENCRYPTION_KEY not set — MFA secrets stored plaintext (NOT compliant for prod)")
+	}
+
 	// Initialize repositories
 	sugaredLogger.Info("Initializing repositories...")
 	userRepo := repositories.NewUserRepository(db)
-	mfaRepo := repositories.NewMFARepository(db)
+	mfaRepo := repositories.NewMFARepository(db, mfaCipher)
 	relationshipsRepo := repositories.NewRelationshipsRepository(db)
 	postRepo := repositories.NewPostRepository(db)
 	commentRepo := repositories.NewCommentRepository(db)
