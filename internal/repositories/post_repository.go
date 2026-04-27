@@ -610,6 +610,13 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		queryBuilder.WriteString(" AND (type != 'SELL' OR sold = false)")
 	}
 
+	// Home feed suppression: hide SELL posts unless explicitly requested
+	// by Type=SELL or unless they are paid/promoted listings. Keeps the
+	// marketplace from drowning out social posts in the home feed.
+	if filter.HideUnpromotedSell && (filter.Type == nil || *filter.Type != models.PostTypeSell) {
+		queryBuilder.WriteString(" AND (type != 'SELL' OR is_promoted = true)")
+	}
+
 	// Location-based filtering (radius search)
 	var locationSearchActive bool
 	if filter.Latitude != nil && filter.Longitude != nil && filter.RadiusKm != nil {
@@ -743,6 +750,11 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 		argCount++
 	} else {
 		queryBuilder.WriteString(" AND (type != 'SELL' OR sold = false)")
+	}
+
+	// Mirror of HideUnpromotedSell from GetFeed so total counts match.
+	if filter.HideUnpromotedSell && (filter.Type == nil || *filter.Type != models.PostTypeSell) {
+		queryBuilder.WriteString(" AND (type != 'SELL' OR is_promoted = true)")
 	}
 
 	// Location-based filtering (radius search)

@@ -605,6 +605,11 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		}
 	}
 
+	// Home feed suppression: hide SELL posts unless promoted. Explicit
+	// SELL queries (e.g. /posts?type=SELL from the marketplace screen)
+	// bypass this in the repo layer, so SELL discovery still works.
+	filter.HideUnpromotedSell = true
+
 	// Get feed
 	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, viewerID)
 	if err != nil {
@@ -679,6 +684,11 @@ func (h *PostHandler) GetPersonalizedFeed(c *gin.Context) {
 			filter.Cursor = &t
 		}
 	}
+
+	// Home feed suppression: hide SELL posts unless promoted. The fan-out
+	// fallback path in PostService.GetPersonalizedFeed forwards the filter
+	// to GetFeed, so this propagates correctly.
+	filter.HideUnpromotedSell = true
 
 	posts, nextCursor, err := h.postService.GetPersonalizedFeed(c.Request.Context(), userID.(string), filter)
 	if err != nil {

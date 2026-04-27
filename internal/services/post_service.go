@@ -260,8 +260,13 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 	// Notify followers of the new post (user followers or business followers)
 	go s.notifyFollowersOfNewPost(context.WithoutCancel(ctx), postID, userID, req.BusinessID)
 
-	// Fan out post to followers' feeds (skipped for celebrity authors with >10K followers)
-	go s.fanoutService.FanoutPost(context.WithoutCancel(ctx), postID, userID)
+	// Fan out post to followers' feeds (skipped for celebrity authors with >10K followers).
+	// SELL posts are explicitly excluded from fan-out: they are commerce, not
+	// social content, and live in the dedicated /sales screen + paid promoted
+	// slots, not in followers' home feeds.
+	if req.Type != models.PostTypeSell {
+		go s.fanoutService.FanoutPost(context.WithoutCancel(ctx), postID, userID)
+	}
 
 	// Return enriched post
 	return s.GetPost(ctx, postID, &userID)
@@ -729,6 +734,19 @@ func (s *PostService) GetPersonalizedFeed(ctx context.Context, viewerID string, 
 	posts, err := s.postRepo.GetPostsByIDs(ctx, allIDs)
 	if err != nil {
 		return nil, nil, utils.NewInternalError("Failed to hydrate feed posts", err)
+	}
+
+	// Suppress unpromoted SELL posts that may exist in user_feeds from
+	// before the fan-out exclusion shipped. Promoted SELL still pass.
+	if filter.HideUnpromotedSell {
+		filtered := posts[:0]
+		for _, p := range posts {
+			if p.Type == models.PostTypeSell && !p.IsPromoted {
+				continue
+			}
+			filtered = append(filtered, p)
+		}
+		posts = filtered
 	}
 
 	// Sort merged result by recency (sources may be interleaved)

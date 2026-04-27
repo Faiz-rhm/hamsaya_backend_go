@@ -391,4 +391,13 @@ type FeedFilter struct {
 	// IncludeInactive bypasses the status = true filter so the post owner
 	// can see their own inactive/expired posts (e.g. the Expired tab).
 	IncludeInactive bool `json:"-"`
+
+	// HideUnpromotedSell suppresses SELL posts from the feed unless they
+	// have is_promoted = true. Used by the home feed so the marketplace
+	// does not drown out social posts; SELL posts continue to appear in
+	// the dedicated /sales screen, search results, and user/business
+	// profiles where Type is set explicitly. Mutually-exclusive with
+	// Type=SELL — when callers explicitly request SELL posts this flag
+	// is ignored.
+	HideUnpromotedSell bool `json:"-"`
 }
