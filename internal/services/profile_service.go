@@ -62,6 +62,13 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID string, viewerID
 	// Convert to response
 	response := models.ToFullProfileResponse(user, profile)
 
+	// Compute profile-completion percentage so the mobile client can render
+	// a progress bar and prompt the user to fill in missing fields. Cheap,
+	// no DB call.
+	pct, missing := profileCompletion(profile)
+	response.CompletionPercent = pct
+	response.MissingFields = missing
+
 	// Populate stats (followers, following, posts count)
 	followersCount, err := s.relationshipsRepo.GetFollowersCount(ctx, userID)
 	if err != nil {
@@ -298,6 +305,45 @@ func (s *ProfileService) isProfileComplete(profile *models.Profile) bool {
 	// First and last name are populated automatically for social (OAuth) users
 	// and are not required as a completion gate.
 	return profile.Location != nil && profile.Location.Valid
+}
+
+// profileCompletion returns (percent, missing_field_keys) for a profile.
+// Score is the proportion of "high-value" fields populated. The list of
+// missing keys is used by the mobile client to deep-link the user to the
+// relevant edit section.
+//
+// Field weights are equal — the rule of thumb is "what would a human-eyed
+// profile actually have?". Email/phone live on the user record, not the
+// profile, so they're excluded.
+func profileCompletion(p *models.Profile) (int, []string) {
+	if p == nil {
+		return 0, nil
+	}
+	checks := []struct {
+		key     string
+		present bool
+	}{
+		{"first_name", p.FirstName != nil && *p.FirstName != ""},
+		{"last_name", p.LastName != nil && *p.LastName != ""},
+		{"avatar", p.Avatar != nil && p.Avatar.URL != ""},
+		{"about", p.About != nil && *p.About != ""},
+		{"gender", p.Gender != nil && *p.Gender != ""},
+		{"province", p.Province != nil && *p.Province != ""},
+		{"district", p.District != nil && *p.District != ""},
+		{"location", p.Location != nil && p.Location.Valid},
+	}
+
+	filled := 0
+	missing := make([]string, 0, len(checks))
+	for _, c := range checks {
+		if c.present {
+			filled++
+		} else {
+			missing = append(missing, c.key)
+		}
+	}
+	percent := (filled * 100) / len(checks)
+	return percent, missing
 }
 
 // Helper function

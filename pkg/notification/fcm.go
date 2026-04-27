@@ -131,6 +131,14 @@ func (f *FCMClient) SendNotification(ctx context.Context, token string, payload 
 			zap.Error(err),
 			zap.String("token", token),
 		)
+		// Surface stale-token errors so callers can prune the FCM token from
+		// storage. messaging.IsRegistrationTokenNotRegistered covers both
+		// classical "NotRegistered" (token revoked / app uninstalled) and
+		// "InvalidArgument" / "InvalidRegistration" responses.
+		if messaging.IsRegistrationTokenNotRegistered(err) ||
+			messaging.IsInvalidArgument(err) {
+			return ErrTokenInvalid
+		}
 		return fmt.Errorf("failed to send notification: %w", err)
 	}
 
@@ -141,6 +149,11 @@ func (f *FCMClient) SendNotification(ctx context.Context, token string, payload 
 
 	return nil
 }
+
+// ErrTokenInvalid is returned by SendNotification when FCM reports the
+// token is no longer valid (revoked, app uninstalled, or malformed).
+// Callers should delete the stored token from their tokens table.
+var ErrTokenInvalid = fmt.Errorf("fcm token is no longer valid")
 
 // SendMulticast sends a push notification to multiple devices
 func (f *FCMClient) SendMulticast(ctx context.Context, tokens []string, payload *PushPayload) (*messaging.BatchResponse, error) {

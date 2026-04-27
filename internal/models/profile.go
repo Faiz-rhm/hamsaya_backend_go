@@ -48,6 +48,13 @@ type FullProfileResponse struct {
 	Latitude     *float64   `json:"latitude,omitempty"`
 	Longitude    *float64   `json:"longitude,omitempty"`
 	IsComplete   bool       `json:"is_complete"`
+	// CompletionPercent is 0-100 derived from how many profile fields the
+	// user has filled in. Mobile renders a progress bar; nudges incomplete
+	// profiles to finish (correlates with retention).
+	CompletionPercent int      `json:"completion_percent"`
+	// MissingFields lists JSON keys still empty so the client can deep-link
+	// the user to the relevant edit-profile section.
+	MissingFields     []string `json:"missing_fields,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`
 	UpdatedAt    time.Time  `json:"updated_at"`
 

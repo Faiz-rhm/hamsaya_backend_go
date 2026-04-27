@@ -273,6 +273,68 @@ services:
           cpus: '0.25'
           memory: 128M
 
+  # Daily Postgres backup → S3. Runs scripts/backup_postgres.sh on a cron
+  # schedule. Uses the official postgres image so pg_dump matches the
+  # server version + adds awscli for the upload.
+  #
+  # Configure via the env block below (or .env). The container does nothing
+  # until the cron fires (default 02:00 UTC daily). To run a one-off backup
+  # immediately:
+  #   docker-compose -f docker-compose.prod.yml run --rm db-backup \
+  #     /scripts/backup_postgres.sh
+  db-backup:
+    image: postgres:15-alpine
+    container_name: hamsaya-db-backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${DB_USER:-postgres}
+      PGPASSWORD: ${DB_PASSWORD:?Database password required}
+      PGDATABASE: ${DB_NAME:-hamsaya}
+      S3_BUCKET: ${BACKUP_S3_BUCKET:?BACKUP_S3_BUCKET required}
+      S3_PREFIX: ${BACKUP_S3_PREFIX:-postgres/prod}
+      S3_ENDPOINT: ${BACKUP_S3_ENDPOINT:-}
+      AWS_ACCESS_KEY_ID: ${BACKUP_AWS_ACCESS_KEY_ID:?BACKUP_AWS_ACCESS_KEY_ID required}
+      AWS_SECRET_ACCESS_KEY: ${BACKUP_AWS_SECRET_ACCESS_KEY:?BACKUP_AWS_SECRET_ACCESS_KEY required}
+      AWS_DEFAULT_REGION: ${BACKUP_AWS_REGION:-us-east-1}
+      RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-7}
+      BACKUP_CRON: ${BACKUP_CRON:-0 2 * * *}
+    volumes:
+      - ./scripts/backup_postgres.sh:/scripts/backup_postgres.sh:ro
+    networks:
+      - hamsaya_network
+    entrypoint:
+      - sh
+      - -c
+      - |
+        apk add --no-cache aws-cli busybox-suid >/dev/null 2>&1
+        mkdir -p /etc/cron.d
+        printf '%s\n' \
+          'PATH=/usr/local/bin:/usr/bin:/bin' \
+          "PGHOST=$$PGHOST" \
+          "PGPORT=$$PGPORT" \
+          "PGUSER=$$PGUSER" \
+          "PGPASSWORD=$$PGPASSWORD" \
+          "PGDATABASE=$$PGDATABASE" \
+          "S3_BUCKET=$$S3_BUCKET" \
+          "S3_PREFIX=$$S3_PREFIX" \
+          "S3_ENDPOINT=$$S3_ENDPOINT" \
+          "AWS_ACCESS_KEY_ID=$$AWS_ACCESS_KEY_ID" \
+          "AWS_SECRET_ACCESS_KEY=$$AWS_SECRET_ACCESS_KEY" \
+          "AWS_DEFAULT_REGION=$$AWS_DEFAULT_REGION" \
+          "RETENTION_DAYS=$$RETENTION_DAYS" \
+          "$$BACKUP_CRON sh /scripts/backup_postgres.sh >>/var/log/backup.log 2>&1" \
+          > /etc/cron.d/pgbackup
+        crontab /etc/cron.d/pgbackup
+        echo "[backup] cron installed: $$BACKUP_CRON"
+        touch /var/log/backup.log
+        crond -f -l 8 &
+        tail -F /var/log/backup.log
+
 networks:
   hamsaya_network:
     driver: bridge

@@ -188,6 +188,10 @@ func (h *ProfileHandler) UploadAvatar(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
+	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+		return
+	}
+
 	// Upload image
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeAvatar)
 	if err != nil {
@@ -261,6 +265,10 @@ func (h *ProfileHandler) UploadCover(c *gin.Context) {
 		return
 	}
 	defer func() { _ = file.Close() }()
+
+	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+		return
+	}
 
 	// Upload image
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeCover)

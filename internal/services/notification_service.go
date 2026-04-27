@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -440,8 +441,21 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 		ChannelID: channelForType(notification.Type),
 	}
 
-	// Send notification
+	// Send notification. On stale-token errors, prune the Redis entry so we
+	// don't keep retrying a dead device on every subsequent notification.
 	if err := s.fcmClient.SendNotification(ctx, token, payload); err != nil {
+		if errors.Is(err, fcmclient.ErrTokenInvalid) {
+			s.logger.Info("FCM token invalid, pruning",
+				zap.String("user_id", notification.UserID),
+			)
+			if delErr := s.redisClient.Del(ctx, key).Err(); delErr != nil {
+				s.logger.Warn("Failed to prune stale FCM token",
+					zap.Error(delErr),
+					zap.String("user_id", notification.UserID),
+				)
+			}
+			return
+		}
 		s.logger.Error("Failed to send push notification",
 			zap.Error(err),
 			zap.String("user_id", notification.UserID),

@@ -675,6 +675,18 @@ Repo is unusually clean of TODO/FIXME/HACK markers — substantive work tracked 
 | 🟢 low | Connection pool default `MaxConns=25` may be low under load | Monitor `/health/db-stats`, raise if saturated |
 | 🟢 low | `server_bin` in old commit history | Declined — skip `git filter-repo` |
 
+### Recent feature additions (April 2026)
+
+| Area | Change | Files |
+|---|---|---|
+| Anti-abuse | **Daily post limits** per type, admin-editable. Redis-keyed counter with UTC-midnight TTL + 30s in-process limit cache. Mobile renders `DailyLimitBadge` with countdown to reset; admin Next.js page CRUDs caps. | `migrations/...daily_post_limits...up.sql`, `internal/services/daily_limit_service.go`, `internal/handlers/daily_limit_handler.go`, mobile `lib/src/featured/post/provider/daily_limit_provider.dart`, admin `app/(dashboard)/daily-limits/page.tsx` |
+| Upload safety | **Per-file 25 MB image cap** enforced via `utils.EnforceUploadSize` at six upload sites (post, avatar, profile cover, three business image fields). Mobile mirrors the cap and rejects oversized crops before compression. | `internal/utils/upload.go`, `internal/handlers/{post,profile,business}_handler.go`, mobile `lib/src/featured/profile/provider/profile_uploader_provider.dart` |
+| UX guardrail | **Comment depth-3 cap.** `CreateComment` walks the parent chain and returns 400 when nesting would exceed 3 levels. | `internal/services/comment_service.go` |
+| Mobile UX | **Avatar / cover cropping** via `image_cropper` (1:1 / 16:9). Cancel-aware; crops piped through existing WebP compression and upload pipeline. | mobile `lib/src/featured/profile/provider/profile_uploader_provider.dart`, `pubspec.yaml` |
+| Profile UX | **Profile completion %** + missing-fields list shipped on `GET /profile/me`. Mobile renders `ProfileCompletionBar` (auto-hides at 100%) on the user's own profile; tap deep-links to edit screen. | `internal/services/profile_service.go`, `internal/models/profile.go`, mobile `lib/src/featured/profile/widgets/profile_completion_bar.dart` |
+| Feed quality | **Suppress unpromoted SELL posts on home feed.** `FeedFilter.HideUnpromotedSell` flag short-circuits in repo + fan-out service so non-promoted marketplace posts stay in the marketplace tab. | `internal/repositories/post_repository.go`, `internal/services/post_fanout_service.go` |
+| Ops | **Daily Postgres dump → S3** sidecar with 7-day retention. Runs from `db-backup` service in `docker-compose.prod.yml`. | `scripts/backup_postgres.sh`, `docker-compose.prod.yml` |
+
 ---
 
 ## 11. Future Recommendations

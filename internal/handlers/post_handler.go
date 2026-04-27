@@ -928,6 +928,11 @@ func (h *PostHandler) UploadPostImage(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
+	// Per-file size cap. Rejects oversized images before WebP encode burns CPU.
+	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+		return
+	}
+
 	// Upload image or video to storage (images 10MB, videos 50MB)
 	photo, err := h.storageService.UploadPostAttachment(c.Request.Context(), file, header)
 	if err != nil {

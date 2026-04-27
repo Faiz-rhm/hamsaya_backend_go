@@ -463,6 +463,10 @@ func (h *BusinessHandler) UploadAvatar(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
+	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+		return
+	}
+
 	// Upload and process the image via storage service
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeAvatar)
 	if err != nil {
@@ -512,6 +516,10 @@ func (h *BusinessHandler) UploadCover(c *gin.Context) {
 		return
 	}
 	defer func() { _ = file.Close() }()
+
+	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+		return
+	}
 
 	// Upload and process the image via storage service
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeCover)
@@ -585,6 +593,10 @@ func (h *BusinessHandler) AddGalleryImage(c *gin.Context) {
 		return
 	}
 	defer func() { _ = file.Close() }()
+
+	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+		return
+	}
 
 	// Upload and process the image via storage service
 	photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)

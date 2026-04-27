@@ -60,7 +60,11 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		return nil, utils.NewNotFoundError("Post not found", err)
 	}
 
-	// If replying to a comment, validate parent comment exists
+	// If replying to a comment, validate parent comment exists + enforce a
+	// 3-level nesting cap. Past 3 levels the UI gets confusing and the
+	// recursive replies query gets expensive. Replies to depth-3 comments
+	// reattach to the same parent (flatten visually) — handled in UI.
+	const maxCommentDepth = 3
 	if req.ParentCommentID != nil {
 		parentComment, err := s.commentRepo.GetByID(ctx, *req.ParentCommentID)
 		if err != nil {
@@ -69,6 +73,24 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		// Ensure parent comment belongs to the same post
 		if parentComment.PostID != postID {
 			return nil, utils.NewBadRequestError("Parent comment does not belong to this post", nil)
+		}
+		// Walk up the parent chain to count depth. Bounded at maxCommentDepth
+		// so a malicious deeply-nested chain can't blow the stack.
+		depth := 1
+		cursor := parentComment.ParentCommentID
+		for cursor != nil && depth < maxCommentDepth {
+			ancestor, aerr := s.commentRepo.GetByID(ctx, *cursor)
+			if aerr != nil {
+				break
+			}
+			depth++
+			cursor = ancestor.ParentCommentID
+		}
+		if depth >= maxCommentDepth {
+			return nil, utils.NewBadRequestError(
+				"Reply depth limit reached. Reply to the original comment instead.",
+				nil,
+			)
 		}
 	}
 
