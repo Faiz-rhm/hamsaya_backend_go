@@ -378,6 +378,78 @@ func TestProfileService_DeactivateAccount(t *testing.T) {
 	})
 }
 
+func TestProfileService_ExportUserData(t *testing.T) {
+	t.Run("returns full export bundle", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		postRepo := new(mocks.MockPostRepository)
+		commentRepo := new(mocks.MockCommentRepository)
+		relRepo := new(mocks.MockRelationshipsRepository)
+		svc := NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
+
+		userID := "user-1"
+		now := time.Now()
+
+		userRepo.On("GetByID", mock.Anything, userID).Return(&models.User{
+			ID: userID, Email: "u@example.com",
+			CreatedAt: now, UpdatedAt: now,
+		}, nil)
+		userRepo.On("GetProfileByUserID", mock.Anything, userID).Return(&models.Profile{
+			ID: userID, CreatedAt: now, UpdatedAt: now,
+		}, nil)
+		postRepo.On("GetUserPosts", mock.Anything, userID, 5000, 0).Return(
+			[]*models.Post{{ID: "p1"}, {ID: "p2"}}, nil)
+		postRepo.On("CountPostsByUser", mock.Anything, userID).Return(42, nil)
+		commentRepo.On("GetByUserID", mock.Anything, userID, 5000, 0).Return(
+			[]*models.PostComment{{ID: "c1"}}, nil)
+		relRepo.On("GetFollowers", mock.Anything, userID, 5000, 0).Return(
+			[]*models.UserFollow{{FollowerID: "f1"}, {FollowerID: "f2"}}, nil)
+		relRepo.On("GetFollowing", mock.Anything, userID, 5000, 0).Return(
+			[]*models.UserFollow{{FollowingID: "g1"}}, nil)
+		relRepo.On("GetFollowersCount", mock.Anything, userID).Return(2, nil)
+		relRepo.On("GetFollowingCount", mock.Anything, userID).Return(1, nil)
+		relRepo.On("GetBlockedUsers", mock.Anything, userID, 5000, 0).Return(
+			[]*models.UserBlock{{BlockedID: "b1"}}, nil)
+		postRepo.On("GetUserBookmarks", mock.Anything, userID, 5000, 0).Return(
+			[]*models.Post{{ID: "bk1"}, {ID: "bk2"}, {ID: "bk3"}}, nil)
+
+		out, err := svc.ExportUserData(context.Background(), userID)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+		require.Equal(t, "json", out.Format)
+		require.Equal(t, "1", out.Version)
+		require.Len(t, out.Posts, 2)
+		require.Len(t, out.Comments, 1)
+		require.ElementsMatch(t, []string{"f1", "f2"}, out.FollowerIDs)
+		require.ElementsMatch(t, []string{"g1"}, out.FollowingIDs)
+		require.ElementsMatch(t, []string{"b1"}, out.BlockedIDs)
+		require.ElementsMatch(t, []string{"bk1", "bk2", "bk3"}, out.BookmarkPostIDs)
+		require.Equal(t, 42, out.Counts.Posts)
+		require.Equal(t, 2, out.Counts.Followers)
+		require.Equal(t, 1, out.Counts.Following)
+		require.Equal(t, 1, out.Counts.Blocked)
+		require.Equal(t, 3, out.Counts.Bookmarks)
+		require.NotNil(t, out.Profile)
+
+		userRepo.AssertExpectations(t)
+		postRepo.AssertExpectations(t)
+		commentRepo.AssertExpectations(t)
+		relRepo.AssertExpectations(t)
+	})
+
+	t.Run("user not found returns 404", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		postRepo := new(mocks.MockPostRepository)
+		commentRepo := new(mocks.MockCommentRepository)
+		relRepo := new(mocks.MockRelationshipsRepository)
+		svc := NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
+
+		userRepo.On("GetByID", mock.Anything, "ghost").Return((*models.User)(nil), errors.New("not found"))
+
+		_, err := svc.ExportUserData(context.Background(), "ghost")
+		require.Error(t, err)
+	})
+}
+
 func TestProfileService_IsProfileComplete(t *testing.T) {
 	svc := &ProfileService{}
 

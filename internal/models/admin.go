@@ -333,6 +333,13 @@ type AdminReportFilter struct {
 	SortDir    string `form:"sort_dir"`
 	Page       int    `form:"page"`
 	Limit      int    `form:"limit"`
+
+	// Triage filters surfaced by the admin panel — date range + free-text
+	// reason match. From/To accept ISO8601 (YYYY-MM-DD); Reason is a
+	// case-insensitive substring match against the reason column.
+	From   string `form:"from"`
+	To     string `form:"to"`
+	Reason string `form:"reason"`
 }
 
 // AdminPostReportResponse is the post report data for admin API

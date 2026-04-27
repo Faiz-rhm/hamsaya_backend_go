@@ -943,9 +943,13 @@ func (r *postRepository) GetPostsByIDs(ctx context.Context, ids []string) ([]*mo
 	return r.queryPosts(ctx, query, ids)
 }
 
-// queryPosts is a helper function to query posts
+// queryPosts is a helper function to query posts.
+//
+// Reads route through DB.Reader() so the optional read replica picks up
+// feed traffic when configured. Falls back to the writer pool when no
+// replica is available (see pkg/database.DB.Reader).
 func (r *postRepository) queryPosts(ctx context.Context, query string, args ...interface{}) ([]*models.Post, error) {
-	rows, err := r.db.Pool.Query(ctx, query, args...)
+	rows, err := r.db.Reader().Query(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

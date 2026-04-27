@@ -1380,6 +1380,35 @@ func (r *adminRepository) DeleteBusiness(ctx context.Context, businessID string)
 	return err
 }
 
+// applyReportTriageFilters appends date-range + reason-substring SQL
+// fragments to the report-list WHERE clause. Used by all four
+// List<Type>Reports paths to keep date/text filters consistent.
+func applyReportTriageFilters(
+	filter *models.AdminReportFilter,
+	conditions []string,
+	args []interface{},
+	argIndex int,
+) ([]string, []interface{}, int) {
+	if filter.From != "" {
+		conditions = append(conditions, fmt.Sprintf("r.created_at >= $%d", argIndex))
+		args = append(args, filter.From)
+		argIndex++
+	}
+	if filter.To != "" {
+		// Inclusive end-of-day so YYYY-MM-DD as `to` matches reports filed
+		// at any time on that day.
+		conditions = append(conditions, fmt.Sprintf("r.created_at < ($%d::date + INTERVAL '1 day')", argIndex))
+		args = append(args, filter.To)
+		argIndex++
+	}
+	if filter.Reason != "" {
+		conditions = append(conditions, fmt.Sprintf("r.reason ILIKE $%d", argIndex))
+		args = append(args, "%"+filter.Reason+"%")
+		argIndex++
+	}
+	return conditions, args, argIndex
+}
+
 func (r *adminRepository) ListPostReports(ctx context.Context, filter *models.AdminReportFilter) ([]*models.AdminPostReportResponse, int64, error) {
 	var conditions []string
 	var args []interface{}
@@ -1396,12 +1425,14 @@ func (r *adminRepository) ListPostReports(ctx context.Context, filter *models.Ad
 		args = append(args, filter.Status)
 		argIndex++
 	}
-	
+
+	conditions, args, argIndex = applyReportTriageFilters(filter, conditions, args, argIndex)
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")
 	}
-	
+
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM post_reports r WHERE %s`, whereClause)
 	
 	var totalCount int64
@@ -1517,11 +1548,13 @@ func (r *adminRepository) ListCommentReports(ctx context.Context, filter *models
 		argIndex++
 	}
 
+	conditions, args, argIndex = applyReportTriageFilters(filter, conditions, args, argIndex)
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")
 	}
-	
+
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM comment_reports r WHERE %s`, whereClause)
 	
 	var totalCount int64
@@ -1635,6 +1668,8 @@ func (r *adminRepository) ListUserReports(ctx context.Context, filter *models.Ad
 		conditions = append(conditions, "r.resolved = false")
 	}
 
+	conditions, args, argIndex = applyReportTriageFilters(filter, conditions, args, argIndex)
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")
@@ -1747,11 +1782,13 @@ func (r *adminRepository) ListBusinessReports(ctx context.Context, filter *model
 		argIndex++
 	}
 
+	conditions, args, argIndex = applyReportTriageFilters(filter, conditions, args, argIndex)
+
 	whereClause := "1=1"
 	if len(conditions) > 0 {
 		whereClause = strings.Join(conditions, " AND ")
 	}
-	
+
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM business_reports r WHERE %s`, whereClause)
 	
 	var totalCount int64
