@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"hash/fnv"
 	"sync"
@@ -45,6 +46,15 @@ type hubShard struct {
 type Hub struct {
 	shards [numShards]*hubShard
 	logger *zap.Logger
+
+	// Optional cross-instance fanout. nil = single-pod mode.
+	fanout *Fanout
+}
+
+// AttachFanout wires a Redis pub/sub fanout to this hub. Called once at
+// boot when DB_REDIS multi-instance mode is enabled. Safe to leave nil.
+func (h *Hub) AttachFanout(f *Fanout) {
+	h.fanout = f
 }
 
 // BroadcastMessage represents a message to be sent to a specific user
@@ -177,6 +187,9 @@ func (h *Hub) Unregister(client *Client) {
 }
 
 // SendToUser sends a message to a specific user via the user's shard.
+// When a Fanout is attached and the user isn't connected to *this* pod,
+// the message is also published on Redis pub/sub so a peer pod with the
+// connection can deliver it.
 func (h *Hub) SendToUser(userID string, message interface{}) error {
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
@@ -190,6 +203,16 @@ func (h *Hub) SendToUser(userID string, message interface{}) error {
 	h.shardFor(userID).broadcast <- &BroadcastMessage{
 		UserID:  userID,
 		Message: messageBytes,
+	}
+
+	// Fanout to peer pods. We always publish (rather than gating on
+	// IsUserConnected) because the local broadcast channel hasn't yet
+	// been processed; checking now would race with the shard goroutine.
+	// Peer pods drop quickly when the user isn't on them.
+	if h.fanout != nil {
+		if pubErr := h.fanout.Publish(context.Background(), userID, messageBytes); pubErr != nil {
+			h.logger.Warn("ws fanout publish failed", zap.Error(pubErr), zap.String("user_id", userID))
+		}
 	}
 
 	return nil

@@ -72,6 +72,13 @@ func NewStorageService(cfg *config.Config, logger *zap.Logger) *StorageService {
 	}
 }
 
+// Client returns the underlying storage client. May be nil when storage
+// isn't configured (mock mode). Used by the async transcode pool which
+// needs direct access to fetch + put + delete by key.
+func (s *StorageService) Client() *storage.Client {
+	return s.client
+}
+
 // UploadImage uploads an image and returns photo metadata
 func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, header *multipart.FileHeader, imageType ImageType) (*models.Photo, error) {
 	const maxSize = int64(10 * 1024 * 1024) // 10 MB

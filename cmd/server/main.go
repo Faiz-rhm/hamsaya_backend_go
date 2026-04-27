@@ -20,6 +20,8 @@ import (
 	"github.com/hamsaya/backend/internal/utils"
 	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
 	"github.com/hamsaya/backend/pkg/database"
+	"github.com/hamsaya/backend/pkg/secrets"
+	"github.com/hamsaya/backend/pkg/transcode"
 	"github.com/hamsaya/backend/pkg/notification"
 	"github.com/hamsaya/backend/pkg/observability"
 	"github.com/hamsaya/backend/pkg/redislock"
@@ -55,6 +57,18 @@ import (
 // @accept json
 // @produce json
 func main() {
+	// Initialize the secrets source. Default backend is process env (no
+	// behavior change). SECRETS_BACKEND=ssm switches to AWS SSM Parameter
+	// Store (stub today — see pkg/secrets/ssm.go header for wiring).
+	secretsCtx, secretsCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	secretsSource, secretsLabel, secretsErr := secrets.FromEnvOrBackend(secretsCtx)
+	secretsCancel()
+	if secretsErr != nil {
+		fmt.Printf("Failed to initialize secrets source: %v\n", secretsErr)
+		os.Exit(1)
+	}
+	_ = secretsSource // reserved for future use by config.Load (overlay)
+
 	// Load configuration
 	cfg, err := config.Load()
 	if err != nil {
@@ -72,6 +86,7 @@ func main() {
 	logger := utils.GetBaseLogger()
 	sugaredLogger := utils.GetLogger()
 	sugaredLogger.Info("Starting Hamsaya Backend API...")
+	sugaredLogger.Infow("Secrets backend", "source", secretsLabel)
 	sugaredLogger.Infow("Configuration loaded",
 		"env", cfg.Server.Env,
 		"port", cfg.Server.Port,
@@ -158,6 +173,18 @@ func main() {
 	go wsHub.Run()
 	sugaredLogger.Info("WebSocket hub started")
 
+	// Cross-instance fanout via Redis pub/sub. Enabled when WS_FANOUT=true
+	// (multi-pod deployments). Single-pod runs leave it disabled — the local
+	// shards handle everything.
+	if os.Getenv("WS_FANOUT") == "true" {
+		hostname, _ := os.Hostname()
+		fanout := websocket.NewFanout(redisClient, wsHub, hostname, logger)
+		fanout.Start()
+		wsHub.AttachFanout(fanout)
+		sugaredLogger.Infow("WebSocket pub/sub fanout enabled", "process_id", hostname)
+		defer fanout.Stop()
+	}
+
 	// Initialize Firebase Cloud Messaging (optional - only if credentials are provided)
 	var fcmClient *notification.FCMClient
 	fcmCfg := notification.FCMConfig{
@@ -222,6 +249,18 @@ func main() {
 	mfaService := services.NewMFAService(mfaRepo, userRepo, passwordService, logger)
 	oauthService := services.NewOAuthService(cfg, userRepo, logger)
 	storageService := services.NewStorageService(cfg, logger)
+
+	// Async WebP transcode pool. Opt-in via TRANSCODE_ASYNC=true so the
+	// existing synchronous-encode upload path keeps working until handlers
+	// are migrated to enqueue jobs. Pool runs only when storage is real.
+	if os.Getenv("TRANSCODE_ASYNC") == "true" && storageService.Client() != nil {
+		transcodeQueue := transcode.NewQueue(redisClient, "")
+		transcodePool := transcode.NewPool(transcodeQueue, storageService.Client(), logger, 4)
+		transcodeCtx, transcodeCancel := context.WithCancel(context.Background())
+		go transcodePool.Run(transcodeCtx)
+		defer transcodeCancel()
+		sugaredLogger.Info("Transcode pool started (4 workers)")
+	}
 	profileService := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, logger)
 	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)

@@ -201,6 +201,57 @@ func (c *Client) UploadFile(ctx context.Context, reader io.Reader, size int64, c
 	return result, nil
 }
 
+// Transcode fetches sourceKey, encodes it to format/quality, writes the
+// result at targetKey, and removes the source on success. Satisfies the
+// transcode.Encoder interface (without importing pkg/transcode — keeps
+// dependency direction one-way).
+func (c *Client) Transcode(ctx context.Context, sourceKey, targetKey, format string, quality int) error {
+	obj, err := c.client.GetObject(ctx, c.bucketName, sourceKey, minio.GetObjectOptions{})
+	if err != nil {
+		return fmt.Errorf("transcode get: %w", err)
+	}
+	defer obj.Close()
+
+	img, _, err := ValidateImage(obj, 50*1024*1024)
+	if err != nil {
+		return fmt.Errorf("transcode decode: %w", err)
+	}
+
+	encoded, err := EncodeImage(img, format)
+	if err != nil {
+		return fmt.Errorf("transcode encode: %w", err)
+	}
+
+	// Buffer the encoded bytes so we can use the size in PutObject.
+	buf, ok := encoded.(*bytes.Buffer)
+	if !ok {
+		var b bytes.Buffer
+		if _, copyErr := io.Copy(&b, encoded); copyErr != nil {
+			return fmt.Errorf("transcode buffer: %w", copyErr)
+		}
+		buf = &b
+	}
+
+	contentType := "image/" + format
+	if _, err := c.client.PutObject(ctx, c.bucketName, targetKey, buf, int64(buf.Len()), minio.PutObjectOptions{
+		ContentType: contentType,
+	}); err != nil {
+		return fmt.Errorf("transcode put: %w", err)
+	}
+
+	if err := c.client.RemoveObject(ctx, c.bucketName, sourceKey, minio.RemoveObjectOptions{}); err != nil {
+		// Non-fatal — encoded variant exists, original lingering only costs storage.
+		c.logger.Warn("transcode cleanup failed", zap.String("source_key", sourceKey), zap.Error(err))
+	}
+
+	c.logger.Info("transcode ok",
+		zap.String("source", sourceKey),
+		zap.String("target", targetKey),
+		zap.String("format", format),
+	)
+	return nil
+}
+
 // Delete deletes a file from storage
 func (c *Client) Delete(ctx context.Context, key string) error {
 	err := c.client.RemoveObject(ctx, c.bucketName, key, minio.RemoveObjectOptions{})

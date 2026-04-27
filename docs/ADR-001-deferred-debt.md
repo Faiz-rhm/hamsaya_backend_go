@@ -18,7 +18,7 @@ The following items are explicitly deferred. Each has a concrete migration plan.
 ## 1. Wire WebP transcode pool into upload handlers
 
 ### Status
-Deferred. Foundation shipped; no upload handler currently calls `Queue.Enqueue`.
+**Partially shipped (2026-04-27).** `pkg/storage.Client.Transcode` now satisfies `transcode.Encoder`. `cmd/server/main.go` boots a 4-worker `transcode.Pool` when `TRANSCODE_ASYNC=true`. Upload handlers still encode synchronously; flipping them to `Queue.Enqueue` requires the mobile coordination described below.
 
 ### Why deferred
 Mobile clients today expect the upload response to include the final WebP URL. Wiring async transcode requires either:
@@ -44,7 +44,7 @@ Either path is multi-day with non-trivial CDN / mobile coordination.
 ## 2. External secrets manager (Vault / SSM)
 
 ### Status
-Deferred. All secrets read from env vars today.
+**Partially shipped (2026-04-27).** `pkg/secrets/` now provides `Source` interface + `EnvSource` + `CachingSource`. `SECRETS_BACKEND=env|ssm` selector wired in main.go. SSM body is a stub — wiring needs `go get github.com/aws/aws-sdk-go-v2/{config,service/ssm}` (deferred to keep go.mod lean). All instructions for flipping it on are in the file header of `pkg/secrets/ssm.go`.
 
 ### Why deferred
 Genuine deployment-infra task. Needs:
@@ -76,10 +76,10 @@ Cannot ship this from a code session alone — it's a deploy-pipeline change.
 ## 3. Profile snake_case → camelCase mobile
 
 ### Status
-Deferred. Affects 56 files.
+Deferred. Affects 122 files (re-counted 2026-04-27 — broader than initially scoped because `created_at`, `business_id`, `business_profile`, etc. are also snake_case across the model surface).
 
 ### Why deferred
-Lint `non_constant_identifier_names` is info-level. Renaming `is_blocked` → `isBlocked`, `first_name` → `firstName`, etc. across freezed-generated `Profile` and `User` models would touch 56 files of feature code. High risk for low value during the pre-prod stabilization window.
+Lint `non_constant_identifier_names` is info-level. Mechanical rename across 122 files of feature code without ability to run full real-device smoke tests in this session is unjustifiable risk for cosmetic lint cleanup. JSON deserialization regressions would manifest at runtime, not at compile time.
 
 ### Migration plan
 1. Add `@JsonKey(name: 'is_blocked')` annotations on each freezed field, rename Dart-side identifiers to camelCase.
@@ -97,7 +97,7 @@ Best done as a single dedicated PR after a release cut.
 ## 4. WS hub Redis pub/sub for multi-instance scale-out
 
 ### Status
-Single-instance sharding shipped. Multi-instance fanout deferred.
+**Shipped (2026-04-27).** `pkg/websocket/pubsub.go` provides `Fanout` with `PSubscribe(ws:user:*)` consumer + `Publish(ws:user:<id>)` producer. `Hub.AttachFanout` wires it. `cmd/server/main.go` boots fanout when `WS_FANOUT=true`. Loopback prevention via `processID` (hostname) — pods drop messages they themselves originated.
 
 ### Why deferred
 Sharding fixes the single-broadcaster goroutine bottleneck within one process. Going wider (multi-pod) requires Redis pub/sub or NATS fanout so a message originated on pod A can reach a client connected to pod B.
