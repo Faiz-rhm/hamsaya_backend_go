@@ -393,12 +393,12 @@ func main() {
 			auth.POST("/logout", authMiddleware.RequireAuth(), authHandler.Logout)
 			auth.POST("/logout-all", authMiddleware.RequireAuth(), authHandler.LogoutAll)
 			auth.POST("/send-verification-email", authMiddleware.RequireAuth(), authHandler.SendVerificationEmail)
-			auth.POST("/change-password", authMiddleware.RequireAuth(), authHandler.ChangePassword)
+			auth.POST("/change-password", verifiedAuth, authHandler.ChangePassword)
 			auth.GET("/sessions", authMiddleware.RequireAuth(), authHandler.GetActiveSessions)
 		}
 
-		// MFA routes (require authentication)
-		mfaHandler.RegisterRoutes(v1, authMiddleware.RequireAuth())
+		// MFA routes (require verified email — enrolling/disabling MFA on an unverified account is an account-takeover vector)
+		mfaHandler.RegisterRoutes(v1, verifiedAuth)
 
 		// Profile routes
 		users := v1.Group("/users")
@@ -408,13 +408,13 @@ func main() {
 			// Protected routes (require authentication)
 			users.GET("/me", authMiddleware.RequireAuth(), profileHandler.GetMyProfile)
 			users.PUT("/me", authMiddleware.RequireAuth(), profileHandler.UpdateProfile)
-			users.DELETE("/me", authMiddleware.RequireAuth(), profileHandler.DeleteAccount)
+			users.DELETE("/me", verifiedAuth, profileHandler.DeleteAccount)
 			users.POST("/me/avatar", verifiedAuth, profileHandler.UploadAvatar)
 			users.DELETE("/me/avatar", verifiedAuth, profileHandler.DeleteAvatar)
 			users.POST("/me/cover", verifiedAuth, profileHandler.UploadCover)
 			users.DELETE("/me/cover", verifiedAuth, profileHandler.DeleteCover)
-			// GDPR Article 20: per-user data export. 1 / 24h.
-			users.GET("/me/export", authMiddleware.RequireAuth(), rateLimiter.LimitDataExport(), profileHandler.ExportData)
+			// GDPR Article 20: per-user data export. 1 / 24h. Requires verified email so unverified accounts can't exfiltrate data.
+			users.GET("/me/export", verifiedAuth, rateLimiter.LimitDataExport(), profileHandler.ExportData)
 
 			// Require auth for user profile and relationship views
 			users.GET("/:user_id", authMiddleware.RequireAuth(), profileHandler.GetUserProfile)

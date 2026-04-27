@@ -13,6 +13,7 @@ type EventRepository interface {
 	// Event interest operations
 	SetInterest(ctx context.Context, interest *models.EventInterest) error
 	GetUserInterest(ctx context.Context, userID, postID string) (*models.EventInterest, error)
+	GetUserInterestsByPostIDs(ctx context.Context, userID string, postIDs []string) (map[string]*models.EventInterest, error)
 	DeleteInterest(ctx context.Context, userID, postID string) error
 
 	// Get interested/going users
@@ -75,6 +76,45 @@ func (r *eventRepository) GetUserInterest(ctx context.Context, userID, postID st
 	}
 
 	return interest, err
+}
+
+// GetUserInterestsByPostIDs fetches the viewer's event-interest rows across many
+// posts in one query. Returns a map keyed by post_id; posts with no interest are
+// absent from the map.
+func (r *eventRepository) GetUserInterestsByPostIDs(ctx context.Context, userID string, postIDs []string) (map[string]*models.EventInterest, error) {
+	out := make(map[string]*models.EventInterest)
+	if userID == "" || len(postIDs) == 0 {
+		return out, nil
+	}
+
+	query := `
+		SELECT id, post_id, user_id, event_state, created_at, updated_at
+		FROM event_interests
+		WHERE user_id = $1 AND post_id = ANY($2)
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, userID, postIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		interest := &models.EventInterest{}
+		if err := rows.Scan(
+			&interest.ID,
+			&interest.PostID,
+			&interest.UserID,
+			&interest.EventState,
+			&interest.CreatedAt,
+			&interest.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		out[interest.PostID] = interest
+	}
+
+	return out, rows.Err()
 }
 
 // DeleteInterest removes a user's interest from an event

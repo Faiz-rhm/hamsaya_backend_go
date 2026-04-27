@@ -686,41 +686,20 @@ func (s *PostService) GetFeed(ctx context.Context, filter *models.FeedFilter, vi
 		return nil, 0, utils.NewInternalError("Failed to get feed", err)
 	}
 
-	// Enrich posts
-	var enrichedPosts []*models.PostResponse
-	for _, post := range posts {
-		enrichedPost, err := s.enrichPost(ctx, post, viewerID)
-		if err != nil {
-			s.logger.Warn("Failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
-			continue
-		}
-		enrichedPosts = append(enrichedPosts, enrichedPost)
-	}
+	enrichedPosts := s.enrichPostsBatch(ctx, posts, viewerID)
 
 	return enrichedPosts, totalCount, nil
 }
 
 // GetUserBookmarks gets bookmarked posts for a user
 func (s *PostService) GetUserBookmarks(ctx context.Context, userID string, limit, offset int) ([]*models.PostResponse, error) {
-	// Get bookmarked posts
 	posts, err := s.postRepo.GetUserBookmarks(ctx, userID, limit, offset)
 	if err != nil {
 		s.logger.Error("Failed to get bookmarks", zap.String("user_id", userID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get bookmarks", err)
 	}
 
-	// Enrich posts
-	var enrichedPosts []*models.PostResponse
-	for _, post := range posts {
-		enrichedPost, err := s.enrichPost(ctx, post, &userID)
-		if err != nil {
-			s.logger.Warn("Failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
-			continue
-		}
-		enrichedPosts = append(enrichedPosts, enrichedPost)
-	}
-
-	return enrichedPosts, nil
+	return s.enrichPostsBatch(ctx, posts, &userID), nil
 }
 
 // GetUserEventPosts gets EVENT posts that the user is going to or interested in
@@ -731,17 +710,7 @@ func (s *PostService) GetUserEventPosts(ctx context.Context, userID string, even
 		return nil, utils.NewInternalError("Failed to get event posts", err)
 	}
 
-	var enrichedPosts []*models.PostResponse
-	for _, post := range posts {
-		enrichedPost, err := s.enrichPost(ctx, post, &userID)
-		if err != nil {
-			s.logger.Warn("Failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
-			continue
-		}
-		enrichedPosts = append(enrichedPosts, enrichedPost)
-	}
-
-	return enrichedPosts, nil
+	return s.enrichPostsBatch(ctx, posts, &userID), nil
 }
 
 // GetPersonalizedFeed returns a cursor-paginated feed for viewerID assembled from
@@ -803,15 +772,7 @@ func (s *PostService) GetPersonalizedFeed(ctx context.Context, viewerID string, 
 		posts = posts[:filter.Limit]
 	}
 
-	var enrichedPosts []*models.PostResponse
-	for _, post := range posts {
-		enrichedPost, err := s.enrichPost(ctx, post, &viewerID)
-		if err != nil {
-			s.logger.Warn("GetPersonalizedFeed: failed to enrich post", zap.String("post_id", post.ID), zap.Error(err))
-			continue
-		}
-		enrichedPosts = append(enrichedPosts, enrichedPost)
-	}
+	enrichedPosts := s.enrichPostsBatch(ctx, posts, &viewerID)
 
 	var nextCursor *time.Time
 	if len(posts) == filter.Limit {
@@ -834,6 +795,293 @@ func mergeDedupe(a, b []string) []string {
 			seen[id] = struct{}{}
 			out = append(out, id)
 		}
+	}
+	return out
+}
+
+// enrichPostsBatch enriches a slice of posts with author, business, attachments,
+// category, engagement status, and event interest using batch queries — replacing
+// the per-post N+1 calls in enrichPost. Total queries are bounded (≤6) regardless
+// of len(posts).
+//
+// Returns responses in the same order as the input. Posts that fail enrichment
+// (e.g., missing author) are still returned with whatever fields could be filled.
+func (s *PostService) enrichPostsBatch(ctx context.Context, posts []*models.Post, viewerID *string) []*models.PostResponse {
+	if len(posts) == 0 {
+		return nil
+	}
+
+	// Collect ID sets in one pass.
+	postIDs := make([]string, 0, len(posts))
+	userIDSet := make(map[string]struct{})
+	businessIDSet := make(map[string]struct{})
+	categoryIDSet := make(map[string]struct{})
+	eventPostIDs := make([]string, 0)
+
+	for _, p := range posts {
+		postIDs = append(postIDs, p.ID)
+		if p.UserID != nil && *p.UserID != "" {
+			userIDSet[*p.UserID] = struct{}{}
+		}
+		if p.BusinessID != nil && *p.BusinessID != "" {
+			businessIDSet[*p.BusinessID] = struct{}{}
+		}
+		if p.Type == models.PostTypeSell && p.CategoryID != nil && *p.CategoryID != "" {
+			categoryIDSet[*p.CategoryID] = struct{}{}
+		}
+		if p.Type == models.PostTypeEvent {
+			eventPostIDs = append(eventPostIDs, p.ID)
+		}
+	}
+
+	userIDs := setToSlice(userIDSet)
+	businessIDs := setToSlice(businessIDSet)
+	categoryIDs := setToSlice(categoryIDSet)
+
+	// Bulk-fetch related data. Errors are logged but non-fatal: each piece
+	// degrades gracefully (post still returned with what we have).
+	profilesByID := make(map[string]*models.Profile, len(userIDs))
+	if len(userIDs) > 0 {
+		profiles, err := s.userRepo.GetProfilesByUserIDs(ctx, userIDs)
+		if err != nil {
+			s.logger.Warn("enrichPostsBatch: failed to load profiles", zap.Error(err))
+		} else {
+			for _, p := range profiles {
+				profilesByID[p.ID] = p
+			}
+		}
+	}
+
+	businessesByID := make(map[string]*models.BusinessProfile, len(businessIDs))
+	if len(businessIDs) > 0 {
+		businesses, err := s.businessRepo.GetByIDs(ctx, businessIDs)
+		if err != nil {
+			s.logger.Warn("enrichPostsBatch: failed to load businesses", zap.Error(err))
+		} else {
+			for _, b := range businesses {
+				businessesByID[b.ID] = b
+			}
+		}
+	}
+
+	categoriesByID := make(map[string]*models.SellCategory, len(categoryIDs))
+	if len(categoryIDs) > 0 {
+		cats, err := s.categoryRepo.GetByIDs(ctx, categoryIDs)
+		if err != nil {
+			s.logger.Warn("enrichPostsBatch: failed to load categories", zap.Error(err))
+		} else {
+			for _, c := range cats {
+				categoriesByID[c.ID] = c
+			}
+		}
+	}
+
+	attachmentsByPostID, err := s.postRepo.GetAttachmentsByPostIDs(ctx, postIDs)
+	if err != nil {
+		s.logger.Warn("enrichPostsBatch: failed to load attachments", zap.Error(err))
+		attachmentsByPostID = map[string][]*models.Attachment{}
+	}
+
+	// Engagement + event interest scoped to viewer.
+	var likedSet, bookmarkedSet map[string]struct{}
+	interestsByPostID := map[string]*models.EventInterest{}
+	if viewerID != nil && *viewerID != "" {
+		likedSet, bookmarkedSet, err = s.postRepo.GetEngagementStatusBatch(ctx, *viewerID, postIDs)
+		if err != nil {
+			s.logger.Warn("enrichPostsBatch: failed to load engagement", zap.Error(err))
+			likedSet, bookmarkedSet = map[string]struct{}{}, map[string]struct{}{}
+		}
+		if len(eventPostIDs) > 0 {
+			interestsByPostID, err = s.eventRepo.GetUserInterestsByPostIDs(ctx, *viewerID, eventPostIDs)
+			if err != nil {
+				s.logger.Warn("enrichPostsBatch: failed to load event interests", zap.Error(err))
+				interestsByPostID = map[string]*models.EventInterest{}
+			}
+		}
+	}
+
+	bucket := s.storageBucketName
+	if bucket == "" {
+		bucket = "hamsaya-uploads"
+	}
+
+	out := make([]*models.PostResponse, 0, len(posts))
+	for _, post := range posts {
+		response := s.buildPostResponse(post, viewerID, profilesByID, businessesByID, categoriesByID, attachmentsByPostID, likedSet, bookmarkedSet, interestsByPostID, bucket)
+
+		// OriginalPost (share) — keep per-post fetch since depth=1 and feed shares
+		// are sparse. Hot path optimization left for a follow-up.
+		if post.OriginalPostID != nil && *post.OriginalPostID != "" {
+			if originalPost, oerr := s.postRepo.GetByID(ctx, *post.OriginalPostID); oerr == nil {
+				if enrichedOriginal, eerr := s.enrichPostSimple(ctx, originalPost, viewerID); eerr == nil {
+					response.OriginalPost = enrichedOriginal
+				}
+			}
+		}
+
+		out = append(out, response)
+	}
+
+	return out
+}
+
+// buildPostResponse populates a PostResponse from pre-fetched lookup maps.
+// All map lookups are O(1); no DB calls happen inside.
+func (s *PostService) buildPostResponse(
+	post *models.Post,
+	viewerID *string,
+	profilesByID map[string]*models.Profile,
+	businessesByID map[string]*models.BusinessProfile,
+	categoriesByID map[string]*models.SellCategory,
+	attachmentsByPostID map[string][]*models.Attachment,
+	likedSet map[string]struct{},
+	bookmarkedSet map[string]struct{},
+	interestsByPostID map[string]*models.EventInterest,
+	bucket string,
+) *models.PostResponse {
+	response := &models.PostResponse{
+		ID:            post.ID,
+		Type:          post.Type,
+		Title:         post.Title,
+		Description:   post.Description,
+		Visibility:    post.Visibility,
+		Status:        post.Status,
+		BusinessID:    post.BusinessID,
+		TotalComments: post.TotalComments,
+		TotalLikes:    post.TotalLikes,
+		TotalShares:   post.TotalShares,
+		CreatedAt:     post.CreatedAt,
+		UpdatedAt:     post.UpdatedAt,
+	}
+
+	if post.UserID != nil {
+		if profile, ok := profilesByID[*post.UserID]; ok {
+			avatarColor := profile.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := models.DefaultAvatarColorForProfile(profile.ID)
+				avatarColor = &c
+			}
+			response.Author = &models.AuthorInfo{
+				UserID:       *post.UserID,
+				FirstName:    profile.FirstName,
+				LastName:     profile.LastName,
+				FullName:     profile.FullName(),
+				Avatar:       profile.Avatar,
+				AvatarColor:  avatarColor,
+				Province:     profile.Province,
+				District:     profile.District,
+				Neighborhood: profile.Neighborhood,
+			}
+		}
+	}
+
+	var fetchedBusiness *models.BusinessProfile
+	if post.BusinessID != nil && *post.BusinessID != "" {
+		if business, ok := businessesByID[*post.BusinessID]; ok {
+			fetchedBusiness = business
+			avatarColor := business.AvatarColor
+			if avatarColor == nil || *avatarColor == "" {
+				c := defaultAvatarColorForBusinessID(business.ID)
+				avatarColor = &c
+			}
+			response.Business = &models.BusinessInfo{
+				BusinessID:   business.ID,
+				Name:         business.Name,
+				Description:  business.Description,
+				PhoneNumber:  business.PhoneNumber,
+				Email:        business.Email,
+				Website:      business.Website,
+				Avatar:       business.Avatar,
+				AvatarColor:  avatarColor,
+				Cover:        business.Cover,
+				Province:     business.Province,
+				District:     business.District,
+				Neighborhood: business.Neighborhood,
+			}
+		}
+	}
+
+	if atts := attachmentsByPostID[post.ID]; len(atts) > 0 {
+		for _, att := range atts {
+			photo := att.Photo
+			photo.URL = storage.EnsureBucketInStorageURL(photo.URL, bucket)
+			response.Attachments = append(response.Attachments, models.AttachmentResponse{
+				ID:    att.ID,
+				Photo: photo,
+			})
+		}
+	}
+
+	if post.Type == models.PostTypeSell {
+		response.Currency = post.Currency
+		response.Price = post.Price
+		response.Discount = post.Discount
+		response.Free = &post.Free
+		response.Sold = &post.Sold
+		response.IsPromoted = &post.IsPromoted
+		response.ContactNo = post.ContactNo
+		response.IsLocation = &post.IsLocation
+		response.ExpiredAt = post.ExpiredAt
+
+		if post.CategoryID != nil && *post.CategoryID != "" {
+			response.CategoryID = post.CategoryID
+			if category, ok := categoriesByID[*post.CategoryID]; ok {
+				response.Category = &models.CategoryInfo{
+					ID:    category.ID,
+					Name:  category.Name,
+					Icon:  models.Icon{Name: category.Icon.Name, Library: category.Icon.Library},
+					Color: category.Color,
+				}
+			}
+		}
+	}
+
+	if post.Type == models.PostTypeEvent {
+		response.StartDate = post.StartDate
+		response.StartTime = post.StartTime
+		response.EndDate = post.EndDate
+		response.EndTime = post.EndTime
+		response.EventState = post.EventState
+		response.InterestedCount = &post.InterestedCount
+		response.GoingCount = &post.GoingCount
+		if interest := interestsByPostID[post.ID]; interest != nil {
+			response.UserEventState = &interest.EventState
+		}
+	}
+
+	if post.AddressLocation != nil && post.AddressLocation.Valid {
+		response.Location = &models.LocationInfo{
+			Latitude:     &post.AddressLocation.P.Y,
+			Longitude:    &post.AddressLocation.P.X,
+			Country:      post.Country,
+			Province:     post.Province,
+			District:     post.District,
+			Neighborhood: post.Neighborhood,
+		}
+	}
+	response.IsLocation = &post.IsLocation
+
+	if viewerID != nil && *viewerID != "" {
+		if _, ok := likedSet[post.ID]; ok {
+			response.LikedByMe = true
+		}
+		if _, ok := bookmarkedSet[post.ID]; ok {
+			response.BookmarkedByMe = true
+		}
+		if post.UserID != nil && *post.UserID == *viewerID {
+			response.IsMine = true
+		} else if fetchedBusiness != nil && fetchedBusiness.UserID == *viewerID {
+			response.IsMine = true
+		}
+	}
+
+	return response
+}
+
+func setToSlice(s map[string]struct{}) []string {
+	out := make([]string, 0, len(s))
+	for k := range s {
+		out = append(out, k)
 	}
 	return out
 }

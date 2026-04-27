@@ -17,6 +17,7 @@ type BusinessRepository interface {
 	// Business Profile CRUD
 	Create(ctx context.Context, business *models.BusinessProfile) error
 	GetByID(ctx context.Context, businessID string) (*models.BusinessProfile, error)
+	GetByIDs(ctx context.Context, businessIDs []string) ([]*models.BusinessProfile, error)
 	GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*models.BusinessProfile, error)
 	Update(ctx context.Context, business *models.BusinessProfile) error
 	Delete(ctx context.Context, businessID string) error
@@ -202,6 +203,70 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 	}
 
 	return business, err
+}
+
+// GetByIDs retrieves multiple business profiles by ID in one query. Soft-deleted
+// rows are excluded.
+func (r *businessRepository) GetByIDs(ctx context.Context, businessIDs []string) ([]*models.BusinessProfile, error) {
+	if len(businessIDs) == 0 {
+		return []*models.BusinessProfile{}, nil
+	}
+
+	query := `
+		SELECT
+			id, user_id, name, license_no, description, address, phone_number,
+			email, website, avatar, avatar_color, cover, status, additional_info,
+			ST_X(address_location::geometry), ST_Y(address_location::geometry),
+			country, province, district, neighborhood,
+			show_location, total_views, total_follow, created_at, updated_at
+		FROM business_profiles
+		WHERE id = ANY($1) AND deleted_at IS NULL
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, businessIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get business profiles by ids: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*models.BusinessProfile, 0, len(businessIDs))
+	for rows.Next() {
+		business := &models.BusinessProfile{}
+		var lng, lat *float64
+		if err := rows.Scan(
+			&business.ID,
+			&business.UserID,
+			&business.Name,
+			&business.LicenseNo,
+			&business.Description,
+			&business.Address,
+			&business.PhoneNumber,
+			&business.Email,
+			&business.Website,
+			&business.Avatar,
+			&business.AvatarColor,
+			&business.Cover,
+			&business.Status,
+			&business.AdditionalInfo,
+			&lng,
+			&lat,
+			&business.Country,
+			&business.Province,
+			&business.District,
+			&business.Neighborhood,
+			&business.ShowLocation,
+			&business.TotalViews,
+			&business.TotalFollow,
+			&business.CreatedAt,
+			&business.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan business profile: %w", err)
+		}
+		scanBusinessLocation(lng, lat, business)
+		out = append(out, business)
+	}
+
+	return out, rows.Err()
 }
 
 // GetByUserID gets all business profiles for a user

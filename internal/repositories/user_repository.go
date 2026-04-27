@@ -30,6 +30,7 @@ type UserRepository interface {
 	CreateProfile(ctx context.Context, profile *models.Profile) error
 	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
 	GetProfileByUserIDIncludingDeleted(ctx context.Context, userID string) (*models.Profile, error)
+	GetProfilesByUserIDs(ctx context.Context, userIDs []string) ([]*models.Profile, error)
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
 
 	// Transactional operations
@@ -420,6 +421,70 @@ func (r *userRepository) GetProfileByUserID(ctx context.Context, userID string) 
 	}
 
 	return profile, nil
+}
+
+// GetProfilesByUserIDs retrieves multiple profiles by user ID in one query.
+// Soft-deleted rows are excluded. The returned slice may be shorter than the
+// input when some IDs have no matching active profile.
+func (r *userRepository) GetProfilesByUserIDs(ctx context.Context, userIDs []string) ([]*models.Profile, error) {
+	if len(userIDs) == 0 {
+		return []*models.Profile{}, nil
+	}
+
+	query := `
+		SELECT id, first_name, last_name, avatar, avatar_color, cover, about, gender, dob, website,
+			ST_X(location::geometry) as longitude,
+			ST_Y(location::geometry) as latitude,
+			country, province, district, neighborhood, is_complete,
+			created_at, updated_at, deleted_at
+		FROM profiles
+		WHERE id = ANY($1) AND deleted_at IS NULL
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, userIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profiles by ids: %w", err)
+	}
+	defer rows.Close()
+
+	profiles := make([]*models.Profile, 0, len(userIDs))
+	for rows.Next() {
+		profile := &models.Profile{}
+		var latitude, longitude *float64
+		if err := rows.Scan(
+			&profile.ID,
+			&profile.FirstName,
+			&profile.LastName,
+			&profile.Avatar,
+			&profile.AvatarColor,
+			&profile.Cover,
+			&profile.About,
+			&profile.Gender,
+			&profile.DOB,
+			&profile.Website,
+			&longitude,
+			&latitude,
+			&profile.Country,
+			&profile.Province,
+			&profile.District,
+			&profile.Neighborhood,
+			&profile.IsComplete,
+			&profile.CreatedAt,
+			&profile.UpdatedAt,
+			&profile.DeletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan profile: %w", err)
+		}
+		if latitude != nil && longitude != nil {
+			profile.Location = &pgtype.Point{
+				P:     pgtype.Vec2{X: *longitude, Y: *latitude},
+				Valid: true,
+			}
+		}
+		profiles = append(profiles, profile)
+	}
+
+	return profiles, rows.Err()
 }
 
 // GetProfileByUserIDIncludingDeleted retrieves a profile by user ID, including soft-deleted

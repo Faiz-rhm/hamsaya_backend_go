@@ -24,6 +24,7 @@ type PostRepository interface {
 	// Attachments
 	CreateAttachment(ctx context.Context, attachment *models.Attachment) error
 	GetAttachmentsByPostID(ctx context.Context, postID string) ([]*models.Attachment, error)
+	GetAttachmentsByPostIDs(ctx context.Context, postIDs []string) (map[string][]*models.Attachment, error)
 	DeleteAttachment(ctx context.Context, attachmentID string) error
 	DeleteAttachmentForPost(ctx context.Context, postID, attachmentID string) error
 
@@ -52,6 +53,7 @@ type PostRepository interface {
 
 	// Engagement status
 	GetEngagementStatus(ctx context.Context, userID, postID string) (liked, bookmarked bool, err error)
+	GetEngagementStatusBatch(ctx context.Context, userID string, postIDs []string) (liked, bookmarked map[string]struct{}, err error)
 
 	// Stats
 	CountPostsByUser(ctx context.Context, userID string) (int, error)
@@ -295,6 +297,38 @@ func (r *postRepository) GetAttachmentsByPostID(ctx context.Context, postID stri
 	}
 
 	return attachments, rows.Err()
+}
+
+// GetAttachmentsByPostIDs fetches attachments for multiple posts in one query.
+// Returns a map keyed by post_id; posts with no attachments are absent from the map.
+func (r *postRepository) GetAttachmentsByPostIDs(ctx context.Context, postIDs []string) (map[string][]*models.Attachment, error) {
+	if len(postIDs) == 0 {
+		return map[string][]*models.Attachment{}, nil
+	}
+
+	query := `
+		SELECT id, post_id, photo, created_at, updated_at
+		FROM attachments
+		WHERE post_id = ANY($1) AND deleted_at IS NULL
+		ORDER BY post_id, created_at ASC
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, postIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make(map[string][]*models.Attachment, len(postIDs))
+	for rows.Next() {
+		att := &models.Attachment{}
+		if err := rows.Scan(&att.ID, &att.PostID, &att.Photo, &att.CreatedAt, &att.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out[att.PostID] = append(out[att.PostID], att)
+	}
+
+	return out, rows.Err()
 }
 
 // DeleteAttachment soft deletes an attachment
@@ -830,6 +864,42 @@ func (r *postRepository) GetEngagementStatus(ctx context.Context, userID, postID
 
 	err = r.db.Pool.QueryRow(ctx, query, userID, postID).Scan(&liked, &bookmarked)
 	return
+}
+
+// GetEngagementStatusBatch fetches like/bookmark status for many posts in one
+// round trip. Returns two sets keyed by post_id. Either set may be empty.
+func (r *postRepository) GetEngagementStatusBatch(ctx context.Context, userID string, postIDs []string) (map[string]struct{}, map[string]struct{}, error) {
+	liked := make(map[string]struct{})
+	bookmarked := make(map[string]struct{})
+	if userID == "" || len(postIDs) == 0 {
+		return liked, bookmarked, nil
+	}
+
+	query := `
+		SELECT 'l' AS kind, post_id FROM post_likes WHERE user_id = $1 AND post_id = ANY($2)
+		UNION ALL
+		SELECT 'b' AS kind, post_id FROM post_bookmarks WHERE user_id = $1 AND post_id = ANY($2)
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, userID, postIDs)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var kind, postID string
+		if err := rows.Scan(&kind, &postID); err != nil {
+			return nil, nil, err
+		}
+		if kind == "l" {
+			liked[postID] = struct{}{}
+		} else {
+			bookmarked[postID] = struct{}{}
+		}
+	}
+
+	return liked, bookmarked, rows.Err()
 }
 
 // CountPostsByUser counts the number of posts by a user

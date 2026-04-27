@@ -96,6 +96,14 @@ func (m *MockUserRepository) GetProfileByUserIDIncludingDeleted(ctx context.Cont
 	return args.Get(0).(*models.Profile), args.Error(1)
 }
 
+func (m *MockUserRepository) GetProfilesByUserIDs(ctx context.Context, userIDs []string) ([]*models.Profile, error) {
+	args := m.Called(ctx, userIDs)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Profile), args.Error(1)
+}
+
 func (m *MockUserRepository) UpdateProfile(ctx context.Context, profile *models.Profile) error {
 	args := m.Called(ctx, profile)
 	return args.Error(0)
@@ -205,6 +213,14 @@ func (m *MockPostRepository) GetAttachmentsByPostID(ctx context.Context, postID 
 	return args.Get(0).([]*models.Attachment), args.Error(1)
 }
 
+func (m *MockPostRepository) GetAttachmentsByPostIDs(ctx context.Context, postIDs []string) (map[string][]*models.Attachment, error) {
+	args := m.Called(ctx, postIDs)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string][]*models.Attachment), args.Error(1)
+}
+
 func (m *MockPostRepository) DeleteAttachment(ctx context.Context, attachmentID string) error {
 	args := m.Called(ctx, attachmentID)
 	return args.Error(0)
@@ -269,6 +285,18 @@ func (m *MockPostRepository) GetPostShares(ctx context.Context, postID string, l
 func (m *MockPostRepository) GetEngagementStatus(ctx context.Context, userID, postID string) (bool, bool, error) {
 	args := m.Called(ctx, userID, postID)
 	return args.Bool(0), args.Bool(1), args.Error(2)
+}
+
+func (m *MockPostRepository) GetEngagementStatusBatch(ctx context.Context, userID string, postIDs []string) (map[string]struct{}, map[string]struct{}, error) {
+	args := m.Called(ctx, userID, postIDs)
+	var liked, bookmarked map[string]struct{}
+	if v := args.Get(0); v != nil {
+		liked = v.(map[string]struct{})
+	}
+	if v := args.Get(1); v != nil {
+		bookmarked = v.(map[string]struct{})
+	}
+	return liked, bookmarked, args.Error(2)
 }
 
 func (m *MockPostRepository) GetFeed(ctx context.Context, filter *models.FeedFilter) ([]*models.Post, error) {
@@ -647,6 +675,14 @@ func (m *MockBusinessRepository) GetByID(ctx context.Context, businessID string)
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.BusinessProfile), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetByIDs(ctx context.Context, businessIDs []string) ([]*models.BusinessProfile, error) {
+	args := m.Called(ctx, businessIDs)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.BusinessProfile), args.Error(1)
 }
 
 func (m *MockBusinessRepository) GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*models.BusinessProfile, error) {
@@ -1398,6 +1434,14 @@ func (m *MockEventRepository) GetUserInterest(ctx context.Context, userID, postI
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(*models.EventInterest), args.Error(1)
+}
+
+func (m *MockEventRepository) GetUserInterestsByPostIDs(ctx context.Context, userID string, postIDs []string) (map[string]*models.EventInterest, error) {
+	args := m.Called(ctx, userID, postIDs)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string]*models.EventInterest), args.Error(1)
 }
 
 func (m *MockEventRepository) DeleteInterest(ctx context.Context, userID, postID string) error {
