@@ -28,7 +28,8 @@ func newProfileRouter(
 	relRepo *mocks.MockRelationshipsRepository,
 ) *gin.Engine {
 	t.Helper()
-	svc := services.NewProfileService(userRepo, postRepo, relRepo, zap.NewNop())
+	commentRepo := &mocks.MockCommentRepository{}
+	svc := services.NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
 	h := NewProfileHandler(svc, nil, testutil.CreateTestValidator(), zap.NewNop())
 
 	authed := authContextMiddleware(profileTestUserID, "profile-sess-001")

@@ -22,7 +22,8 @@ func newTestProfileService(
 	postRepo *mocks.MockPostRepository,
 	relRepo *mocks.MockRelationshipsRepository,
 ) *ProfileService {
-	return NewProfileService(userRepo, postRepo, relRepo, zap.NewNop())
+	commentRepo := &mocks.MockCommentRepository{}
+	return NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
 }
 
 func TestProfileService_GetProfile(t *testing.T) {
