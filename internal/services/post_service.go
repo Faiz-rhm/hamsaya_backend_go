@@ -198,6 +198,11 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 	// Create post in database first (needed before creating poll)
 	if err := s.postRepo.Create(ctx, post); err != nil {
 		s.logger.Error("Failed to create post", zap.String("user_id", userID), zap.Error(err))
+		// Refund the daily-limit slot we pre-incremented above so the user
+		// is not punished for a backend failure outside their control.
+		if s.dailyLimitService != nil {
+			s.dailyLimitService.Refund(ctx, userID, string(req.Type))
+		}
 		return nil, utils.NewInternalError("Failed to create post", err)
 	}
 
@@ -227,6 +232,11 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 				)
 				// Delete the post since poll creation failed
 				_ = s.postRepo.Delete(ctx, postID)
+				// Refund the daily-limit slot — the user's quota should not
+				// be consumed when the post is rolled back.
+				if s.dailyLimitService != nil {
+					s.dailyLimitService.Refund(ctx, userID, string(req.Type))
+				}
 				return nil, utils.NewInternalError("Failed to create poll for post", err)
 			}
 
