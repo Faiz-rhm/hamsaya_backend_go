@@ -94,6 +94,38 @@ func (h *ProfileHandler) GetUserProfile(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Profile retrieved successfully", profile)
 }
 
+// ExportData godoc
+// @Summary Export user data (GDPR Article 20)
+// @Description Returns a JSON dump of the authenticated user's owned data:
+// @Description profile, posts, comments, follower/following IDs, blocks, bookmarks.
+// @Description Heavy endpoint — gated by a 1-per-24h per-user rate limit upstream.
+// @Tags profile
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} models.UserDataExport
+// @Failure 401 {object} utils.Response
+// @Failure 429 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /users/me/export [get]
+func (h *ProfileHandler) ExportData(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	export, err := h.profileService.ExportUserData(c.Request.Context(), userID.(string))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	// Trigger a download in browsers; mobile clients ignore the disposition.
+	filename := "hamsaya-export-" + userID.(string) + "-" + time.Now().UTC().Format("20060102") + ".json"
+	c.Header("Content-Disposition", `attachment; filename="`+filename+`"`)
+	c.JSON(http.StatusOK, export)
+}
+
 // UpdateProfile godoc
 // @Summary Update user profile
 // @Description Update the authenticated user's profile information

@@ -208,7 +208,7 @@ func main() {
 	mfaService := services.NewMFAService(mfaRepo, userRepo, passwordService, logger)
 	oauthService := services.NewOAuthService(cfg, userRepo, logger)
 	storageService := services.NewStorageService(cfg, logger)
-	profileService := services.NewProfileService(userRepo, postRepo, relationshipsRepo, logger)
+	profileService := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, logger)
 	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
@@ -360,6 +360,8 @@ func main() {
 			users.DELETE("/me/avatar", verifiedAuth, profileHandler.DeleteAvatar)
 			users.POST("/me/cover", verifiedAuth, profileHandler.UploadCover)
 			users.DELETE("/me/cover", verifiedAuth, profileHandler.DeleteCover)
+			// GDPR Article 20: per-user data export. 1 / 24h.
+			users.GET("/me/export", authMiddleware.RequireAuth(), rateLimiter.LimitDataExport(), profileHandler.ExportData)
 
 			// Require auth for user profile and relationship views
 			users.GET("/:user_id", authMiddleware.RequireAuth(), profileHandler.GetUserProfile)

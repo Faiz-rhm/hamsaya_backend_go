@@ -15,6 +15,7 @@ import (
 type ProfileService struct {
 	userRepo          repositories.UserRepository
 	postRepo          repositories.PostRepository
+	commentRepo       repositories.CommentRepository
 	relationshipsRepo repositories.RelationshipsRepository
 	logger            *zap.Logger
 }
@@ -23,12 +24,14 @@ type ProfileService struct {
 func NewProfileService(
 	userRepo repositories.UserRepository,
 	postRepo repositories.PostRepository,
+	commentRepo repositories.CommentRepository,
 	relationshipsRepo repositories.RelationshipsRepository,
 	logger *zap.Logger,
 ) *ProfileService {
 	return &ProfileService{
 		userRepo:          userRepo,
 		postRepo:          postRepo,
+		commentRepo:       commentRepo,
 		relationshipsRepo: relationshipsRepo,
 		logger:            logger,
 	}
@@ -352,4 +355,87 @@ func stringOrEmpty(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// ExportUserData collects the user's owned data for the GDPR data-export
+// endpoint. Lists are capped (see exportListLimit) to keep the response
+// inside a single HTTP cycle; total counts are reported separately so the
+// client can warn when truncation happened.
+//
+// Heavy work — gated upstream by a 1-per-day rate limit middleware.
+func (s *ProfileService) ExportUserData(ctx context.Context, userID string) (*models.UserDataExport, error) {
+	const exportListLimit = 5000
+
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("User not found", err)
+	}
+	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
+	if err != nil {
+		return nil, utils.NewInternalError("Failed to get profile", err)
+	}
+	profileResp := models.ToFullProfileResponse(user, profile)
+	pct, missing := profileCompletion(profile)
+	profileResp.CompletionPercent = pct
+	profileResp.MissingFields = missing
+
+	posts, err := s.postRepo.GetUserPosts(ctx, userID, exportListLimit, 0)
+	if err != nil {
+		s.logger.Error("export: posts", zap.String("user_id", userID), zap.Error(err))
+		posts = nil
+	}
+	postsCount, _ := s.postRepo.CountPostsByUser(ctx, userID)
+
+	comments, err := s.commentRepo.GetByUserID(ctx, userID, exportListLimit, 0)
+	if err != nil {
+		s.logger.Error("export: comments", zap.String("user_id", userID), zap.Error(err))
+		comments = nil
+	}
+
+	followers, _ := s.relationshipsRepo.GetFollowers(ctx, userID, exportListLimit, 0)
+	following, _ := s.relationshipsRepo.GetFollowing(ctx, userID, exportListLimit, 0)
+	followersTotal, _ := s.relationshipsRepo.GetFollowersCount(ctx, userID)
+	followingTotal, _ := s.relationshipsRepo.GetFollowingCount(ctx, userID)
+
+	followerIDs := make([]string, 0, len(followers))
+	for _, f := range followers {
+		followerIDs = append(followerIDs, f.FollowerID)
+	}
+	followingIDs := make([]string, 0, len(following))
+	for _, f := range following {
+		followingIDs = append(followingIDs, f.FollowingID)
+	}
+
+	blocked, _ := s.relationshipsRepo.GetBlockedUsers(ctx, userID, exportListLimit, 0)
+	blockedIDs := make([]string, 0, len(blocked))
+	for _, b := range blocked {
+		blockedIDs = append(blockedIDs, b.BlockedID)
+	}
+
+	bookmarks, _ := s.postRepo.GetUserBookmarks(ctx, userID, exportListLimit, 0)
+	bookmarkIDs := make([]string, 0, len(bookmarks))
+	for _, p := range bookmarks {
+		bookmarkIDs = append(bookmarkIDs, p.ID)
+	}
+
+	return &models.UserDataExport{
+		GeneratedAt:     time.Now().UTC(),
+		Format:          "json",
+		Version:         "1",
+		Profile:         profileResp,
+		Posts:           posts,
+		Comments:        comments,
+		FollowerIDs:     followerIDs,
+		FollowingIDs:    followingIDs,
+		BlockedIDs:      blockedIDs,
+		BookmarkPostIDs: bookmarkIDs,
+		Counts: models.ExportCounts{
+			Posts:     postsCount,
+			Comments:  len(comments),
+			Followers: followersTotal,
+			Following: followingTotal,
+			Blocked:   len(blockedIDs),
+			Bookmarks: len(bookmarkIDs),
+		},
+	}, nil
 }

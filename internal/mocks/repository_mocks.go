@@ -582,6 +582,14 @@ func (m *MockCommentRepository) CountByPostID(ctx context.Context, postID string
 	return args.Int(0), args.Error(1)
 }
 
+func (m *MockCommentRepository) GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*models.PostComment, error) {
+	args := m.Called(ctx, userID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.PostComment), args.Error(1)
+}
+
 func (m *MockCommentRepository) CreateAttachment(ctx context.Context, attachment *models.CommentAttachment) error {
 	args := m.Called(ctx, attachment)
 	return args.Error(0)

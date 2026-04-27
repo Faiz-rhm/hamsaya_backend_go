@@ -24,6 +24,7 @@ type CommentRepository interface {
 	GetByPostID(ctx context.Context, postID string, limit, offset int) ([]*models.PostComment, error)
 	GetReplies(ctx context.Context, parentCommentID string, limit, offset int) ([]*models.PostComment, error)
 	CountByPostID(ctx context.Context, postID string) (int, error)
+	GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*models.PostComment, error)
 
 	// Comment attachments
 	CreateAttachment(ctx context.Context, attachment *models.CommentAttachment) error
@@ -177,6 +178,23 @@ func (r *commentRepository) GetReplies(ctx context.Context, parentCommentID stri
 	`
 
 	return r.queryComments(ctx, query, parentCommentID, limit, offset)
+}
+
+// GetByUserID returns all comments authored by a user, newest first.
+// Used by the GDPR data-export endpoint; included content is the user's own
+// only (not replies to or under their posts).
+func (r *commentRepository) GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*models.PostComment, error) {
+	query := `
+		SELECT
+			id, post_id, user_id, business_id, parent_comment_id, text, location,
+			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
+		FROM post_comments
+		WHERE user_id = $1 AND deleted_at IS NULL
+		ORDER BY created_at DESC
+		LIMIT $2 OFFSET $3
+	`
+
+	return r.queryComments(ctx, query, userID, limit, offset)
 }
 
 // CountByPostID counts comments by post ID

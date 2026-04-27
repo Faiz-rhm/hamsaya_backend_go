@@ -54,6 +54,13 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      time.Hour,
 		KeyPrefix:   "ratelimit:posts-create:",
 	},
+	// data-export: GDPR Article 20 dump is expensive (5k posts + 5k comments
+	// + relationship lists). Cap at 1 / 24h per user to prevent abuse.
+	"data-export": {
+		MaxRequests: 1,
+		Window:      24 * time.Hour,
+		KeyPrefix:   "ratelimit:data-export:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
@@ -143,6 +150,12 @@ func (rl *RateLimiter) LimitReports() gin.HandlerFunc {
 // per hour. Falls back to per-IP limiting for unauthenticated callers.
 func (rl *RateLimiter) LimitPostsCreate() gin.HandlerFunc {
 	config := DefaultRateLimits["posts-create"]
+	return rl.LimitByUser(config)
+}
+
+// LimitDataExport gates GET /users/me/export at 1 request / 24h per user.
+func (rl *RateLimiter) LimitDataExport() gin.HandlerFunc {
+	config := DefaultRateLimits["data-export"]
 	return rl.LimitByUser(config)
 }
 
