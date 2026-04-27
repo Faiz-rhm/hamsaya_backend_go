@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"hash/fnv"
 	"sort"
@@ -29,6 +30,7 @@ type PostService struct {
 	notificationService *NotificationService
 	fanoutService       *FanoutService
 	fanoutRepo          repositories.FanoutRepository
+	dailyLimitService   *DailyLimitService
 	storageBucketName   string
 	logger              *zap.Logger
 }
@@ -45,6 +47,7 @@ func NewPostService(
 	notificationService *NotificationService,
 	fanoutService *FanoutService,
 	fanoutRepo repositories.FanoutRepository,
+	dailyLimitService *DailyLimitService,
 	storageBucketName string,
 	logger *zap.Logger,
 ) *PostService {
@@ -59,9 +62,16 @@ func NewPostService(
 		notificationService: notificationService,
 		fanoutService:       fanoutService,
 		fanoutRepo:          fanoutRepo,
+		dailyLimitService:   dailyLimitService,
 		storageBucketName:   storageBucketName,
 		logger:              logger,
 	}
+}
+
+// GetDailyLimitService exposes the limit service so the handler can render
+// a 429 with the proper payload + power the GET /posts/daily-limits endpoint.
+func (s *PostService) GetDailyLimitService() *DailyLimitService {
+	return s.dailyLimitService
 }
 
 // defaultAvatarColorForBusiness returns a deterministic hex color for business ID when DB has no avatar_color.
@@ -80,6 +90,32 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 	// Validate post type specific requirements
 	if err := s.validatePostRequest(req); err != nil {
 		return nil, err
+	}
+
+	// Daily-limit gate (admin role bypassed inside the service). Counter is
+	// pre-incremented; if downstream creation fails we Refund() to restore
+	// the slot. Only checked when the limit service is wired (tests using
+	// PostService without it skip the gate).
+	if s.dailyLimitService != nil {
+		user, uerr := s.userRepo.GetByID(ctx, userID)
+		role := models.RoleUser
+		if uerr == nil && user != nil {
+			role = user.Role
+		}
+		onBusiness := req.BusinessID != nil && *req.BusinessID != ""
+		if err := s.dailyLimitService.CheckAndIncrement(
+			ctx, userID, role, string(req.Type), onBusiness,
+		); err != nil {
+			if errors.Is(err, ErrDailyLimitExceeded) {
+				return nil, utils.NewTooManyRequestsError(
+					"Daily post limit reached for this type. Try again tomorrow.",
+					err,
+				)
+			}
+			s.logger.Warn("daily limit check error", zap.Error(err))
+			// Failure of the limit subsystem must not block legitimate posts —
+			// fall through and let the post create succeed.
+		}
 	}
 
 	// Create post

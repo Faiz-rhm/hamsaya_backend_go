@@ -197,6 +197,7 @@ func main() {
 	adminRepo := repositories.NewAdminRepository(db)
 	fanoutRepo := repositories.NewFanoutRepository(db)
 	helpChatRepo := repositories.NewHelpChatRepository(db)
+	dailyLimitRepo := repositories.NewDailyLimitRepository(db)
 
 	// Initialize services
 	sugaredLogger.Info("Initializing services...")
@@ -213,7 +214,8 @@ func main() {
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
-	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, cfg.Storage.BucketName, logger)
+	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, redisClient, logger)
+	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, dailyLimitService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
@@ -283,6 +285,7 @@ func main() {
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
 	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
+	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
 
 	// Health check routes (no versioning)
 	router.GET("/health", healthHandler.Health)
@@ -382,6 +385,8 @@ func main() {
 			posts.GET("", authMiddleware.RequireAuth(), postHandler.GetFeed)
 			// /posts/feed must be registered before /:post_id to avoid the param route catching it
 			posts.GET("/feed", authMiddleware.RequireAuth(), postHandler.GetPersonalizedFeed)
+			// Daily limit usage — must come before /:post_id for the same reason.
+			posts.GET("/daily-limits", authMiddleware.RequireAuth(), dailyLimitHandler.GetMyDailyLimits)
 			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
 
 			// Protected routes (require verified email)
@@ -619,6 +624,11 @@ func main() {
 			admin.GET("/help-chat", helpChatHandler.AdminGetThreads)
 			admin.GET("/help-chat/:user_id", helpChatHandler.AdminGetUserThread)
 			admin.POST("/help-chat/:user_id/reply", helpChatHandler.AdminReply)
+
+			// Daily-post-limit management — list / update per-post-type caps
+			// at runtime without redeploying.
+			admin.GET("/daily-limits", dailyLimitHandler.AdminListLimits)
+			admin.PUT("/daily-limits/:post_type", dailyLimitHandler.AdminUpdateLimit)
 		}
 
 		// Placeholder for future routes

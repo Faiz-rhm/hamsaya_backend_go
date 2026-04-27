@@ -58,6 +58,13 @@ func NewUnauthorizedError(message string, err error) *AppError {
 	return NewAppError(http.StatusUnauthorized, message, err)
 }
 
+// NewTooManyRequestsError builds a 429. Returned by daily-limit and rate
+// guards so the caller can distinguish rate-limited responses from real
+// failures and surface a retry-friendly message to the user.
+func NewTooManyRequestsError(message string, err error) *AppError {
+	return NewAppError(http.StatusTooManyRequests, message, err)
+}
+
 func NewForbiddenError(message string, err error) *AppError {
 	return NewAppError(http.StatusForbidden, message, err)
 }
