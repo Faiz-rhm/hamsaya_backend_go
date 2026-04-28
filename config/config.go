@@ -324,6 +324,29 @@ func Load() (*Config, error) {
 				"(current value is empty, the default placeholder, or too short)")
 	}
 
+	// Require MFA encryption key: non-empty and a valid 32-byte hex string (64 hex chars).
+	// pkg/crypto.NewSecretCipher enforces the same shape; validating here fails fast at boot
+	// instead of at first MFA operation.
+	if cfg.Crypto.MFASecretKey == "" {
+		return nil, fmt.Errorf(
+			"MFA_SECRET_ENCRYPTION_KEY must be set (32-byte hex, 64 characters) — " +
+				"generate with: openssl rand -hex 32")
+	}
+	if len(cfg.Crypto.MFASecretKey) != 64 {
+		return nil, fmt.Errorf(
+			"MFA_SECRET_ENCRYPTION_KEY must be 64 hex characters (32 bytes); got %d characters",
+			len(cfg.Crypto.MFASecretKey))
+	}
+
+	// Reject default MinIO dev credential for object storage to prevent accidental
+	// deployment with well-known keys.
+	const defaultStorageSecretKey = "minioadmin"
+	if cfg.Storage.SecretKey == "" || cfg.Storage.SecretKey == defaultStorageSecretKey {
+		return nil, fmt.Errorf(
+			"STORAGE_SECRET_KEY must be set to a non-default value " +
+				"(current value is empty or the well-known MinIO default 'minioadmin')")
+	}
+
 	// Default CORS in development so admin panel (e.g. localhost:3001) works without .env
 	if cfg.Server.Env == "development" {
 		if len(cfg.CORS.AllowedOrigins) == 0 {
