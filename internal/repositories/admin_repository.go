@@ -34,6 +34,7 @@ type AdminRepository interface {
 	GetPostByID(ctx context.Context, postID string) (*models.AdminPostDetailResponse, error)
 	GetPostComments(ctx context.Context, postID string) ([]models.AdminPostCommentResponse, error)
 	UpdatePostStatus(ctx context.Context, postID, status string) error
+	UpdatePost(ctx context.Context, postID string, req *models.AdminUpdatePostRequest) error
 	DeletePost(ctx context.Context, postID string) error
 	
 	ListComments(ctx context.Context, filter *models.AdminCommentFilter) ([]*models.AdminCommentResponse, int64, error)
@@ -902,6 +903,58 @@ func (r *adminRepository) UpdatePostStatus(ctx context.Context, postID, status s
 	statusBool := status == "ACTIVE" || status == "true"
 	query := `UPDATE posts SET status = $1, updated_at = NOW() WHERE id = $2`
 	_, err := r.db.Pool.Exec(ctx, query, statusBool, postID)
+	return err
+}
+
+// UpdatePost applies a partial admin override. Each pointer column is
+// included only when non-nil so a no-op field stays untouched. The status
+// string maps to the boolean column (ACTIVE→true, HIDDEN→false).
+func (r *adminRepository) UpdatePost(ctx context.Context, postID string, req *models.AdminUpdatePostRequest) error {
+	set := []string{}
+	args := []any{postID}
+	add := func(col string, val any) {
+		args = append(args, val)
+		set = append(set, fmt.Sprintf("%s = $%d", col, len(args)))
+	}
+	if req.Title != nil {
+		add("title", *req.Title)
+	}
+	if req.Description != nil {
+		add("description", *req.Description)
+	}
+	if req.Status != nil {
+		add("status", *req.Status == "ACTIVE")
+	}
+	if req.Visibility != nil {
+		add("visibility", *req.Visibility)
+	}
+	if req.IsPromoted != nil {
+		add("is_promoted", *req.IsPromoted)
+	}
+	if req.Free != nil {
+		add("free", *req.Free)
+	}
+	if req.Sold != nil {
+		add("sold", *req.Sold)
+	}
+	if req.ContactNo != nil {
+		add("contact_no", *req.ContactNo)
+	}
+	if req.Currency != nil {
+		add("currency", *req.Currency)
+	}
+	if req.Price != nil {
+		add("price", *req.Price)
+	}
+	if req.Discount != nil {
+		add("discount", *req.Discount)
+	}
+	if len(set) == 0 {
+		return nil
+	}
+	set = append(set, "updated_at = NOW()")
+	q := fmt.Sprintf(`UPDATE posts SET %s WHERE id = $1`, strings.Join(set, ", "))
+	_, err := r.db.Pool.Exec(ctx, q, args...)
 	return err
 }
 

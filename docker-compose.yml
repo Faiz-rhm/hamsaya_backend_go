@@ -44,8 +44,8 @@ services:
       - "9002:9000"
       - "9003:9001"
     environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ROOT_USER: hamsaya-dev-access
+      MINIO_ROOT_PASSWORD: ac0e615dbb2d9b2bdd05c74e90639af5
       MINIO_BROWSER_REDIRECT_URL: http://localhost:9003
     command: server /data --console-address ":9001"
     volumes:
@@ -91,12 +91,12 @@ services:
       - JWT_ACCESS_TOKEN_DURATION=15m
       - JWT_REFRESH_TOKEN_DURATION=720h
       - STORAGE_ENDPOINT=minio:9000
-      - STORAGE_ACCESS_KEY=minioadmin
-      - STORAGE_SECRET_KEY=minioadmin
+      - STORAGE_ACCESS_KEY=hamsaya-dev-access
+      - STORAGE_SECRET_KEY=ac0e615dbb2d9b2bdd05c74e90639af5
       - STORAGE_BUCKET_NAME=hamsaya-uploads
       - STORAGE_USE_SSL=false
       - STORAGE_REGION=us-east-1
-      - CDN_URL=http://localhost:9002
+      - CDN_URL=http://192.168.100.39:9002
       - RATE_LIMIT_REQUESTS_PER_HOUR=1000
       - RATE_LIMIT_AUTH_ATTEMPTS=5
       - RATE_LIMIT_AUTH_WINDOW=15m

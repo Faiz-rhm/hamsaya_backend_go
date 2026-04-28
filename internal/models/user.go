@@ -14,10 +14,32 @@ import (
 type UserRole string
 
 const (
-	RoleUser      UserRole = "user"
-	RoleAdmin     UserRole = "admin"
-	RoleModerator UserRole = "moderator"
+	RoleUser       UserRole = "user"
+	RoleAdmin      UserRole = "admin"
+	RoleModerator  UserRole = "moderator"
+	RoleSuperAdmin UserRole = "super_admin"
 )
+
+// HasRole reports whether r is at least as privileged as required. Tier
+// ordering: super_admin > admin > moderator > user. Used by middleware so a
+// super_admin transparently satisfies any admin-or-mod check without code
+// changes downstream.
+func (r UserRole) HasRole(required UserRole) bool {
+	return roleRank(r) >= roleRank(required)
+}
+
+func roleRank(r UserRole) int {
+	switch r {
+	case RoleSuperAdmin:
+		return 30
+	case RoleAdmin:
+		return 20
+	case RoleModerator:
+		return 10
+	default:
+		return 0
+	}
+}
 
 // User represents a user account
 type User struct {
@@ -139,19 +161,25 @@ func (u *User) IsLocked() bool {
 	return u.LockedUntil.After(time.Now())
 }
 
-// IsAdmin checks if the user has admin role
-func (u *User) IsAdmin() bool {
-	return u.Role == RoleAdmin
+// IsSuperAdmin checks if the user has super_admin role.
+func (u *User) IsSuperAdmin() bool {
+	return u.Role == RoleSuperAdmin
 }
 
-// IsModerator checks if the user has moderator role
+// IsAdmin returns true for both admin and super_admin so existing call sites
+// that grant "admin powers" automatically include super_admin.
+func (u *User) IsAdmin() bool {
+	return u.Role == RoleAdmin || u.Role == RoleSuperAdmin
+}
+
+// IsModerator checks if the user has moderator role.
 func (u *User) IsModerator() bool {
 	return u.Role == RoleModerator
 }
 
-// IsAdminOrModerator checks if the user has admin or moderator role
+// IsAdminOrModerator returns true for moderator, admin, or super_admin.
 func (u *User) IsAdminOrModerator() bool {
-	return u.Role == RoleAdmin || u.Role == RoleModerator
+	return u.Role.HasRole(RoleModerator)
 }
 
 // FullName returns the user's full name

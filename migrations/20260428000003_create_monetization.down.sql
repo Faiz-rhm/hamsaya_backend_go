@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS boosts;
+DROP TABLE IF EXISTS credit_transactions;
+DROP TABLE IF EXISTS credit_balances;
+DROP TABLE IF EXISTS ads;

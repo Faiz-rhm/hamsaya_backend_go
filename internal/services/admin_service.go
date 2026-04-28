@@ -304,6 +304,52 @@ func (s *AdminService) UpdatePostStatus(ctx context.Context, postID, status, adm
 	return nil
 }
 
+// UpdatePost applies a partial admin override (title / description /
+// is_promoted / status / visibility / sell-specific fields). Audit-log entry
+// captures the diff so the change is traceable.
+func (s *AdminService) UpdatePost(ctx context.Context, postID, adminID string, req *models.AdminUpdatePostRequest) error {
+	if err := s.adminRepo.UpdatePost(ctx, postID, req); err != nil {
+		s.logger.Error("Failed to update post", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to update post", err)
+	}
+	diff := map[string]interface{}{}
+	if req.Title != nil {
+		diff["title"] = *req.Title
+	}
+	if req.Description != nil {
+		diff["description"] = *req.Description
+	}
+	if req.Status != nil {
+		diff["status"] = *req.Status
+	}
+	if req.Visibility != nil {
+		diff["visibility"] = *req.Visibility
+	}
+	if req.IsPromoted != nil {
+		diff["is_promoted"] = *req.IsPromoted
+	}
+	if req.Free != nil {
+		diff["free"] = *req.Free
+	}
+	if req.Sold != nil {
+		diff["sold"] = *req.Sold
+	}
+	if req.ContactNo != nil {
+		diff["contact_no"] = *req.ContactNo
+	}
+	if req.Currency != nil {
+		diff["currency"] = *req.Currency
+	}
+	if req.Price != nil {
+		diff["price"] = *req.Price
+	}
+	if req.Discount != nil {
+		diff["discount"] = *req.Discount
+	}
+	s.writeAuditLog(ctx, adminID, "update_post", "post", postID, diff, "")
+	return nil
+}
+
 // DeletePost soft deletes a post
 func (s *AdminService) DeletePost(ctx context.Context, postID, adminID string) error {
 	err := s.adminRepo.DeletePost(ctx, postID)

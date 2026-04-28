@@ -45,6 +45,12 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 		return nil, utils.NewBadRequestError("Content is required for text messages", nil)
 	}
 
+	// Reject self-messaging — would violate ordered_participants CHECK constraint
+	// (participant1_id < participant2_id) and is meaningless UX-wise.
+	if senderID == req.RecipientID {
+		return nil, utils.NewBadRequestError("Cannot send a message to yourself", nil)
+	}
+
 	// Get or create conversation
 	conversation, err := s.conversationRepo.GetOrCreate(ctx, senderID, req.RecipientID)
 	if err != nil {
@@ -64,6 +70,7 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 		SenderID:       senderID,
 		Content:        req.Content,
 		MessageType:    req.MessageType,
+		ProductID:      req.ProductID,
 		CreatedAt:      time.Now(),
 	}
 
@@ -263,12 +270,18 @@ func (s *ChatService) enrichConversation(ctx context.Context, conversation *mode
 		if profile.LastName != nil {
 			lastName = *profile.LastName
 		}
+		avatarColor := profile.AvatarColor
+		if avatarColor == nil || *avatarColor == "" {
+			c := models.DefaultAvatarColorForProfile(profile.ID)
+			avatarColor = &c
+		}
 		response.OtherParticipant = &models.UserInfo{
-			UserID:    otherParticipantID,
-			FirstName: firstName,
-			LastName:  lastName,
-			FullName:  profile.FullName(),
-			Avatar:    profile.Avatar,
+			UserID:      otherParticipantID,
+			FirstName:   firstName,
+			LastName:    lastName,
+			FullName:    profile.FullName(),
+			Avatar:      profile.Avatar,
+			AvatarColor: avatarColor,
 		}
 	}
 
@@ -300,6 +313,7 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 		ConversationID: message.ConversationID,
 		Content:        message.Content,
 		MessageType:    message.MessageType,
+		ProductID:      message.ProductID,
 		IsRead:         message.ReadAt != nil,
 		CreatedAt:      message.CreatedAt,
 	}
@@ -315,12 +329,18 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 		if profile.LastName != nil {
 			lastName = *profile.LastName
 		}
+		avatarColor := profile.AvatarColor
+		if avatarColor == nil || *avatarColor == "" {
+			c := models.DefaultAvatarColorForProfile(profile.ID)
+			avatarColor = &c
+		}
 		response.Sender = &models.UserInfo{
-			UserID:    message.SenderID,
-			FirstName: firstName,
-			LastName:  lastName,
-			FullName:  profile.FullName(),
-			Avatar:    profile.Avatar,
+			UserID:      message.SenderID,
+			FirstName:   firstName,
+			LastName:    lastName,
+			FullName:    profile.FullName(),
+			Avatar:      profile.Avatar,
+			AvatarColor: avatarColor,
 		}
 	}
 

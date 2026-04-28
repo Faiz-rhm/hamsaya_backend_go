@@ -70,6 +70,12 @@ type ServerConfig struct {
 	Host     string
 	Env      string
 	LogLevel string
+	// AdminCookieDomain scopes the admin SPA's HttpOnly auth cookies. Empty
+	// means host-only (cookie limited to the exact host that issued it),
+	// which is correct for single-domain admin deployments. Set to e.g.
+	// ".hamsaya.af" only when the admin panel and API live on different
+	// subdomains under a shared parent.
+	AdminCookieDomain string
 }
 
 // DatabaseConfig holds database configuration
@@ -207,10 +213,11 @@ func Load() (*Config, error) {
 
 	cfg := &Config{
 		Server: ServerConfig{
-			Port:     viper.GetString("SERVER_PORT"),
-			Host:     viper.GetString("SERVER_HOST"),
-			Env:      viper.GetString("ENV"),
-			LogLevel: viper.GetString("LOG_LEVEL"),
+			Port:              viper.GetString("SERVER_PORT"),
+			Host:              viper.GetString("SERVER_HOST"),
+			Env:               viper.GetString("ENV"),
+			LogLevel:          viper.GetString("LOG_LEVEL"),
+			AdminCookieDomain: viper.GetString("ADMIN_COOKIE_DOMAIN"),
 		},
 		Database: DatabaseConfig{
 			Host:            viper.GetString("DB_HOST"),
@@ -359,7 +366,26 @@ func Load() (*Config, error) {
 			cfg.CORS.AllowedMethods = []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"}
 		}
 		if len(cfg.CORS.AllowedHeaders) == 0 {
-			cfg.CORS.AllowedHeaders = []string{"Content-Type", "Authorization", "Accept", "Origin", "User-Agent"}
+			cfg.CORS.AllowedHeaders = []string{"Content-Type", "Authorization", "Accept", "Origin", "User-Agent", "X-CSRF-Token", "X-Device-Info"}
+		}
+		if !cfg.CORS.AllowCredentials {
+			// Admin SPA depends on credentialed cross-origin requests when
+			// running on a separate dev port. Force it on in development so
+			// HttpOnly cookies flow.
+			cfg.CORS.AllowCredentials = true
+		}
+	}
+
+	// Reject the unsafe combination of credentialed CORS with a wildcard
+	// origin: browsers ignore the response, but the misconfiguration tends to
+	// hide a real bug (someone meant to allowlist explicit origins).
+	if cfg.CORS.AllowCredentials {
+		for _, o := range cfg.CORS.AllowedOrigins {
+			if strings.TrimSpace(o) == "*" {
+				return nil, fmt.Errorf(
+					"CORS_ALLOWED_ORIGINS cannot contain '*' when CORS_ALLOW_CREDENTIALS=true; " +
+						"list explicit origins (e.g. https://admin.hamsaya.af)")
+			}
 		}
 	}
 

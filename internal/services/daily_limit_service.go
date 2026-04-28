@@ -79,6 +79,14 @@ func (s *DailyLimitService) CheckAndIncrement(
 		return nil // admins are unlimited
 	}
 
+	limit, err := s.cachedLimit(ctx, postType)
+	if err != nil {
+		return err
+	}
+	if limit != nil && limit.Unlimited {
+		return nil // admin marked this post type as unlimited for everyone
+	}
+
 	effective, err := s.effectiveLimit(ctx, postType, onBusiness)
 	if err != nil {
 		return err
@@ -163,6 +171,14 @@ func (s *DailyLimitService) GetUsage(
 		}
 
 		if role == models.RoleAdmin {
+			usage.Unlimited = true
+			usage.Remaining = -1
+			usage.Limit = -1
+			out = append(out, usage)
+			continue
+		}
+
+		if lim.Unlimited {
 			usage.Unlimited = true
 			usage.Remaining = -1
 			usage.Limit = -1

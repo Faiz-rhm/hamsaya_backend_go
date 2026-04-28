@@ -66,6 +66,42 @@ func TestCORS_WildcardOrigin(t *testing.T) {
 	assert.NotEmpty(t, w.Header().Get("Access-Control-Allow-Origin"))
 }
 
+func TestCORS_WildcardSuppressedWhenCredentialed(t *testing.T) {
+	// "*" must not be echoed when credentials are allowed: browsers reject
+	// the response, and silently sending it hides misconfiguration.
+	cfg := config.CORSConfig{
+		AllowedOrigins:   []string{"*"},
+		AllowedMethods:   []string{"GET"},
+		AllowedHeaders:   []string{"Content-Type"},
+		AllowCredentials: true,
+	}
+	r := newCORSRouter(cfg)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "https://anyone.com")
+	r.ServeHTTP(w, req)
+
+	assert.Empty(t, w.Header().Get("Access-Control-Allow-Origin"))
+}
+
+func TestCORS_ExplicitOriginEchoedWithCredentials(t *testing.T) {
+	cfg := config.CORSConfig{
+		AllowedOrigins:   []string{"https://admin.hamsaya.af"},
+		AllowedMethods:   []string{"GET"},
+		AllowedHeaders:   []string{"Content-Type", "X-CSRF-Token"},
+		AllowCredentials: true,
+	}
+	r := newCORSRouter(cfg)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test", nil)
+	req.Header.Set("Origin", "https://admin.hamsaya.af")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, "https://admin.hamsaya.af", w.Header().Get("Access-Control-Allow-Origin"))
+	assert.Equal(t, "true", w.Header().Get("Access-Control-Allow-Credentials"))
+	assert.Equal(t, "Origin", w.Header().Get("Vary"))
+}
+
 func TestCORS_Preflight(t *testing.T) {
 	r := newCORSRouter(defaultCORSConfig())
 	w := httptest.NewRecorder()

@@ -31,6 +31,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.uber.org/zap/zapcore"
 )
 
 // @title Hamsaya Backend API
@@ -150,6 +151,14 @@ func main() {
 	defer db.Close()
 	sugaredLogger.Info("Database connected successfully")
 
+	// Mirror warn+ log entries to the app_logs table so the admin /logs page
+	// can surface them. The sink runs in a background goroutine bounded by a
+	// 256-entry channel; oversize bursts evict oldest rather than block.
+	dbLogSink := observability.NewDBLogSink(db, zapcore.WarnLevel, 256)
+	dbLogSink.Start(context.Background())
+	logger = utils.WrapWithCore(logger, dbLogSink)
+	sugaredLogger = logger.Sugar()
+
 	// Connect to Redis
 	sugaredLogger.Info("Connecting to Redis...")
 	redisClient := redis.NewClient(&redis.Options{
@@ -239,6 +248,8 @@ func main() {
 	fanoutRepo := repositories.NewFanoutRepository(db)
 	helpChatRepo := repositories.NewHelpChatRepository(db)
 	dailyLimitRepo := repositories.NewDailyLimitRepository(db)
+	monetizationRepo := repositories.NewMonetizationRepository(db)
+	appLogRepo := repositories.NewAppLogRepository(db)
 
 	// Initialize services
 	sugaredLogger.Info("Initializing services...")
@@ -268,6 +279,7 @@ func main() {
 	categoryService := services.NewCategoryService(categoryRepo, logger)
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
 	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, redisClient, logger)
+	monetizationService := services.NewMonetizationService(monetizationRepo, logger)
 	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, dailyLimitService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
@@ -321,6 +333,10 @@ func main() {
 	sugaredLogger.Info("Initializing handlers...")
 	healthHandler := handlers.NewHealthHandler(db, redisClient)
 	authHandler := handlers.NewAuthHandler(authService, validator, logger)
+	adminCookieCfg := utils.NewCookieConfig(cfg.Server.Env, cfg.Server.AdminCookieDomain)
+	adminAuthHandler := handlers.NewAdminAuthHandler(authService, validator, logger, adminCookieCfg, cfg.JWT)
+	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
+	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, logger)
 	mfaHandler := handlers.NewMFAHandler(mfaService, validator, logger)
 	oauthHandler := handlers.NewOAuthHandler(authService, oauthService, validator, logger)
 	profileHandler := handlers.NewProfileHandler(profileService, storageService, validator, logger)
@@ -339,6 +355,8 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
 	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
+	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, validator, logger)
+	appLogHandler := handlers.NewAppLogHandler(appLogRepo, logger)
 
 	// Health check routes (no versioning)
 	router.GET("/health", healthHandler.Health)
@@ -388,6 +406,13 @@ func main() {
 			auth.POST("/oauth/google", rateLimiter.LimitAuth(), oauthHandler.GoogleOAuth)
 			auth.POST("/oauth/facebook", rateLimiter.LimitAuth(), oauthHandler.FacebookOAuth)
 			auth.POST("/oauth/apple", rateLimiter.LimitAuth(), oauthHandler.AppleOAuth)
+
+			// Admin SPA cookie-auth flow (HttpOnly + CSRF). Parallel to the
+			// JSON-token endpoints above; mobile clients keep using /login.
+			auth.POST("/admin/login", rateLimiter.LimitLoginAttempts(), adminAuthHandler.AdminLogin)
+			auth.POST("/admin/refresh", rateLimiter.LimitAuth(), adminAuthHandler.AdminRefresh)
+			auth.POST("/admin/mfa/verify", rateLimiter.LimitAuth(), adminAuthHandler.AdminMFAVerify)
+			auth.POST("/admin/logout", authMiddleware.RequireAuth(), middleware.CSRF(), adminAuthHandler.AdminLogout)
 
 			// Protected auth routes (require authentication)
 			auth.POST("/logout", authMiddleware.RequireAuth(), authHandler.Logout)
@@ -595,36 +620,46 @@ func main() {
 			helpChat.GET("/messages", helpChatHandler.GetMessages)
 		}
 
-		// Admin routes (require admin role)
+		// Admin routes — base group requires moderator-or-above. Per-endpoint
+		// middleware tightens this where the action exceeds moderator scope.
+		// Tier semantics:
+		//   RequireAdmin      → moderator, admin, super_admin
+		//   RequireAdminOnly  → admin, super_admin (excludes moderator)
+		//   RequireSuperAdmin → super_admin only
+		adminOnly := authMiddleware.RequireAdminOnly()
+		superOnly := authMiddleware.RequireSuperAdmin()
+
 		admin := v1.Group("/admin")
 		admin.Use(authMiddleware.RequireAdmin())
 		{
-			// Dashboard & Analytics
-			admin.GET("/stats", adminHandler.GetDashboardStats)
-			admin.GET("/analytics/users", adminHandler.GetUserAnalytics)
-			admin.GET("/analytics/posts", adminHandler.GetPostAnalytics)
-			admin.GET("/analytics/engagement", adminHandler.GetEngagementAnalytics)
-			admin.GET("/analytics/businesses", adminHandler.GetBusinessAnalytics)
+			// Dashboard & Analytics — admin-tier (mods don't see analytics).
+			admin.GET("/stats", adminOnly, adminHandler.GetDashboardStats)
+			admin.GET("/analytics/users", adminOnly, adminHandler.GetUserAnalytics)
+			admin.GET("/analytics/posts", adminOnly, adminHandler.GetPostAnalytics)
+			admin.GET("/analytics/engagement", adminOnly, adminHandler.GetEngagementAnalytics)
+			admin.GET("/analytics/businesses", adminOnly, adminHandler.GetBusinessAnalytics)
 
-			// User Management
+			// User Management — read for all admins; suspend/unsuspend admin-only;
+			// delete admin-only; role change super_admin-only.
 			admin.GET("/users", adminHandler.ListUsers)
 			admin.GET("/users/:user_id", adminHandler.GetUser)
-			admin.POST("/users/:user_id/suspend", adminHandler.SuspendUser)
-			admin.POST("/users/:user_id/unsuspend", adminHandler.UnsuspendUser)
-			admin.DELETE("/users/:user_id", adminHandler.DeleteUser)
-			admin.PUT("/users/:user_id/role", adminHandler.UpdateUserRole)
+			admin.POST("/users/:user_id/suspend", adminOnly, adminHandler.SuspendUser)
+			admin.POST("/users/:user_id/unsuspend", adminOnly, adminHandler.UnsuspendUser)
+			admin.DELETE("/users/:user_id", adminOnly, adminHandler.DeleteUser)
+			admin.PUT("/users/:user_id/role", superOnly, adminHandler.UpdateUserRole)
 
-			// Content Moderation
+			// Content Moderation — moderator-and-above.
 			admin.GET("/posts", adminHandler.ListAllPosts)
 			admin.GET("/posts/:post_id", adminHandler.GetPostDetail)
 			admin.DELETE("/posts/:post_id", adminHandler.DeletePost)
 			admin.PUT("/posts/:post_id/status", adminHandler.UpdatePostStatus)
+			admin.PATCH("/posts/:post_id", adminHandler.UpdatePost)
 			admin.GET("/comments", adminHandler.ListAllComments)
 			admin.GET("/comments/:comment_id", adminHandler.GetComment)
 			admin.PUT("/comments/:comment_id/restore", adminHandler.RestoreComment)
 			admin.DELETE("/comments/:comment_id", adminHandler.DeleteComment)
 
-			// Reports
+			// Reports — moderator-and-above.
 			admin.GET("/reports/posts", adminHandler.ListPostReports)
 			admin.GET("/reports/posts/:report_id", adminHandler.GetPostReport)
 			admin.GET("/reports/comments", adminHandler.ListCommentReports)
@@ -635,55 +670,86 @@ func main() {
 			admin.GET("/reports/businesses/:report_id", adminHandler.GetBusinessReport)
 			admin.PUT("/reports/:report_type/:report_id/status", adminHandler.UpdateReportStatus)
 
+			// Feedback — list for all admins; resolve admin-only.
 			admin.GET("/feedback", adminHandler.ListFeedback)
+			admin.PUT("/feedback/:feedback_id/resolve", adminOnly, adminHandler.ResolveFeedback)
 
-			// Business Management
+			// Business Management — read+approve for all admins; delete admin-only.
 			admin.GET("/businesses", adminHandler.ListAllBusinesses)
 			admin.GET("/businesses/:business_id", adminHandler.GetBusinessDetail)
 			admin.PUT("/businesses/:business_id/status", adminHandler.UpdateBusinessStatus)
-			admin.DELETE("/businesses/:business_id", adminHandler.DeleteBusiness)
+			admin.DELETE("/businesses/:business_id", adminOnly, adminHandler.DeleteBusiness)
 
-			// Categories (wire existing handlers)
-			admin.GET("/categories", categoryHandler.GetAllCategories)
-			admin.POST("/categories", categoryHandler.CreateCategory)
-			admin.PUT("/categories/:category_id", categoryHandler.UpdateCategory)
-			admin.DELETE("/categories/:category_id", categoryHandler.DeleteCategory)
+			// Categories — admin-only (platform config).
+			admin.GET("/categories", adminOnly, categoryHandler.GetAllCategories)
+			admin.POST("/categories", adminOnly, categoryHandler.CreateCategory)
+			admin.PUT("/categories/:category_id", adminOnly, categoryHandler.UpdateCategory)
+			admin.DELETE("/categories/:category_id", adminOnly, categoryHandler.DeleteCategory)
 
-			// Push Notifications
-			admin.POST("/notifications/broadcast", adminHandler.BroadcastNotification)
-			admin.POST("/notifications/send", adminHandler.SendTargetedNotification)
+			// Push Notifications — broadcast admin-only; targeted super_admin-only
+			// (named-user push has higher abuse potential than mass broadcast).
+			admin.POST("/notifications/broadcast", adminOnly, adminHandler.BroadcastNotification)
+			admin.POST("/notifications/send", superOnly, adminHandler.SendTargetedNotification)
 
-			// Audit Logs
-			admin.GET("/audit-logs", adminHandler.ListAuditLogs)
+			// Audit Logs — admin-and-above. Mods don't audit other admins.
+			admin.GET("/audit-logs", adminOnly, adminHandler.ListAuditLogs)
 
-			// Feedback Resolution
-			admin.PUT("/feedback/:feedback_id/resolve", adminHandler.ResolveFeedback)
+			// Admin Account Management — list admin-only; mutations super-only.
+			admin.GET("/accounts", adminOnly, adminHandler.ListAdmins)
+			admin.GET("/accounts/invites", adminOnly, adminHandler.ListAdminInvites)
+			admin.POST("/accounts/invites", superOnly, adminHandler.CreateAdminInvite)
+			admin.DELETE("/accounts/invites/:invite_id", superOnly, adminHandler.RevokeAdminInvite)
 
-			// Admin Account Management
-			admin.GET("/accounts", adminHandler.ListAdmins)
-			admin.GET("/accounts/invites", adminHandler.ListAdminInvites)
-			admin.POST("/accounts/invites", adminHandler.CreateAdminInvite)
-			admin.DELETE("/accounts/invites/:invite_id", adminHandler.RevokeAdminInvite)
+			// IP / Device Bans — admin-only (safety hammer).
+			admin.GET("/bans/ip", adminOnly, adminHandler.ListIPBans)
+			admin.POST("/bans/ip", adminOnly, adminHandler.CreateIPBan)
+			admin.DELETE("/bans/ip/:ban_id", adminOnly, adminHandler.DeleteIPBan)
+			admin.GET("/bans/devices", adminOnly, adminHandler.ListDeviceBans)
+			admin.POST("/bans/devices", adminOnly, adminHandler.CreateDeviceBan)
+			admin.DELETE("/bans/devices/:ban_id", adminOnly, adminHandler.DeleteDeviceBan)
 
-			// IP Bans
-			admin.GET("/bans/ip", adminHandler.ListIPBans)
-			admin.POST("/bans/ip", adminHandler.CreateIPBan)
-			admin.DELETE("/bans/ip/:ban_id", adminHandler.DeleteIPBan)
-
-			// Device Bans
-			admin.GET("/bans/devices", adminHandler.ListDeviceBans)
-			admin.POST("/bans/devices", adminHandler.CreateDeviceBan)
-			admin.DELETE("/bans/devices/:ban_id", adminHandler.DeleteDeviceBan)
-
-			// Help chat management
+			// Help chat — moderator-and-above.
 			admin.GET("/help-chat", helpChatHandler.AdminGetThreads)
 			admin.GET("/help-chat/:user_id", helpChatHandler.AdminGetUserThread)
 			admin.POST("/help-chat/:user_id/reply", helpChatHandler.AdminReply)
 
-			// Daily-post-limit management — list / update per-post-type caps
-			// at runtime without redeploying.
-			admin.GET("/daily-limits", dailyLimitHandler.AdminListLimits)
-			admin.PUT("/daily-limits/:post_type", dailyLimitHandler.AdminUpdateLimit)
+			// Daily-post-limit management — admin-only.
+			admin.GET("/daily-limits", adminOnly, dailyLimitHandler.AdminListLimits)
+			admin.PUT("/daily-limits/:post_type", adminOnly, dailyLimitHandler.AdminUpdateLimit)
+
+			// Monetization — admin-only. The user-facing surface (advertiser
+			// submission, boost purchase, credit topup) lives elsewhere; these
+			// routes are oversight + ad review only.
+			admin.GET("/ads", adminOnly, monetizationHandler.ListAds)
+			admin.GET("/ads/:ad_id", adminOnly, monetizationHandler.GetAd)
+			admin.PUT("/ads/:ad_id/approve", adminOnly, monetizationHandler.ApproveAd)
+			admin.PUT("/ads/:ad_id/reject", adminOnly, monetizationHandler.RejectAd)
+			admin.DELETE("/ads/:ad_id", adminOnly, monetizationHandler.DeleteAd)
+
+			admin.GET("/credits", adminOnly, monetizationHandler.ListBalances)
+			admin.GET("/credits/:user_id", adminOnly, monetizationHandler.GetUserCredits)
+			admin.POST("/credits/:user_id/adjust", adminOnly, monetizationHandler.AdjustUserCredits)
+
+			admin.GET("/boosts", adminOnly, monetizationHandler.ListBoosts)
+			admin.PUT("/boosts/:boost_id/cancel", adminOnly, monetizationHandler.CancelBoost)
+
+			// /admin/system/* — super_admin exclusive platform telemetry +
+			// feature-flag controls. RequireSuperAdmin replaces (not stacks
+			// with) the group middleware here, but Gin runs both — moderator
+			// requests are rejected by RequireSuperAdmin before reaching the
+			// handler, which is the desired behavior.
+			admin.GET("/system/build-info", superOnly, systemHandler.BuildInfo)
+			admin.GET("/system/health", superOnly, systemHandler.ServiceHealth)
+			admin.GET("/system/table-stats", superOnly, systemHandler.TableStats)
+			admin.GET("/system/sessions", superOnly, systemHandler.SessionsList)
+			admin.POST("/system/sessions/:session_id/revoke", superOnly, systemHandler.SessionRevoke)
+			admin.GET("/system/flags", superOnly, systemHandler.FlagsList)
+			admin.PUT("/system/flags/:key", superOnly, systemHandler.FlagsToggle)
+			admin.GET("/system/denylist-stats", superOnly, systemHandler.DenylistStats)
+
+			// Application logs — super_admin only. Backed by the DBLogSink
+			// (pkg/observability) which mirrors warn+ entries to app_logs.
+			admin.GET("/logs", superOnly, appLogHandler.List)
 		}
 
 		// Placeholder for future routes

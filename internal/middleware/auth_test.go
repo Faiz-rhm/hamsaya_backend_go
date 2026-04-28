@@ -301,6 +301,11 @@ func TestRequireAdmin(t *testing.T) {
 			role:       models.RoleModerator,
 			wantStatus: http.StatusOK,
 		},
+		{
+			name:       "super_admin user",
+			role:       models.RoleSuperAdmin,
+			wantStatus: http.StatusOK,
+		},
 	}
 
 	for _, tt := range tests {
@@ -356,6 +361,11 @@ func TestRequireAdminOnly(t *testing.T) {
 			role:       models.RoleAdmin,
 			wantStatus: http.StatusOK,
 		},
+		{
+			name:       "super_admin user",
+			role:       models.RoleSuperAdmin,
+			wantStatus: http.StatusOK,
+		},
 	}
 
 	for _, tt := range tests {
@@ -378,6 +388,55 @@ func TestRequireAdminOnly(t *testing.T) {
 			})
 
 			w := performRequest(router, http.MethodGet, "/admin-only", token)
+			assert.Equal(t, tt.wantStatus, w.Code)
+			userRepo.AssertExpectations(t)
+		})
+	}
+}
+
+// ---------------------------------------------------------------------------
+// TestRequireSuperAdmin
+// ---------------------------------------------------------------------------
+
+func TestRequireSuperAdmin(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	const (
+		email     = "super@example.com"
+		sessionID = "session-super-123"
+	)
+
+	tests := []struct {
+		name       string
+		role       models.UserRole
+		wantStatus int
+	}{
+		{name: "moderator", role: models.RoleModerator, wantStatus: http.StatusForbidden},
+		{name: "admin", role: models.RoleAdmin, wantStatus: http.StatusForbidden},
+		{name: "super_admin", role: models.RoleSuperAdmin, wantStatus: http.StatusOK},
+		{name: "regular user", role: models.RoleUser, wantStatus: http.StatusForbidden},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			userID := "user-" + string(tt.role)
+			token := generateTestToken(userID, email, models.AAL1, sessionID)
+
+			userRepo := new(mocks.MockUserRepository)
+			session := buildValidSession(sessionID, userID, token)
+			userRepo.On("GetSessionByID", mock.Anything, sessionID).Return(session, nil)
+
+			u := testutil.CreateTestUser(userID, email)
+			u.Role = tt.role
+			userRepo.On("GetByID", mock.Anything, userID).Return(u, nil)
+
+			m := newTestAuthMiddleware(userRepo)
+			router := gin.New()
+			router.GET("/super", m.RequireSuperAdmin(), func(c *gin.Context) {
+				c.JSON(http.StatusOK, gin.H{"ok": true})
+			})
+
+			w := performRequest(router, http.MethodGet, "/super", token)
 			assert.Equal(t, tt.wantStatus, w.Code)
 			userRepo.AssertExpectations(t)
 		})

@@ -414,6 +414,41 @@ func (h *AdminHandler) UpdatePostStatus(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Post status updated successfully", nil)
 }
 
+// UpdatePost godoc
+// @Summary Edit a post (admin override)
+// @Description Apply partial updates to a post — description, title,
+// is_promoted, sell fields, etc. Status changes still go through the
+// dedicated /status endpoint, but this endpoint also accepts ACTIVE/HIDDEN
+// for convenience.
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param post_id path string true "Post ID"
+// @Param request body models.AdminUpdatePostRequest true "Fields to change"
+// @Success 200 {object} utils.Response
+// @Router /admin/posts/{post_id} [patch]
+func (h *AdminHandler) UpdatePost(c *gin.Context) {
+	postID := c.Param("post_id")
+	adminID, _ := middleware.GetUserID(c)
+
+	var req models.AdminUpdatePostRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	if err := h.adminService.UpdatePost(c.Request.Context(), postID, adminID, &req); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Post updated", nil)
+}
+
 // DeletePost godoc
 // @Summary Delete a post
 // @Description Soft delete a post

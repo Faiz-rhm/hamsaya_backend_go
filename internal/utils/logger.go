@@ -96,3 +96,18 @@ func Sync() {
 func SetLogLevel(level string) {
 	_ = os.Setenv("LOG_LEVEL", level)
 }
+
+// WrapWithCore returns a new logger that tees its output through `extra`
+// alongside the existing core. Used by main.go to attach the DB log sink
+// once the database is ready, so warn+ entries are mirrored to app_logs.
+func WrapWithCore(base *zap.Logger, extra zapcore.Core) *zap.Logger {
+	if base == nil || extra == nil {
+		return base
+	}
+	wrapped := base.WithOptions(zap.WrapCore(func(existing zapcore.Core) zapcore.Core {
+		return zapcore.NewTee(existing, extra)
+	}))
+	baseLogger = wrapped
+	Logger = wrapped.Sugar()
+	return wrapped
+}

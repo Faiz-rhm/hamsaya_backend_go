@@ -42,8 +42,8 @@ func NewMessageRepository(db *database.DB) MessageRepository {
 func (r *messageRepository) Create(ctx context.Context, message *models.Message) error {
 	query := `
 		INSERT INTO messages (
-			id, conversation_id, sender_id, content, message_type, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6)
+			id, conversation_id, sender_id, content, message_type, product_id, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 
 	_, err := r.db.Pool.Exec(ctx, query,
@@ -52,6 +52,7 @@ func (r *messageRepository) Create(ctx context.Context, message *models.Message)
 		message.SenderID,
 		message.Content,
 		message.MessageType,
+		message.ProductID,
 		message.CreatedAt,
 	)
 
@@ -65,7 +66,7 @@ func (r *messageRepository) Create(ctx context.Context, message *models.Message)
 // GetByID retrieves a message by ID
 func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
 		FROM messages
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -77,6 +78,7 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 		&message.SenderID,
 		&message.Content,
 		&message.MessageType,
+		&message.ProductID,
 		&message.ReadAt,
 		&message.CreatedAt,
 		&message.DeletedAt,
@@ -95,7 +97,7 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 // List retrieves messages in a conversation
 func (r *messageRepository) List(ctx context.Context, filter *models.GetMessagesFilter) ([]*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
 		FROM messages
 		WHERE conversation_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -117,6 +119,7 @@ func (r *messageRepository) List(ctx context.Context, filter *models.GetMessages
 			&message.SenderID,
 			&message.Content,
 			&message.MessageType,
+			&message.ProductID,
 			&message.ReadAt,
 			&message.CreatedAt,
 			&message.DeletedAt,
@@ -212,7 +215,7 @@ func (r *messageRepository) GetUnreadCount(ctx context.Context, conversationID, 
 // GetLastMessage retrieves the last message in a conversation
 func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID string) (*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
 		FROM messages
 		WHERE conversation_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -226,6 +229,7 @@ func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID s
 		&message.SenderID,
 		&message.Content,
 		&message.MessageType,
+		&message.ProductID,
 		&message.ReadAt,
 		&message.CreatedAt,
 		&message.DeletedAt,

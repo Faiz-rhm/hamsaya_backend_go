@@ -224,7 +224,51 @@ func (m *AuthMiddleware) RequireAdmin() gin.HandlerFunc {
 	}
 }
 
-// RequireAdminOnly requires strictly admin role (not moderator)
+// RequireSuperAdmin requires the strictest super_admin role. Used for
+// platform-level controls (role assignment, system endpoints, secret
+// rotation) where a regular admin must not be able to elevate themselves.
+func (m *AuthMiddleware) RequireSuperAdmin() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		claims, err := m.extractAndValidateToken(c)
+		if err != nil {
+			m.logger.Warn("Authentication failed", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Authentication required", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		user, err := m.userRepo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			m.logger.Error("Failed to get user for super_admin check", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Invalid user", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+
+		if !user.IsSuperAdmin() {
+			m.logger.Warn("Super-admin access denied",
+				zap.String("user_id", user.ID),
+				zap.String("role", string(user.Role)),
+			)
+			utils.SendError(c, http.StatusForbidden, "Super-admin access required", utils.ErrForbidden)
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("email", claims.Email)
+		c.Set("session_id", claims.SessionID)
+		c.Set("aal", claims.AAL)
+		c.Set("user", user)
+		c.Set("admin_user", user)
+
+		c.Next()
+	}
+}
+
+// RequireAdminOnly requires admin or super_admin role (excludes moderator).
+// Note: User.IsAdmin() returns true for both admin and super_admin since the
+// super tier transparently satisfies admin checks.
 func (m *AuthMiddleware) RequireAdminOnly() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		claims, err := m.extractAndValidateToken(c)
@@ -273,21 +317,26 @@ func GetAdminUser(c *gin.Context) (*models.User, bool) {
 	return user.(*models.User), true
 }
 
-// extractAndValidateToken extracts and validates JWT from Authorization header
+// extractAndValidateToken extracts and validates a JWT. Resolution order:
+//  1. Authorization: Bearer <token> header — used by mobile clients.
+//  2. admin_token cookie — used by the admin SPA (HttpOnly, set by
+//     /auth/admin/login). Only consulted when the Authorization header is
+//     absent so legacy callers are unaffected.
 func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTClaims, error) {
-	// Get Authorization header
-	authHeader := c.GetHeader("Authorization")
-	if authHeader == "" {
-		return nil, utils.NewUnauthorizedError("Missing authorization header", nil)
+	var token string
+
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) != 2 || parts[0] != "Bearer" {
+			return nil, utils.NewUnauthorizedError("Invalid authorization header format", nil)
+		}
+		token = parts[1]
+	} else if cookie, err := c.Request.Cookie(utils.CookieAdminAccessToken); err == nil {
+		token = cookie.Value
+	} else {
+		return nil, utils.NewUnauthorizedError("Missing authorization credentials", nil)
 	}
 
-	// Check Bearer prefix
-	parts := strings.SplitN(authHeader, " ", 2)
-	if len(parts) != 2 || parts[0] != "Bearer" {
-		return nil, utils.NewUnauthorizedError("Invalid authorization header format", nil)
-	}
-
-	token := parts[1]
 	if token == "" {
 		return nil, utils.NewUnauthorizedError("Missing token", nil)
 	}

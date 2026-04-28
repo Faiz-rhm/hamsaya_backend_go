@@ -120,6 +120,30 @@ func (e *testEnv) makeAdmin(t *testing.T, userID string) {
 	}
 }
 
+// makeSuperAdmin promotes a user to super_admin role.
+func (e *testEnv) makeSuperAdmin(t *testing.T, userID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := e.db.Pool.Exec(ctx,
+		`UPDATE users SET role = 'super_admin' WHERE id = $1`, userID)
+	if err != nil {
+		t.Fatalf("makeSuperAdmin: failed to promote user %s: %v", userID, err)
+	}
+}
+
+// makeModerator promotes a user to moderator role.
+func (e *testEnv) makeModerator(t *testing.T, userID string) {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err := e.db.Pool.Exec(ctx,
+		`UPDATE users SET role = 'moderator' WHERE id = $1`, userID)
+	if err != nil {
+		t.Fatalf("makeModerator: failed to promote user %s: %v", userID, err)
+	}
+}
+
 // testConfig returns config pointing at the Docker test database.
 func testConfig() *config.Config {
 	host := getEnvOrDefault("DB_HOST", "localhost")
@@ -253,6 +277,10 @@ func buildRouter(
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, validator, logger)
+	adminCookieCfg := utils.NewCookieConfig(cfg.Server.Env, cfg.Server.AdminCookieDomain)
+	adminAuthHandler := handlers.NewAdminAuthHandler(authSvc, validator, logger, adminCookieCfg, cfg.JWT)
+	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
+	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, logger)
 	postHandler := handlers.NewPostHandler(postSvc, nil, validator, logger)
 	commentHandler := handlers.NewCommentHandler(commentSvc, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatSvc, wsHub, validator, logger, cfg)
@@ -288,6 +316,10 @@ func buildRouter(
 	auth.POST("/oauth/google", oauthHandler.GoogleOAuth)
 	auth.POST("/oauth/facebook", oauthHandler.FacebookOAuth)
 	auth.POST("/oauth/apple", oauthHandler.AppleOAuth)
+	auth.POST("/admin/login", adminAuthHandler.AdminLogin)
+	auth.POST("/admin/refresh", adminAuthHandler.AdminRefresh)
+	auth.POST("/admin/mfa/verify", adminAuthHandler.AdminMFAVerify)
+	auth.POST("/admin/logout", requireAuth, middleware.CSRF(), adminAuthHandler.AdminLogout)
 	auth.POST("/logout", requireAuth, authHandler.Logout)
 	auth.POST("/verify-email", authHandler.VerifyEmail)
 	auth.POST("/forgot-password", authHandler.ForgotPassword)
@@ -486,6 +518,17 @@ func buildRouter(
 	admin.GET("/businesses/:business_id", adminHandler.GetBusinessDetail)
 	admin.PUT("/businesses/:business_id/status", adminHandler.UpdateBusinessStatus)
 	admin.DELETE("/businesses/:business_id", adminHandler.DeleteBusiness)
+
+	// System endpoints — super_admin only.
+	superOnly := authMW.RequireSuperAdmin()
+	admin.GET("/system/build-info", superOnly, systemHandler.BuildInfo)
+	admin.GET("/system/health", superOnly, systemHandler.ServiceHealth)
+	admin.GET("/system/table-stats", superOnly, systemHandler.TableStats)
+	admin.GET("/system/sessions", superOnly, systemHandler.SessionsList)
+	admin.POST("/system/sessions/:session_id/revoke", superOnly, systemHandler.SessionRevoke)
+	admin.GET("/system/flags", superOnly, systemHandler.FlagsList)
+	admin.PUT("/system/flags/:key", superOnly, systemHandler.FlagsToggle)
+	admin.GET("/system/denylist-stats", superOnly, systemHandler.DenylistStats)
 
 	return r
 }

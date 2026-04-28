@@ -427,6 +427,25 @@ type UpdatePostStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=ACTIVE HIDDEN DELETED"`
 }
 
+// AdminUpdatePostRequest is the partial-update payload from /admin/posts/{id}.
+// All fields optional — handler treats `nil` as "leave unchanged". Provides
+// admin override for moderation edits and promotion toggles. Status maps to
+// the boolean column (ACTIVE=true, HIDDEN=false). DELETED is handled via the
+// existing soft-delete endpoint, not here.
+type AdminUpdatePostRequest struct {
+	Title       *string  `json:"title,omitempty"       validate:"omitempty,max=255"`
+	Description *string  `json:"description,omitempty" validate:"omitempty,max=4000"`
+	Status      *string  `json:"status,omitempty"      validate:"omitempty,oneof=ACTIVE HIDDEN"`
+	Visibility  *string  `json:"visibility,omitempty"  validate:"omitempty,oneof=PUBLIC FRIENDS PRIVATE"`
+	IsPromoted  *bool    `json:"is_promoted,omitempty"`
+	Free        *bool    `json:"free,omitempty"`
+	Sold        *bool    `json:"sold,omitempty"`
+	ContactNo   *string  `json:"contact_no,omitempty"  validate:"omitempty,max=20"`
+	Currency    *string  `json:"currency,omitempty"    validate:"omitempty,len=3"`
+	Price       *float64 `json:"price,omitempty"       validate:"omitempty,min=0"`
+	Discount    *float64 `json:"discount,omitempty"    validate:"omitempty,min=0,max=100"`
+}
+
 // UpdateBusinessStatusRequest is the request to update a business's status
 type UpdateBusinessStatusRequest struct {
 	Status string `json:"status" binding:"required,oneof=ACTIVE PENDING SUSPENDED REJECTED"`

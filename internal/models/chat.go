@@ -27,6 +27,7 @@ type Message struct {
 	SenderID       string       `json:"sender_id"`
 	Content        *string      `json:"content"`
 	MessageType    MessageType  `json:"message_type"`
+	ProductID      *string      `json:"product_id,omitempty"`
 	ReadAt         *time.Time   `json:"read_at,omitempty"`
 	CreatedAt      time.Time    `json:"created_at"`
 	DeletedAt      *time.Time   `json:"deleted_at,omitempty"`
@@ -49,6 +50,7 @@ type MessageResponse struct {
 	Sender         *UserInfo    `json:"sender"`
 	Content        *string      `json:"content"`
 	MessageType    MessageType  `json:"message_type"`
+	ProductID      *string      `json:"product_id,omitempty"`
 	IsRead         bool         `json:"is_read"`
 	CreatedAt      time.Time    `json:"created_at"`
 }
@@ -64,11 +66,12 @@ type MessageInfo struct {
 
 // UserInfo represents brief user information for chat
 type UserInfo struct {
-	UserID    string  `json:"user_id"`
-	FirstName string  `json:"first_name"`
-	LastName  string  `json:"last_name"`
-	FullName  string  `json:"full_name"`
-	Avatar    *Photo  `json:"avatar,omitempty"`
+	UserID      string  `json:"user_id"`
+	FirstName   string  `json:"first_name"`
+	LastName    string  `json:"last_name"`
+	FullName    string  `json:"full_name"`
+	Avatar      *Photo  `json:"avatar,omitempty"`
+	AvatarColor *string `json:"avatar_color,omitempty"`
 }
 
 // SendMessageRequest represents a request to send a message
@@ -76,6 +79,7 @@ type SendMessageRequest struct {
 	RecipientID string      `json:"recipient_id" validate:"required,uuid"`
 	Content     *string     `json:"content,omitempty" validate:"omitempty,min=1,max=5000"`
 	MessageType MessageType `json:"message_type" validate:"required,oneof=TEXT IMAGE FILE"`
+	ProductID   *string     `json:"product_id,omitempty" validate:"omitempty,uuid"`
 }
 
 // GetConversationsFilter represents filters for listing conversations

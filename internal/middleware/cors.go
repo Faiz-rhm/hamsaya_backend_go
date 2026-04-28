@@ -12,24 +12,30 @@ func CORS(cfg config.CORSConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
 
-		// Check if origin is allowed
+		// Check if origin is allowed. When credentials are enabled the "*"
+		// wildcard is unsafe and is never echoed — browsers reject
+		// "Access-Control-Allow-Origin: *" combined with credentials, so a
+		// "*" entry only acts as a fallback for non-credentialed requests
+		// and the configured explicit origins are required for cookie auth.
 		allowed := false
+		wildcard := false
 		for _, allowedOrigin := range cfg.AllowedOrigins {
-			// Trim spaces from configured origins
 			allowedOrigin = strings.TrimSpace(allowedOrigin)
-			if allowedOrigin == "*" || allowedOrigin == origin {
+			if allowedOrigin == "*" {
+				wildcard = true
+				continue
+			}
+			if allowedOrigin == origin {
 				allowed = true
 				break
 			}
 		}
 
-		// Always set CORS headers for allowed origins
 		if allowed {
-			if origin != "" {
-				c.Header("Access-Control-Allow-Origin", origin)
-			} else {
-				c.Header("Access-Control-Allow-Origin", "*")
-			}
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Vary", "Origin")
+		} else if wildcard && !cfg.AllowCredentials {
+			c.Header("Access-Control-Allow-Origin", "*")
 		}
 
 		c.Header("Access-Control-Allow-Methods", strings.Join(cfg.AllowedMethods, ", "))

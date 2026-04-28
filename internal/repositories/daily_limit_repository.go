@@ -31,7 +31,7 @@ func NewDailyLimitRepository(db *database.DB) DailyLimitRepository {
 
 func (r *dailyLimitRepository) List(ctx context.Context) ([]*models.DailyPostLimit, error) {
 	const query = `
-		SELECT post_type, user_limit, business_multiplier, description, updated_at, updated_by
+		SELECT post_type, user_limit, business_multiplier, unlimited, description, updated_at, updated_by
 		FROM daily_post_limits
 		ORDER BY post_type ASC
 	`
@@ -45,7 +45,7 @@ func (r *dailyLimitRepository) List(ctx context.Context) ([]*models.DailyPostLim
 	for rows.Next() {
 		l := &models.DailyPostLimit{}
 		if err := rows.Scan(&l.PostType, &l.UserLimit, &l.BusinessMultiplier,
-			&l.Description, &l.UpdatedAt, &l.UpdatedBy); err != nil {
+			&l.Unlimited, &l.Description, &l.UpdatedAt, &l.UpdatedBy); err != nil {
 			return nil, fmt.Errorf("scan daily limit: %w", err)
 		}
 		limits = append(limits, l)
@@ -55,14 +55,14 @@ func (r *dailyLimitRepository) List(ctx context.Context) ([]*models.DailyPostLim
 
 func (r *dailyLimitRepository) Get(ctx context.Context, postType string) (*models.DailyPostLimit, error) {
 	const query = `
-		SELECT post_type, user_limit, business_multiplier, description, updated_at, updated_by
+		SELECT post_type, user_limit, business_multiplier, unlimited, description, updated_at, updated_by
 		FROM daily_post_limits
 		WHERE post_type = $1
 	`
 	l := &models.DailyPostLimit{}
 	err := r.db.Pool.QueryRow(ctx, query, postType).Scan(
 		&l.PostType, &l.UserLimit, &l.BusinessMultiplier,
-		&l.Description, &l.UpdatedAt, &l.UpdatedBy,
+		&l.Unlimited, &l.Description, &l.UpdatedAt, &l.UpdatedBy,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
@@ -84,17 +84,18 @@ func (r *dailyLimitRepository) Update(
 		UPDATE daily_post_limits
 		SET user_limit          = COALESCE($2, user_limit),
 		    business_multiplier = COALESCE($3, business_multiplier),
-		    description         = COALESCE($4, description),
+		    unlimited           = COALESCE($4, unlimited),
+		    description         = COALESCE($5, description),
 		    updated_at          = NOW(),
-		    updated_by          = $5
+		    updated_by          = $6
 		WHERE post_type = $1
-		RETURNING post_type, user_limit, business_multiplier, description, updated_at, updated_by
+		RETURNING post_type, user_limit, business_multiplier, unlimited, description, updated_at, updated_by
 	`
 	l := &models.DailyPostLimit{}
 	err := r.db.Pool.QueryRow(ctx, query, postType,
-		req.UserLimit, req.BusinessMultiplier, req.Description, updatedBy,
+		req.UserLimit, req.BusinessMultiplier, req.Unlimited, req.Description, updatedBy,
 	).Scan(&l.PostType, &l.UserLimit, &l.BusinessMultiplier,
-		&l.Description, &l.UpdatedAt, &l.UpdatedBy)
+		&l.Unlimited, &l.Description, &l.UpdatedAt, &l.UpdatedBy)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil
 	}
