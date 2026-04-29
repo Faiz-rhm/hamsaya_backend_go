@@ -234,7 +234,9 @@ type PostResponse struct {
 	Visibility  PostVisibility  `json:"visibility"`
 	Status      bool            `json:"status"`
 
-	// Author info
+	// Author info — user_id mirrored at top level so mobile clients can always
+	// identify the post owner even when the author profile fetch fails.
+	UserID     *string       `json:"user_id,omitempty"`
 	Author     *AuthorInfo   `json:"author,omitempty"`
 	BusinessID *string       `json:"business_id,omitempty"`
 	Business   *BusinessInfo `json:"business_profile,omitempty"`
