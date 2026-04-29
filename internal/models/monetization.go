@@ -32,7 +32,10 @@ type Ad struct {
 // fields ride alongside as form values. AdvertiserID identifies the user the
 // placement belongs to (super_admin can create on behalf of any user).
 type AdCreateRequest struct {
-	AdvertiserID string     `form:"advertiser_id" validate:"required,uuid"`
+	// Optional. When empty the handler defaults to the requesting admin's
+	// user id, so the typical "I'm creating my own placement" flow needs no
+	// extra input. Provide explicitly to attribute the ad to a different user.
+	AdvertiserID string     `form:"advertiser_id" validate:"omitempty,uuid"`
 	Title        string     `form:"title"         validate:"required,min=2,max=120"`
 	Body         *string    `form:"body"          validate:"omitempty,max=2000"`
 	TargetURL    string     `form:"target_url"    validate:"required,url"`

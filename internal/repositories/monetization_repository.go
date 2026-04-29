@@ -20,10 +20,13 @@ import (
 type MonetizationRepository interface {
 	// Ads
 	ListAds(ctx context.Context, status string, page, limit int) ([]*models.Ad, int, error)
+	ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error)
 	GetAd(ctx context.Context, id string) (*models.Ad, error)
 	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, status string, startAt, endAt *time.Time) (*models.Ad, error)
 	UpdateAdStatus(ctx context.Context, id, status, reviewedBy string, req *models.AdReviewRequest) (*models.Ad, error)
 	DeleteAd(ctx context.Context, id string) error
+	IncrementAdImpression(ctx context.Context, id string) error
+	IncrementAdClick(ctx context.Context, id string) error
 
 	// Credits
 	ListBalances(ctx context.Context, search string, page, limit int) ([]*models.CreditBalance, int, error)
@@ -107,6 +110,66 @@ func (r *monetizationRepository) ListAds(ctx context.Context, status string, pag
 		out = append(out, ad)
 	}
 	return out, total, rows.Err()
+}
+
+// ListActiveAds returns ads that are currently servable: status=ACTIVE,
+// optional start_at <= now, optional end_at >= now (NULL end_at = no expiry).
+// Used by the public /v1/ads/active endpoint that mobile feeds consume.
+func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	const q = `
+		SELECT a.id, a.advertiser_id,
+		       COALESCE(u.email, ''),
+		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
+		       a.title, a.body, a.image_url, a.target_url, a.status,
+		       a.start_at, a.end_at, a.impressions, a.clicks,
+		       a.reviewed_by::text, a.reviewed_at, a.review_note,
+		       a.created_at, a.updated_at
+		FROM ads a
+		LEFT JOIN users u    ON u.id = a.advertiser_id
+		LEFT JOIN profiles up ON up.id = a.advertiser_id
+		WHERE a.status = 'ACTIVE'
+		  AND (a.start_at IS NULL OR a.start_at <= NOW())
+		  AND (a.end_at   IS NULL OR a.end_at   >  NOW())
+		ORDER BY RANDOM()
+		LIMIT $1
+	`
+	rows, err := r.db.Pool.Query(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("active ads list: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*models.Ad
+	for rows.Next() {
+		ad := &models.Ad{}
+		if err := rows.Scan(
+			&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
+			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL, &ad.Status,
+			&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
+			&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
+			&ad.CreatedAt, &ad.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("active ads scan: %w", err)
+		}
+		out = append(out, ad)
+	}
+	return out, rows.Err()
+}
+
+// IncrementAdImpression bumps the impressions counter. Best-effort — if the
+// row no longer exists it's a no-op.
+func (r *monetizationRepository) IncrementAdImpression(ctx context.Context, id string) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE ads SET impressions = impressions + 1 WHERE id = $1`, id)
+	return err
+}
+
+// IncrementAdClick bumps the clicks counter.
+func (r *monetizationRepository) IncrementAdClick(ctx context.Context, id string) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE ads SET clicks = clicks + 1 WHERE id = $1`, id)
+	return err
 }
 
 func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.Ad, error) {

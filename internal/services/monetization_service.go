@@ -44,6 +44,20 @@ func (s *MonetizationService) ListAds(ctx context.Context, status string, page, 
 	return s.repo.ListAds(ctx, normalizeAdStatus(status), page, limit)
 }
 
+// ListActiveAds returns the public-facing slice of ads ready to be served
+// inline in the mobile feed.
+func (s *MonetizationService) ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error) {
+	return s.repo.ListActiveAds(ctx, limit)
+}
+
+func (s *MonetizationService) RecordImpression(ctx context.Context, id string) error {
+	return s.repo.IncrementAdImpression(ctx, id)
+}
+
+func (s *MonetizationService) RecordClick(ctx context.Context, id string) error {
+	return s.repo.IncrementAdClick(ctx, id)
+}
+
 // CreateAd inserts a new placement. `imageURL` may be empty when the admin
 // did not attach an image. Status defaults to PENDING; AutoApprove flips it
 // to ACTIVE for super_admin convenience.

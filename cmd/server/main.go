@@ -753,6 +753,13 @@ func main() {
 			admin.GET("/logs", superOnly, appLogHandler.List)
 		}
 
+		// Public-facing ads — mobile feed fetches active placements without
+		// authentication so logged-out browsing still serves ads. Impression
+		// and click counters are best-effort, fire-and-forget.
+		v1.GET("/ads/active", monetizationHandler.ListActiveAdsPublic)
+		v1.POST("/ads/:ad_id/impression", monetizationHandler.RecordAdImpression)
+		v1.POST("/ads/:ad_id/click", monetizationHandler.RecordAdClick)
+
 		// Placeholder for future routes
 		v1.GET("/ping", func(c *gin.Context) {
 			utils.SendSuccess(c, http.StatusOK, "pong", gin.H{

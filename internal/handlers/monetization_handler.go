@@ -33,6 +33,49 @@ func NewMonetizationHandler(
 
 // ─── Ads ─────────────────────────────────────────────────────────────────────
 
+// ─── Public (mobile-facing) ─────────────────────────────────────────────────
+
+// ListActiveAdsPublic returns currently-live ads. No auth required so the
+// mobile feed can fetch even before the user signs in.
+//
+// @Router /ads/active [get]
+func (h *MonetizationHandler) ListActiveAdsPublic(c *gin.Context) {
+	limit := atoiOr(c.Query("limit"), 10)
+	ads, err := h.service.ListActiveAds(c.Request.Context(), limit)
+	if err != nil {
+		h.logger.Error("public active ads", zap.Error(err))
+		utils.SendError(c, http.StatusInternalServerError, "Failed to load ads", err)
+		return
+	}
+	if ads == nil {
+		ads = []*models.Ad{}
+	}
+	utils.SendSuccess(c, http.StatusOK, "Active ads", gin.H{"items": ads})
+}
+
+// RecordAdImpression — public, fire-and-forget impression tracker called by
+// mobile when an ad enters the visible viewport.
+//
+// @Router /ads/{ad_id}/impression [post]
+func (h *MonetizationHandler) RecordAdImpression(c *gin.Context) {
+	id := c.Param("ad_id")
+	if err := h.service.RecordImpression(c.Request.Context(), id); err != nil {
+		h.logger.Warn("ad impression", zap.Error(err))
+	}
+	utils.SendSuccess(c, http.StatusOK, "ok", nil)
+}
+
+// RecordAdClick — public, called by mobile before opening the target URL.
+//
+// @Router /ads/{ad_id}/click [post]
+func (h *MonetizationHandler) RecordAdClick(c *gin.Context) {
+	id := c.Param("ad_id")
+	if err := h.service.RecordClick(c.Request.Context(), id); err != nil {
+		h.logger.Warn("ad click", zap.Error(err))
+	}
+	utils.SendSuccess(c, http.StatusOK, "ok", nil)
+}
+
 // CreateAd accepts a multipart form: required `image` file, plus form fields
 // matching AdCreateRequest (advertiser_id, title, body, target_url, start_at,
 // end_at, auto_approve).
@@ -46,6 +89,16 @@ func (h *MonetizationHandler) CreateAd(c *gin.Context) {
 	}
 	if err := h.validator.Validate(&req); err != nil {
 		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	// Default attribution: ad belongs to the admin who created it unless the
+	// admin explicitly named a different advertiser_id.
+	if req.AdvertiserID == "" {
+		req.AdvertiserID = adminUserID(c)
+	}
+	if req.AdvertiserID == "" {
+		utils.SendError(c, http.StatusBadRequest, "advertiser_id required", utils.ErrValidation)
 		return
 	}
 
