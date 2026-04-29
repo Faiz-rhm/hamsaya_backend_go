@@ -6,9 +6,10 @@ import "time"
 type MessageType string
 
 const (
-	MessageTypeText  MessageType = "TEXT"
-	MessageTypeImage MessageType = "IMAGE"
-	MessageTypeFile  MessageType = "FILE"
+	MessageTypeText     MessageType = "TEXT"
+	MessageTypeImage    MessageType = "IMAGE"
+	MessageTypeFile     MessageType = "FILE"
+	MessageTypeLocation MessageType = "LOCATION"
 )
 
 // Conversation represents a chat conversation between two users
@@ -78,7 +79,7 @@ type UserInfo struct {
 type SendMessageRequest struct {
 	RecipientID string      `json:"recipient_id" validate:"required,uuid"`
 	Content     *string     `json:"content,omitempty" validate:"omitempty,min=1,max=5000"`
-	MessageType MessageType `json:"message_type" validate:"required,oneof=TEXT IMAGE FILE"`
+	MessageType MessageType `json:"message_type" validate:"required"`
 	ProductID   *string     `json:"product_id,omitempty" validate:"omitempty,uuid"`
 }
 

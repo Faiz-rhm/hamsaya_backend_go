@@ -40,6 +40,14 @@ func NewChatService(
 
 // SendMessage sends a message to another user
 func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *models.SendMessageRequest) (*models.MessageResponse, error) {
+	// Validate message type — accept TEXT, IMAGE, FILE, LOCATION.
+	switch req.MessageType {
+	case models.MessageTypeText, models.MessageTypeImage, models.MessageTypeFile, models.MessageTypeLocation:
+		// valid
+	default:
+		return nil, utils.NewBadRequestError("message_type must be one of: TEXT IMAGE FILE LOCATION", nil)
+	}
+
 	// Validate message content
 	if req.MessageType == models.MessageTypeText && (req.Content == nil || *req.Content == "") {
 		return nil, utils.NewBadRequestError("Content is required for text messages", nil)
