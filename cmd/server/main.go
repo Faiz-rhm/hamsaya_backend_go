@@ -337,6 +337,8 @@ func main() {
 	adminAuthHandler := handlers.NewAdminAuthHandler(authService, validator, logger, adminCookieCfg, cfg.JWT)
 	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
 	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, logger)
+	customRoleRepo := repositories.NewCustomRoleRepository(db)
+	customRoleHandler := handlers.NewCustomRoleHandler(customRoleRepo, logger)
 	mfaHandler := handlers.NewMFAHandler(mfaService, validator, logger)
 	oauthHandler := handlers.NewOAuthHandler(authService, oauthService, validator, logger)
 	profileHandler := handlers.NewProfileHandler(profileService, storageService, validator, logger)
@@ -693,6 +695,16 @@ func main() {
 
 			// Audit Logs — admin-and-above. Mods don't audit other admins.
 			admin.GET("/audit-logs", adminOnly, adminHandler.ListAuditLogs)
+
+			// Custom named roles — super_admin only for mutations, admin+ for reads.
+			admin.GET("/custom-roles", adminOnly, customRoleHandler.List)
+			admin.POST("/custom-roles", superOnly, customRoleHandler.Create)
+			admin.GET("/custom-roles/:role_id", adminOnly, customRoleHandler.Get)
+			admin.PUT("/custom-roles/:role_id", superOnly, customRoleHandler.Update)
+			admin.DELETE("/custom-roles/:role_id", superOnly, customRoleHandler.Delete)
+			admin.GET("/custom-roles/:role_id/users", adminOnly, customRoleHandler.ListRoleUsers)
+			admin.POST("/users/:user_id/custom-role", superOnly, customRoleHandler.Assign)
+			admin.GET("/users/:user_id/custom-role", adminOnly, customRoleHandler.GetUserCustomRole)
 
 			// Admin Account Management — list admin-only; mutations super-only.
 			admin.GET("/accounts", adminOnly, adminHandler.ListAdmins)
