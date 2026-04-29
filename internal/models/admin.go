@@ -100,6 +100,7 @@ type AdminUserResponse struct {
 	PostsCount     int64     `json:"posts_count"`
 	FollowersCount int64     `json:"followers_count"`
 	FollowingCount int64     `json:"following_count"`
+	CustomRoleName string    `json:"custom_role_name,omitempty"`
 }
 
 // AdminUserDetailResponse is the full user detail returned in admin API
@@ -457,6 +458,18 @@ type BroadcastNotificationRequest struct {
 	Message  string   `json:"message" binding:"required,max=500"`
 	Province *string  `json:"province,omitempty"`
 	UserIDs  []string `json:"user_ids,omitempty"`
+}
+
+// BroadcastHistoryItem groups admin broadcast notifications by send batch.
+// Recipients are bucketed by (title, message, minute) so a single broadcast
+// becomes one row regardless of fan-out size.
+type BroadcastHistoryItem struct {
+	Title          string    `json:"title"`
+	Message        string    `json:"message"`
+	SentAt         time.Time `json:"sent_at"`
+	RecipientCount int64     `json:"recipient_count"`
+	ReadCount      int64     `json:"read_count"`
+	AdminID        *string   `json:"admin_id,omitempty"`
 }
 
 // AdminFeedbackResponse is user feedback for admin list

@@ -45,12 +45,14 @@ type Config struct {
 
 // UploadResult represents the result of an upload operation
 type UploadResult struct {
-	URL      string
-	Key      string
-	Size     int64
-	MimeType string
-	Width    int
-	Height   int
+	URL       string
+	ThumbURL  string // ~240w variant for list cells / avatars
+	MediumURL string // ~720w variant for cards
+	Key       string
+	Size      int64
+	MimeType  string
+	Width     int
+	Height    int
 }
 
 // NewClient creates a new storage client
@@ -138,9 +140,10 @@ func (c *Client) UploadImage(ctx context.Context, reader io.Reader, contentType,
 
 	// Generate object key
 	ext := getExtensionFromFormat(format)
-	filename := fmt.Sprintf("%s/%s%s", folder, uuid.New().String(), ext)
+	id := uuid.New().String()
+	filename := fmt.Sprintf("%s/%s%s", folder, id, ext)
 
-	// Upload to MinIO
+	// Upload original
 	size := int64(len(data))
 	_, err = c.client.PutObject(ctx, c.bucketName, filename, bytes.NewReader(data), size, minio.PutObjectOptions{
 		ContentType: contentType,
@@ -149,16 +152,51 @@ func (c *Client) UploadImage(ctx context.Context, reader io.Reader, contentType,
 		return nil, fmt.Errorf("failed to upload to storage: %w", err)
 	}
 
-	// Get dimensions
 	bounds := img.Bounds()
 
+	// Generate + upload thumb (240w) and medium (720w) variants. Best-effort —
+	// failures don't block the main upload.
+	thumbKey := fmt.Sprintf("%s/%s_thumb%s", folder, id, ext)
+	mediumKey := fmt.Sprintf("%s/%s_medium%s", folder, id, ext)
+	thumbURL := ""
+	mediumURL := ""
+
+	if thumb := ResizeImage(img, 240, 0); thumb != nil {
+		if encoded, err := EncodeImage(thumb, format); err == nil {
+			if buf, err := io.ReadAll(encoded); err == nil {
+				if _, perr := c.client.PutObject(ctx, c.bucketName, thumbKey,
+					bytes.NewReader(buf), int64(len(buf)),
+					minio.PutObjectOptions{ContentType: contentType}); perr == nil {
+					thumbURL = c.getPublicURL(thumbKey)
+				} else {
+					c.logger.Warn("thumb variant upload failed", zap.Error(perr))
+				}
+			}
+		}
+	}
+	if medium := ResizeImage(img, 720, 0); medium != nil {
+		if encoded, err := EncodeImage(medium, format); err == nil {
+			if buf, err := io.ReadAll(encoded); err == nil {
+				if _, perr := c.client.PutObject(ctx, c.bucketName, mediumKey,
+					bytes.NewReader(buf), int64(len(buf)),
+					minio.PutObjectOptions{ContentType: contentType}); perr == nil {
+					mediumURL = c.getPublicURL(mediumKey)
+				} else {
+					c.logger.Warn("medium variant upload failed", zap.Error(perr))
+				}
+			}
+		}
+	}
+
 	result := &UploadResult{
-		URL:      c.getPublicURL(filename),
-		Key:      filename,
-		Size:     size,
-		MimeType: contentType,
-		Width:    bounds.Dx(),
-		Height:   bounds.Dy(),
+		URL:       c.getPublicURL(filename),
+		ThumbURL:  thumbURL,
+		MediumURL: mediumURL,
+		Key:       filename,
+		Size:      size,
+		MimeType:  contentType,
+		Width:     bounds.Dx(),
+		Height:    bounds.Dy(),
 	}
 
 	c.logger.Info("Image uploaded",

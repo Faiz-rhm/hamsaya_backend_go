@@ -166,12 +166,14 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 
 	// Create photo model
 	photo := &models.Photo{
-		URL:      result.URL,
-		Name:     header.Filename,
-		Size:     result.Size,
-		Width:    result.Width,
-		Height:   result.Height,
-		MimeType: result.MimeType,
+		URL:       result.URL,
+		ThumbURL:  result.ThumbURL,
+		MediumURL: result.MediumURL,
+		Name:      header.Filename,
+		Size:      result.Size,
+		Width:     result.Width,
+		Height:    result.Height,
+		MimeType:  result.MimeType,
 	}
 
 	s.logger.Info("Image uploaded",

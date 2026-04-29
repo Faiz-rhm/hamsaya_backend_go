@@ -514,6 +514,15 @@ func (s *AdminService) DeleteComment(ctx context.Context, commentID, adminID str
 }
 
 // RestoreComment unhides a soft-deleted comment (clears deleted_at)
+func (s *AdminService) UpdateCommentContent(ctx context.Context, commentID, content, adminID string) error {
+	if err := s.adminRepo.UpdateCommentContent(ctx, commentID, content); err != nil {
+		return utils.NewInternalError("Failed to update comment", err)
+	}
+	s.writeAuditLog(ctx, adminID, "update_comment_content", "comment", commentID,
+		map[string]interface{}{"new_length": len(content)}, "")
+	return nil
+}
+
 func (s *AdminService) RestoreComment(ctx context.Context, commentID, adminID string) error {
 	err := s.adminRepo.RestoreComment(ctx, commentID)
 	if err != nil {
@@ -919,6 +928,16 @@ func (s *AdminService) BroadcastNotification(ctx context.Context, req *models.Br
 	)
 
 	return nil
+}
+
+// ListBroadcastHistory returns past admin broadcasts grouped by send batch.
+func (s *AdminService) ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error) {
+	items, err := s.adminRepo.ListBroadcastHistory(ctx, limit)
+	if err != nil {
+		s.logger.Error("Failed to list broadcast history", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to list broadcast history", err)
+	}
+	return items, nil
 }
 
 // ListFeedback lists user feedback with pagination and optional type filter

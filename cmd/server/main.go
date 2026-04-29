@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/config"
 	_ "github.com/hamsaya/backend/docs" // Import swagger docs
@@ -322,6 +323,20 @@ func main() {
 	router.Use(middleware.Timeout(middleware.DefaultRequestTimeout))
 	router.Use(banMiddleware.Enforce())
 
+	// gzip JSON responses (excludes uploads, websocket, metrics)
+	router.Use(gzip.Gzip(
+		gzip.DefaultCompression,
+		gzip.WithExcludedPaths([]string{
+			"/api/v1/posts/upload-image",
+			"/api/v1/users/me/avatar",
+			"/api/v1/users/me/cover",
+			"/api/v1/businesses/", // covers /:id/avatar /cover /attachments
+			"/api/v1/chat/ws",
+			"/metrics",
+			"/health",
+		}),
+	))
+
 	// OpenTelemetry: in-flight count, request duration/count metrics, and tracing
 	router.Use(telem.MeterRequestsInFlight())
 	router.Use(telem.MeterRequestDuration())
@@ -355,7 +370,7 @@ func main() {
 	searchHandler := handlers.NewSearchHandler(searchService, validator, logger)
 	reportHandler := handlers.NewReportHandler(reportService)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
-	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
+	adminHandler := handlers.NewAdminHandler(adminService, mfaService, validator, logger)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
 	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
 	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, storageService, validator, logger)
@@ -650,17 +665,21 @@ func main() {
 			admin.POST("/users/:user_id/unsuspend", adminOnly, adminHandler.UnsuspendUser)
 			admin.DELETE("/users/:user_id", adminOnly, adminHandler.DeleteUser)
 			admin.PUT("/users/:user_id/role", superOnly, adminHandler.UpdateUserRole)
+			admin.POST("/users/:user_id/force-disable-mfa", adminOnly, adminHandler.ForceDisableUserMFA)
 
 			// Content Moderation — moderator-and-above.
 			admin.GET("/posts", adminHandler.ListAllPosts)
 			admin.GET("/posts/:post_id", adminHandler.GetPostDetail)
 			admin.DELETE("/posts/:post_id", adminHandler.DeletePost)
+			admin.POST("/posts/bulk-delete", adminHandler.BulkDeletePosts)
 			admin.PUT("/posts/:post_id/status", adminHandler.UpdatePostStatus)
 			admin.PATCH("/posts/:post_id", adminHandler.UpdatePost)
 			admin.GET("/comments", adminHandler.ListAllComments)
 			admin.GET("/comments/:comment_id", adminHandler.GetComment)
+			admin.PATCH("/comments/:comment_id", adminHandler.UpdateCommentContent)
 			admin.PUT("/comments/:comment_id/restore", adminHandler.RestoreComment)
 			admin.DELETE("/comments/:comment_id", adminHandler.DeleteComment)
+			admin.POST("/comments/bulk-delete", adminHandler.BulkDeleteComments)
 
 			// Reports — moderator-and-above.
 			admin.GET("/reports/posts", adminHandler.ListPostReports)
@@ -693,6 +712,7 @@ func main() {
 			// (named-user push has higher abuse potential than mass broadcast).
 			admin.POST("/notifications/broadcast", adminOnly, adminHandler.BroadcastNotification)
 			admin.POST("/notifications/send", superOnly, adminHandler.SendTargetedNotification)
+			admin.GET("/notifications/history", adminOnly, adminHandler.ListBroadcastHistory)
 
 			// Audit Logs — admin-and-above. Mods don't audit other admins.
 			admin.GET("/audit-logs", adminOnly, adminHandler.ListAuditLogs)
@@ -802,6 +822,28 @@ func main() {
 		IdleTimeout:    60 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
+
+	// Boost expiry sweeper — flips ACTIVE boosts past their end_at to
+	// EXPIRED every 15 minutes so the admin panel and public queries stay
+	// accurate without relying on lazy filtering alone.
+	go func() {
+		ticker := time.NewTicker(15 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				res, err := db.Pool.Exec(context.Background(), `
+					UPDATE boosts SET status = 'EXPIRED'
+					WHERE status = 'ACTIVE' AND expires_at < NOW()
+				`)
+				if err != nil {
+					sugaredLogger.Warnw("boost expiry sweep failed", "error", err)
+				} else if res.RowsAffected() > 0 {
+					sugaredLogger.Infow("boost expiry sweep", "expired", res.RowsAffected())
+				}
+			}
+		}
+	}()
 
 	// Start server in a goroutine
 	go func() {

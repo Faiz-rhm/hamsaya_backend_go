@@ -16,6 +16,7 @@ import (
 // AdminHandler handles admin-related HTTP requests
 type AdminHandler struct {
 	adminService *services.AdminService
+	mfaService   *services.MFAService
 	validator    *utils.Validator
 	logger       *zap.Logger
 }
@@ -23,11 +24,13 @@ type AdminHandler struct {
 // NewAdminHandler creates a new admin handler
 func NewAdminHandler(
 	adminService *services.AdminService,
+	mfaService *services.MFAService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *AdminHandler {
 	return &AdminHandler{
 		adminService: adminService,
+		mfaService:   mfaService,
 		validator:    validator,
 		logger:       logger,
 	}
@@ -310,6 +313,26 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 // @Failure 403 {object} utils.Response
 // @Failure 500 {object} utils.Response
 // @Router /admin/users/{user_id} [delete]
+// ForceDisableUserMFA admin-resets a user's MFA. Used to unlock users who
+// lost their authenticator. No password required (admin authority is enough).
+func (h *AdminHandler) ForceDisableUserMFA(c *gin.Context) {
+	userID := c.Param("user_id")
+	adminID, _ := middleware.GetUserID(c)
+	if h.mfaService == nil {
+		utils.SendError(c, http.StatusInternalServerError, "MFA service unavailable", nil)
+		return
+	}
+	if err := h.mfaService.ForceDisableMFA(c.Request.Context(), userID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	h.logger.Info("MFA force-disabled by admin",
+		zap.String("user_id", userID),
+		zap.String("admin_id", adminID),
+	)
+	utils.SendSuccess(c, http.StatusOK, "MFA reset", nil)
+}
+
 func (h *AdminHandler) DeleteUser(c *gin.Context) {
 	userID := c.Param("user_id")
 	adminID, _ := middleware.GetUserID(c)
@@ -529,6 +552,27 @@ func (h *AdminHandler) GetComment(c *gin.Context) {
 		return
 	}
 	utils.SendSuccess(c, http.StatusOK, "Comment retrieved successfully", comment)
+}
+
+// UpdateCommentContent edits a comment's text. Useful for fixing offensive
+// content in-place without a full delete (preserves thread context).
+func (h *AdminHandler) UpdateCommentContent(c *gin.Context) {
+	commentID := c.Param("comment_id")
+	adminID, _ := middleware.GetUserID(c)
+
+	var body struct {
+		Content string `json:"content" binding:"required,min=1,max=10000"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.SendBadRequest(c, "content is required", err)
+		return
+	}
+
+	if err := h.adminService.UpdateCommentContent(c.Request.Context(), commentID, body.Content, adminID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Comment updated", nil)
 }
 
 // DeleteComment godoc
@@ -1223,4 +1267,96 @@ func (h *AdminHandler) DeleteDeviceBan(c *gin.Context) {
 		return
 	}
 	utils.SendSuccess(c, http.StatusOK, "Device ban removed", nil)
+}
+
+// BulkDeletePosts soft-deletes multiple posts in one request. Used by the
+// admin posts list bulk-action toolbar.
+func (h *AdminHandler) BulkDeletePosts(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	var req struct {
+		IDs []string `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	if len(req.IDs) == 0 {
+		utils.SendBadRequest(c, "ids is required", nil)
+		return
+	}
+	if len(req.IDs) > 200 {
+		utils.SendBadRequest(c, "Too many ids (max 200 per request)", nil)
+		return
+	}
+	deleted, failed := 0, 0
+	for _, id := range req.IDs {
+		if _, err := uuid.Parse(id); err != nil {
+			failed++
+			continue
+		}
+		if err := h.adminService.DeletePost(c.Request.Context(), id, adminID); err != nil {
+			failed++
+			h.logger.Warn("Bulk delete post failed", zap.String("post_id", id), zap.Error(err))
+			continue
+		}
+		deleted++
+	}
+	utils.SendSuccess(c, http.StatusOK, "Bulk delete complete", gin.H{
+		"deleted": deleted,
+		"failed":  failed,
+	})
+}
+
+// BulkDeleteComments soft-deletes multiple comments in one request.
+func (h *AdminHandler) BulkDeleteComments(c *gin.Context) {
+	adminID, _ := middleware.GetUserID(c)
+	var req struct {
+		IDs []string `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendBadRequest(c, "Invalid request body", err)
+		return
+	}
+	if len(req.IDs) == 0 {
+		utils.SendBadRequest(c, "ids is required", nil)
+		return
+	}
+	if len(req.IDs) > 200 {
+		utils.SendBadRequest(c, "Too many ids (max 200 per request)", nil)
+		return
+	}
+	deleted, failed := 0, 0
+	for _, id := range req.IDs {
+		if _, err := uuid.Parse(id); err != nil {
+			failed++
+			continue
+		}
+		if err := h.adminService.DeleteComment(c.Request.Context(), id, adminID); err != nil {
+			failed++
+			h.logger.Warn("Bulk delete comment failed", zap.String("comment_id", id), zap.Error(err))
+			continue
+		}
+		deleted++
+	}
+	utils.SendSuccess(c, http.StatusOK, "Bulk delete complete", gin.H{
+		"deleted": deleted,
+		"failed":  failed,
+	})
+}
+
+// ListBroadcastHistory returns past admin broadcast notifications grouped by
+// (title, message, sent_at minute). Each row shows recipient count.
+func (h *AdminHandler) ListBroadcastHistory(c *gin.Context) {
+	limit := 50
+	if v, err := strconv.Atoi(c.Query("limit")); err == nil && v > 0 && v <= 200 {
+		limit = v
+	}
+	items, err := h.adminService.ListBroadcastHistory(c.Request.Context(), limit)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Broadcast history retrieved", gin.H{
+		"items": items,
+	})
 }

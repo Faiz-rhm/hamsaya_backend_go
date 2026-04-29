@@ -1213,6 +1213,14 @@ func (m *MockAdminRepository) GetUserIDsByProvince(ctx context.Context, province
 	return args.Get(0).([]string), args.Error(1)
 }
 
+func (m *MockAdminRepository) ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error) {
+	args := m.Called(ctx, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.BroadcastHistoryItem), args.Error(1)
+}
+
 func (m *MockAdminRepository) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error) {
 	args := m.Called(ctx, filter)
 	if args.Get(0) == nil {

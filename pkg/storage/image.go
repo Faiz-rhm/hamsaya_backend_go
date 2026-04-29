@@ -27,6 +27,26 @@ func NewImageProcessor() *ImageProcessor {
 	}
 }
 
+// ResizeImage scales [img] proportionally so width = [targetWidth]. When
+// [targetHeight] is 0 the height auto-derives from aspect ratio. Returns the
+// original image unchanged when it's already smaller than the target.
+// Free function so callers (e.g. variant pipeline) don't need an
+// ImageProcessor instance.
+func ResizeImage(img image.Image, targetWidth, targetHeight int) image.Image {
+	if img == nil || targetWidth <= 0 {
+		return img
+	}
+	bounds := img.Bounds()
+	if bounds.Dx() <= targetWidth {
+		return img
+	}
+	if targetHeight <= 0 {
+		ratio := float64(bounds.Dx()) / float64(bounds.Dy())
+		targetHeight = int(float64(targetWidth) / ratio)
+	}
+	return imaging.Resize(img, targetWidth, targetHeight, imaging.Lanczos)
+}
+
 // ResizeImage resizes an image to fit within max dimensions while maintaining aspect ratio
 func (p *ImageProcessor) ResizeImage(img image.Image, maxWidth, maxHeight int) image.Image {
 	bounds := img.Bounds()

@@ -6,6 +6,7 @@ require (
 	firebase.google.com/go/v4 v4.18.0
 	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/disintegration/imaging v1.6.2
+	github.com/gin-contrib/gzip v1.2.6
 	github.com/gin-gonic/gin v1.12.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/golang-jwt/jwt/v5 v5.3.0

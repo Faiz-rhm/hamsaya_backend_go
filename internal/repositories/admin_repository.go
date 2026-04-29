@@ -41,6 +41,7 @@ type AdminRepository interface {
 	GetCommentByID(ctx context.Context, commentID string) (*models.AdminCommentDetailResponse, error)
 	DeleteComment(ctx context.Context, commentID string) error
 	RestoreComment(ctx context.Context, commentID string) error
+	UpdateCommentContent(ctx context.Context, commentID, content string) error
 	ResolveCommentReportsByCommentID(ctx context.Context, commentID string) error
 	
 	ListBusinesses(ctx context.Context, filter *models.AdminBusinessFilter) ([]*models.AdminBusinessResponse, int64, error)
@@ -67,6 +68,7 @@ type AdminRepository interface {
 	
 	GetAllUserIDs(ctx context.Context) ([]string, error)
 	GetUserIDsByProvince(ctx context.Context, province string) ([]string, error)
+	ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error)
 
 	ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error)
 	ResolveFeedback(ctx context.Context, feedbackID, adminID, status string, notes *string) error
@@ -416,9 +418,11 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 			u.locked_until, u.last_login_at, u.created_at,
 			(SELECT COUNT(*) FROM posts WHERE user_id = u.id AND deleted_at IS NULL) as posts_count,
 			(SELECT COUNT(*) FROM user_follows WHERE following_id = u.id) as followers_count,
-			(SELECT COUNT(*) FROM user_follows WHERE follower_id = u.id) as following_count
+			(SELECT COUNT(*) FROM user_follows WHERE follower_id = u.id) as following_count,
+			COALESCE(cr.name, '') as custom_role_name
 		FROM users u
 		LEFT JOIN profiles p ON u.id = p.id
+		LEFT JOIN custom_roles cr ON cr.id = u.custom_role_id
 		WHERE %s
 		ORDER BY %s %s
 		LIMIT $%d OFFSET $%d
@@ -443,6 +447,7 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 			&user.OAuthProvider,
 			&user.LockedUntil, &user.LastLoginAt, &user.CreatedAt,
 			&user.PostsCount, &user.FollowersCount, &user.FollowingCount,
+			&user.CustomRoleName,
 		)
 		if err != nil {
 			return nil, 0, err
@@ -1095,6 +1100,19 @@ func (r *adminRepository) DeleteComment(ctx context.Context, commentID string) e
 	query := `UPDATE post_comments SET deleted_at = NOW(), updated_at = NOW() WHERE id = $1`
 	_, err := r.db.Pool.Exec(ctx, query, commentID)
 	return err
+}
+
+func (r *adminRepository) UpdateCommentContent(ctx context.Context, commentID, content string) error {
+	result, err := r.db.Pool.Exec(ctx,
+		`UPDATE post_comments SET text = $2, updated_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+		commentID, content)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("comment not found")
+	}
+	return nil
 }
 
 // RestoreComment clears deleted_at for a soft-deleted comment (unhide)
@@ -2004,6 +2022,45 @@ func (r *adminRepository) GetUserIDsByProvince(ctx context.Context, province str
 		ids = append(ids, id)
 	}
 	return ids, nil
+}
+
+// ListBroadcastHistory groups ADMIN-typed notifications by (title, message,
+// truncated-minute, admin_id) so a single fan-out shows as one row.
+func (r *adminRepository) ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	query := `
+		SELECT
+			COALESCE(title, '') AS title,
+			COALESCE(message, '') AS message,
+			date_trunc('minute', MIN(created_at)) AS sent_at,
+			COUNT(*) AS recipient_count,
+			COUNT(*) FILTER (WHERE read = true) AS read_count,
+			MAX((data->>'admin_id')::text) AS admin_id
+		FROM notifications
+		WHERE type = 'ADMIN'
+		GROUP BY title, message, date_trunc('minute', created_at), data->>'admin_id'
+		ORDER BY sent_at DESC
+		LIMIT $1
+	`
+	rows, err := r.db.Pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	items := make([]*models.BroadcastHistoryItem, 0)
+	for rows.Next() {
+		it := &models.BroadcastHistoryItem{}
+		var adminID *string
+		if err := rows.Scan(&it.Title, &it.Message, &it.SentAt, &it.RecipientCount, &it.ReadCount, &adminID); err != nil {
+			return nil, err
+		}
+		it.AdminID = adminID
+		items = append(items, it)
+	}
+	return items, nil
 }
 
 func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error) {

@@ -343,6 +343,30 @@ func (s *MFAService) DisableMFA(ctx context.Context, userID, password string) er
 	return nil
 }
 
+// ForceDisableMFA disables MFA for a user without password verification.
+// Admin-only — used by `POST /admin/users/:id/force-disable-mfa` when an
+// operator needs to unlock a user who lost their authenticator.
+func (s *MFAService) ForceDisableMFA(ctx context.Context, userID string) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return utils.NewNotFoundError("User not found", err)
+	}
+	factors, err := s.mfaRepo.GetFactorsByUserID(ctx, userID)
+	if err == nil {
+		for _, factor := range factors {
+			_ = s.mfaRepo.DeleteFactor(ctx, factor.ID)
+		}
+	}
+	_ = s.mfaRepo.DeleteAllBackupCodes(ctx, userID)
+	user.MFAEnabled = false
+	user.UpdatedAt = time.Now()
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return utils.NewInternalError("Failed to disable MFA", err)
+	}
+	s.logger.Info("MFA force-disabled by admin", zap.String("user_id", userID))
+	return nil
+}
+
 // RegenerateBackupCodes regenerates backup codes for a user
 func (s *MFAService) RegenerateBackupCodes(ctx context.Context, userID string) ([]string, error) {
 	// Delete existing backup codes
