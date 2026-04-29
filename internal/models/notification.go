@@ -21,6 +21,22 @@ const (
 	NotificationTypeNewPost         NotificationType = "NEW_POST"
 	NotificationTypeAdmin           NotificationType = "ADMIN"
 	NotificationTypeSellExpired     NotificationType = "SELL_EXPIRED"
+
+	// Account / security
+	NotificationTypeWelcome             NotificationType = "WELCOME"
+	NotificationTypePasswordChanged     NotificationType = "PASSWORD_CHANGED"
+	NotificationTypeEmailVerified       NotificationType = "EMAIL_VERIFIED"
+	NotificationTypeAccountSuspended    NotificationType = "ACCOUNT_SUSPENDED"
+	NotificationTypeAccountUnsuspended  NotificationType = "ACCOUNT_UNSUSPENDED"
+
+	// Sales / shopping
+	NotificationTypeSellInterested NotificationType = "SELL_INTERESTED" // someone bookmarked your sell
+	NotificationTypeSellSold       NotificationType = "SELL_SOLD"       // seller marked as sold (for bookmarkers)
+
+	// Moderation
+	NotificationTypePostDeletedByAdmin     NotificationType = "POST_DELETED_BY_ADMIN"
+	NotificationTypeBusinessDeletedByAdmin NotificationType = "BUSINESS_DELETED_BY_ADMIN"
+	NotificationTypeCommentDeletedByAdmin  NotificationType = "COMMENT_DELETED_BY_ADMIN"
 )
 
 // NotificationCategory represents notification category for settings
@@ -32,6 +48,7 @@ const (
 	NotificationCategoryEvents   NotificationCategory = "EVENTS"
 	NotificationCategorySales    NotificationCategory = "SALES"
 	NotificationCategoryBusiness NotificationCategory = "BUSINESS"
+	NotificationCategoryAccount  NotificationCategory = "ACCOUNT"
 )
 
 // Notification represents a user notification
@@ -78,7 +95,7 @@ type CreateNotificationRequest struct {
 
 // UpdateNotificationSettingsRequest represents a request to update notification settings
 type UpdateNotificationSettingsRequest struct {
-	Category NotificationCategory `json:"category" validate:"required,oneof=POSTS MESSAGES EVENTS SALES BUSINESS"`
+	Category NotificationCategory `json:"category" validate:"required,oneof=POSTS MESSAGES EVENTS SALES BUSINESS ACCOUNT"`
 	PushPref bool                 `json:"push_pref"`
 }
 

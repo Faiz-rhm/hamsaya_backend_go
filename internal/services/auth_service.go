@@ -22,15 +22,16 @@ const (
 
 // AuthService handles authentication operations
 type AuthService struct {
-	userRepo        repositories.UserRepository
-	adminRepo       repositories.AdminRepository
-	passwordService *PasswordService
-	jwtService      *JWTService
-	emailService    *EmailService
-	tokenStorage    *TokenStorageService
-	mfaService      *MFAService
-	logger          *zap.Logger
-	cfg             *config.Config
+	userRepo            repositories.UserRepository
+	adminRepo           repositories.AdminRepository
+	passwordService     *PasswordService
+	jwtService          *JWTService
+	emailService        *EmailService
+	tokenStorage        *TokenStorageService
+	mfaService          *MFAService
+	notificationService *NotificationService
+	logger              *zap.Logger
+	cfg                 *config.Config
 }
 
 // NewAuthService creates a new authentication service
@@ -56,6 +57,13 @@ func NewAuthService(
 		logger:          logger,
 		cfg:             cfg,
 	}
+}
+
+// SetNotificationService wires the notification service after construction.
+// Auth and notification services would otherwise create a circular dependency at
+// build time, so we inject post-construction.
+func (s *AuthService) SetNotificationService(n *NotificationService) {
+	s.notificationService = n
 }
 
 // Register creates a complete user profile with firstname, lastname, and location
@@ -135,6 +143,9 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			zap.String("user_id", userID),
 			zap.String("email", email),
 		)
+
+		// Welcome notification — best-effort; failures don't break registration.
+		s.sendWelcomeNotification(ctx, userID, req.FirstName)
 
 		// Send verification code email (Resend or SMTP)
 		verificationCode, err := s.jwtService.GenerateVerificationCode()
@@ -833,6 +844,9 @@ func (s *AuthService) VerifyEmail(ctx context.Context, req *models.VerifyEmailRe
 		}
 	}
 
+	// In-app notification confirming verification
+	s.sendEmailVerifiedNotification(ctx, userID)
+
 	s.logger.Info("Email verified successfully", zap.String("user_id", userID))
 	return nil
 }
@@ -1049,6 +1063,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, session
 		s.logger.Error("Failed to send password changed email", zap.Error(err))
 		// Continue anyway
 	}
+
+	// In-app + push notification
+	s.sendPasswordChangedNotification(ctx, userID)
 
 	s.logger.Info("Password changed successfully", zap.String("user_id", userID))
 	return nil
@@ -1293,4 +1310,65 @@ func (s *AuthService) AcceptAdminInvite(ctx context.Context, req *models.AcceptA
 		},
 		Tokens: tokenPair,
 	}, nil
+}
+
+// sendWelcomeNotification creates an in-app + push welcome notification for a
+// freshly registered user. Best-effort — failures are logged and ignored.
+func (s *AuthService) sendWelcomeNotification(ctx context.Context, userID, firstName string) {
+	if s.notificationService == nil {
+		return
+	}
+	go func() {
+		ctxDetach := context.WithoutCancel(ctx)
+		title := "Welcome to Hamsaya!"
+		msg := "Discover neighbors, businesses, and listings in your area."
+		if firstName != "" {
+			title = "Welcome, " + firstName + "!"
+		}
+		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			UserID:  userID,
+			Type:    models.NotificationTypeWelcome,
+			Title:   &title,
+			Message: &msg,
+			Data:    map[string]interface{}{},
+		})
+	}()
+}
+
+// sendPasswordChangedNotification confirms a successful password change.
+func (s *AuthService) sendPasswordChangedNotification(ctx context.Context, userID string) {
+	if s.notificationService == nil {
+		return
+	}
+	go func() {
+		ctxDetach := context.WithoutCancel(ctx)
+		title := "Password updated"
+		msg := "Your password was changed successfully. If this wasn't you, contact support immediately."
+		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			UserID:  userID,
+			Type:    models.NotificationTypePasswordChanged,
+			Title:   &title,
+			Message: &msg,
+			Data:    map[string]interface{}{},
+		})
+	}()
+}
+
+// sendEmailVerifiedNotification confirms successful email verification.
+func (s *AuthService) sendEmailVerifiedNotification(ctx context.Context, userID string) {
+	if s.notificationService == nil {
+		return
+	}
+	go func() {
+		ctxDetach := context.WithoutCancel(ctx)
+		title := "Email verified"
+		msg := "Your email address is now verified. Full access unlocked."
+		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+			UserID:  userID,
+			Type:    models.NotificationTypeEmailVerified,
+			Title:   &title,
+			Message: &msg,
+			Data:    map[string]interface{}{},
+		})
+	}()
 }

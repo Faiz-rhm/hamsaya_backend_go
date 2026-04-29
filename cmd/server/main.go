@@ -285,6 +285,7 @@ func main() {
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
 	authService := services.NewAuthService(userRepo, adminRepo, passwordService, jwtService, emailService, tokenStorage, mfaService, cfg, logger)
+	authService.SetNotificationService(notificationService)
 	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, notificationService, wsHub, logger)
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)

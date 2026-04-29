@@ -60,6 +60,19 @@ func channelForType(t models.NotificationType) string {
 		return "messages"
 	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing:
 		return "events"
+	case models.NotificationTypeWelcome,
+		models.NotificationTypePasswordChanged,
+		models.NotificationTypeEmailVerified,
+		models.NotificationTypeAccountSuspended,
+		models.NotificationTypeAccountUnsuspended,
+		models.NotificationTypePostDeletedByAdmin,
+		models.NotificationTypeCommentDeletedByAdmin,
+		models.NotificationTypeBusinessDeletedByAdmin:
+		return "account"
+	case models.NotificationTypeSellExpired,
+		models.NotificationTypeSellInterested,
+		models.NotificationTypeSellSold:
+		return "sales"
 	default:
 		return "general"
 	}
@@ -78,10 +91,21 @@ func typeToCategory(t models.NotificationType) models.NotificationCategory {
 		return models.NotificationCategoryMessages
 	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing:
 		return models.NotificationCategoryEvents
-	case models.NotificationTypeBusinessFollow:
+	case models.NotificationTypeBusinessFollow,
+		models.NotificationTypeBusinessDeletedByAdmin:
 		return models.NotificationCategoryBusiness
-	case models.NotificationTypeSellExpired:
+	case models.NotificationTypeSellExpired,
+		models.NotificationTypeSellInterested,
+		models.NotificationTypeSellSold:
 		return models.NotificationCategorySales
+	case models.NotificationTypeWelcome,
+		models.NotificationTypePasswordChanged,
+		models.NotificationTypeEmailVerified,
+		models.NotificationTypeAccountSuspended,
+		models.NotificationTypeAccountUnsuspended,
+		models.NotificationTypePostDeletedByAdmin,
+		models.NotificationTypeCommentDeletedByAdmin:
+		return models.NotificationCategoryAccount
 	default:
 		return models.NotificationCategoryPosts
 	}

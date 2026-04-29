@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"github.com/hamsaya/backend/internal/models"
@@ -170,13 +171,13 @@ func (s *AdminService) GetUserDetail(ctx context.Context, userID string) (*model
 // SuspendUser suspends a user for a specified number of days
 func (s *AdminService) SuspendUser(ctx context.Context, userID string, days int, reason string, adminID string) error {
 	until := time.Now().AddDate(0, 0, days)
-	
+
 	err := s.adminRepo.SuspendUser(ctx, userID, until)
 	if err != nil {
 		s.logger.Error("Failed to suspend user", zap.String("user_id", userID), zap.Error(err))
 		return utils.NewInternalError("Failed to suspend user", err)
 	}
-	
+
 	s.logger.Info("User suspended",
 		zap.String("user_id", userID),
 		zap.String("admin_id", adminID),
@@ -185,6 +186,26 @@ func (s *AdminService) SuspendUser(ctx context.Context, userID string, days int,
 		zap.Time("until", until),
 	)
 	s.writeAuditLog(ctx, adminID, "suspend_user", "user", userID, map[string]interface{}{"days": days, "reason": reason}, "")
+
+	// Notify the user that their account was suspended.
+	if s.notificationService != nil {
+		title := "Your account has been suspended"
+		msg := reason
+		if msg == "" {
+			msg = "Your account has been suspended for " + fmt.Sprintf("%d days", days)
+		}
+		_, _ = s.notificationService.CreateNotification(context.WithoutCancel(ctx), &models.CreateNotificationRequest{
+			UserID:  userID,
+			Type:    models.NotificationTypeAccountSuspended,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"admin_id": adminID,
+				"days":     days,
+				"reason":   reason,
+			},
+		})
+	}
 	return nil
 }
 
@@ -195,12 +216,27 @@ func (s *AdminService) UnsuspendUser(ctx context.Context, userID string, adminID
 		s.logger.Error("Failed to unsuspend user", zap.String("user_id", userID), zap.Error(err))
 		return utils.NewInternalError("Failed to unsuspend user", err)
 	}
-	
+
 	s.logger.Info("User unsuspended",
 		zap.String("user_id", userID),
 		zap.String("admin_id", adminID),
 	)
 	s.writeAuditLog(ctx, adminID, "unsuspend_user", "user", userID, nil, "")
+
+	// Notify the user the suspension was lifted.
+	if s.notificationService != nil {
+		title := "Your account has been reinstated"
+		msg := "Welcome back. Your suspension was lifted by an administrator."
+		_, _ = s.notificationService.CreateNotification(context.WithoutCancel(ctx), &models.CreateNotificationRequest{
+			UserID:  userID,
+			Type:    models.NotificationTypeAccountUnsuspended,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"admin_id": adminID,
+			},
+		})
+	}
 	return nil
 }
 
@@ -352,18 +388,47 @@ func (s *AdminService) UpdatePost(ctx context.Context, postID, adminID string, r
 
 // DeletePost soft deletes a post
 func (s *AdminService) DeletePost(ctx context.Context, postID, adminID string) error {
+	// Resolve post owner before deleting so we can notify them.
+	authorID := ""
+	postTitle := ""
+	if existing, gerr := s.adminRepo.GetPostByID(ctx, postID); gerr == nil && existing != nil {
+		authorID = existing.AuthorID
+		if existing.Title != nil {
+			postTitle = *existing.Title
+		}
+	}
+
 	err := s.adminRepo.DeletePost(ctx, postID)
 	if err != nil {
 		s.logger.Error("Failed to delete post", zap.String("post_id", postID), zap.Error(err))
 		return utils.NewInternalError("Failed to delete post", err)
 	}
-	
+
 	s.writeAuditLog(ctx, adminID, "delete_post", "post", postID, nil, "")
 	s.logger.Info("Post deleted",
 		zap.String("post_id", postID),
 		zap.String("admin_id", adminID),
 	)
-	
+
+	// Notify the post owner.
+	if s.notificationService != nil && authorID != "" {
+		title := "Your post was removed"
+		msg := "An administrator removed your post for violating community guidelines."
+		if postTitle != "" {
+			msg = "An administrator removed your post \"" + postTitle + "\" for violating community guidelines."
+		}
+		_, _ = s.notificationService.CreateNotification(context.WithoutCancel(ctx), &models.CreateNotificationRequest{
+			UserID:  authorID,
+			Type:    models.NotificationTypePostDeletedByAdmin,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"admin_id": adminID,
+				"post_id":  postID,
+			},
+		})
+	}
+
 	return nil
 }
 
@@ -409,6 +474,11 @@ func (s *AdminService) ListComments(ctx context.Context, filter *models.AdminCom
 
 // DeleteComment soft deletes a comment and marks any related comment reports as RESOLVED
 func (s *AdminService) DeleteComment(ctx context.Context, commentID, adminID string) error {
+	authorID := ""
+	if existing, gerr := s.adminRepo.GetCommentByID(ctx, commentID); gerr == nil && existing != nil {
+		authorID = existing.AuthorID
+	}
+
 	err := s.adminRepo.DeleteComment(ctx, commentID)
 	if err != nil {
 		s.logger.Error("Failed to delete comment", zap.String("comment_id", commentID), zap.Error(err))
@@ -424,6 +494,22 @@ func (s *AdminService) DeleteComment(ctx context.Context, commentID, adminID str
 		zap.String("comment_id", commentID),
 		zap.String("admin_id", adminID),
 	)
+
+	// Notify the comment author.
+	if s.notificationService != nil && authorID != "" {
+		title := "Your comment was removed"
+		msg := "An administrator removed your comment for violating community guidelines."
+		_, _ = s.notificationService.CreateNotification(context.WithoutCancel(ctx), &models.CreateNotificationRequest{
+			UserID:  authorID,
+			Type:    models.NotificationTypeCommentDeletedByAdmin,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"admin_id":   adminID,
+				"comment_id": commentID,
+			},
+		})
+	}
 	return nil
 }
 
@@ -523,17 +609,43 @@ func (s *AdminService) UpdateBusinessStatus(ctx context.Context, businessID, sta
 
 // DeleteBusiness soft deletes a business
 func (s *AdminService) DeleteBusiness(ctx context.Context, businessID, adminID string) error {
+	// Resolve business owner before deletion so we can notify them.
+	ownerID := ""
+	bizName := ""
+	if existing, gerr := s.adminRepo.GetBusinessByID(ctx, businessID); gerr == nil && existing != nil {
+		ownerID = existing.OwnerID
+		bizName = existing.Name
+	}
+
 	err := s.adminRepo.DeleteBusiness(ctx, businessID)
 	if err != nil {
 		s.logger.Error("Failed to delete business", zap.String("business_id", businessID), zap.Error(err))
 		return utils.NewInternalError("Failed to delete business", err)
 	}
-	
+
 	s.writeAuditLog(ctx, adminID, "delete_business", "business", businessID, nil, "")
 	s.logger.Info("Business deleted",
 		zap.String("business_id", businessID),
 		zap.String("admin_id", adminID),
 	)
+
+	if s.notificationService != nil && ownerID != "" {
+		title := "Your business profile was removed"
+		msg := "An administrator removed your business profile."
+		if bizName != "" {
+			msg = "An administrator removed your business \"" + bizName + "\"."
+		}
+		_, _ = s.notificationService.CreateNotification(context.WithoutCancel(ctx), &models.CreateNotificationRequest{
+			UserID:  ownerID,
+			Type:    models.NotificationTypeBusinessDeletedByAdmin,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"admin_id":    adminID,
+				"business_id": businessID,
+			},
+		})
+	}
 	return nil
 }
 
