@@ -38,7 +38,7 @@ func newChatRouter(
 	} else {
 		ur = &mocks.MockUserRepository{}
 	}
-	svc := services.NewChatService(convRepo, msgRepo, ur, nil, zap.NewNop())
+	svc := services.NewChatService(convRepo, msgRepo, ur, nil, nil, nil, zap.NewNop())
 	cfg := &config.Config{CORS: config.CORSConfig{AllowedOrigins: []string{"*"}}}
 	h := NewChatHandler(svc, nil, testutil.CreateTestValidator(), zap.NewNop(), cfg)
 

@@ -137,9 +137,11 @@ func (h *SystemHandler) TableStats(c *gin.Context) {
 // users — for super_admin "force log everyone out" or anomaly review.
 // @Router /admin/system/sessions [get]
 func (h *SystemHandler) SessionsList(c *gin.Context) {
+	// Cast JSONB device_info and inet ip_address to text so pgx can scan them
+	// into *string without a custom codec.
 	rows, err := h.db.Pool.Query(c.Request.Context(), `
 		SELECT s.id::text, s.user_id::text, COALESCE(u.email,''),
-		       s.device_info, s.ip_address, s.user_agent,
+		       s.device_info::text, s.ip_address::text, s.user_agent,
 		       s.created_at, s.expires_at
 		FROM user_sessions s
 		LEFT JOIN users u ON u.id = s.user_id

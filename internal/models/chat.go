@@ -12,11 +12,13 @@ const (
 	MessageTypeLocation MessageType = "LOCATION"
 )
 
-// Conversation represents a chat conversation between two users
+// Conversation represents a chat conversation between two users (optionally
+// scoped to a business so a customer can have a separate thread per business).
 type Conversation struct {
 	ID             string     `json:"id"`
 	Participant1ID string     `json:"participant1_id"`
 	Participant2ID string     `json:"participant2_id"`
+	BusinessID     *string    `json:"business_id,omitempty"`
 	LastMessageAt  *time.Time `json:"last_message_at"`
 	CreatedAt      time.Time  `json:"created_at"`
 }
@@ -36,12 +38,21 @@ type Message struct {
 
 // ConversationResponse is the API response for a conversation
 type ConversationResponse struct {
-	ID               string         `json:"id"`
-	OtherParticipant *UserInfo      `json:"other_participant"`
-	LastMessage      *MessageInfo   `json:"last_message,omitempty"`
-	UnreadCount      int            `json:"unread_count"`
-	LastMessageAt    *time.Time     `json:"last_message_at"`
-	CreatedAt        time.Time      `json:"created_at"`
+	ID               string              `json:"id"`
+	OtherParticipant *UserInfo           `json:"other_participant"`
+	Business         *ConversationBizRef `json:"business,omitempty"`
+	LastMessage      *MessageInfo        `json:"last_message,omitempty"`
+	UnreadCount      int                 `json:"unread_count"`
+	LastMessageAt    *time.Time          `json:"last_message_at"`
+	CreatedAt        time.Time           `json:"created_at"`
+}
+
+// ConversationBizRef is a brief business reference shown next to a conversation
+// when the chat is scoped to a business.
+type ConversationBizRef struct {
+	ID     string  `json:"id"`
+	Name   string  `json:"name"`
+	Avatar *Photo  `json:"avatar,omitempty"`
 }
 
 // MessageResponse is the API response for a message
@@ -81,13 +92,15 @@ type SendMessageRequest struct {
 	Content     *string     `json:"content,omitempty" validate:"omitempty,min=1,max=5000"`
 	MessageType MessageType `json:"message_type" validate:"required"`
 	ProductID   *string     `json:"product_id,omitempty" validate:"omitempty,uuid"`
+	BusinessID  *string     `json:"business_id,omitempty" validate:"omitempty,uuid"`
 }
 
 // GetConversationsFilter represents filters for listing conversations
 type GetConversationsFilter struct {
-	UserID string
-	Limit  int
-	Offset int
+	UserID     string
+	BusinessID *string // nil = personal chats only; non-nil = chats scoped to that business
+	Limit      int
+	Offset     int
 }
 
 // GetMessagesFilter represents filters for listing messages

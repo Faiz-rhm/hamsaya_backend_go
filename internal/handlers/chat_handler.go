@@ -197,8 +197,15 @@ func (h *ChatHandler) GetConversations(c *gin.Context) {
 		}
 	}
 
+	// Optional business scope: when provided, return only conversations
+	// addressed to that business (caller must own it; service will verify).
+	var businessID *string
+	if biz := c.Query("business_id"); biz != "" {
+		businessID = &biz
+	}
+
 	// Get conversations
-	conversations, err := h.chatService.GetConversations(c.Request.Context(), userID.(string), limit, offset)
+	conversations, err := h.chatService.GetConversations(c.Request.Context(), userID.(string), limit, offset, businessID)
 	if err != nil {
 		h.handleError(c, err)
 		return

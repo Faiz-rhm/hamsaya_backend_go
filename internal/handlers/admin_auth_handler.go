@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/config"
 	"github.com/hamsaya/backend/internal/models"
+	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
 	"go.uber.org/zap"
@@ -16,26 +17,29 @@ import (
 // remains untouched: existing endpoints keep returning JSON tokens; the new
 // /auth/admin/* endpoints set HttpOnly cookies and omit tokens from the body.
 type AdminAuthHandler struct {
-	authService *services.AuthService
-	validator   *utils.Validator
-	logger      *zap.Logger
-	cookieCfg   utils.CookieConfig
-	jwtCfg      config.JWTConfig
+	authService    *services.AuthService
+	customRoleRepo repositories.CustomRoleRepository
+	validator      *utils.Validator
+	logger         *zap.Logger
+	cookieCfg      utils.CookieConfig
+	jwtCfg         config.JWTConfig
 }
 
 func NewAdminAuthHandler(
 	authService *services.AuthService,
+	customRoleRepo repositories.CustomRoleRepository,
 	validator *utils.Validator,
 	logger *zap.Logger,
 	cookieCfg utils.CookieConfig,
 	jwtCfg config.JWTConfig,
 ) *AdminAuthHandler {
 	return &AdminAuthHandler{
-		authService: authService,
-		validator:   validator,
-		logger:      logger,
-		cookieCfg:   cookieCfg,
-		jwtCfg:      jwtCfg,
+		authService:    authService,
+		customRoleRepo: customRoleRepo,
+		validator:      validator,
+		logger:         logger,
+		cookieCfg:      cookieCfg,
+		jwtCfg:         jwtCfg,
 	}
 }
 
@@ -109,7 +113,31 @@ func (h *AdminAuthHandler) AdminLogin(c *gin.Context) {
 
 	// Strip raw tokens from the response — admin SPA never reads them.
 	resp.Tokens = nil
-	utils.SendSuccess(c, http.StatusOK, "Login successful", resp)
+
+	// Attach the user's custom-role permissions so the SPA can restrict UI
+	// access exactly to what the assigned role allows. Returns nil when no
+	// custom role is assigned (frontend falls back to base-role matrix).
+	customPerms := h.resolveCustomPerms(c, resp.User.ID)
+
+	utils.SendSuccess(c, http.StatusOK, "Login successful", gin.H{
+		"user":               resp.User,
+		"profile":            resp.Profile,
+		"requires_mfa":       resp.RequiresMFA,
+		"custom_permissions": customPerms,
+	})
+}
+
+// resolveCustomPerms fetches the custom role for userID and returns its
+// permission list. Returns nil on any error or when no role is assigned.
+func (h *AdminAuthHandler) resolveCustomPerms(c *gin.Context, userID string) []string {
+	if h.customRoleRepo == nil {
+		return nil
+	}
+	role, err := h.customRoleRepo.GetUserCustomRole(c.Request.Context(), userID)
+	if err != nil || role == nil {
+		return nil
+	}
+	return role.Permissions
 }
 
 // AdminMFAVerify completes the second factor of an admin login challenge.

@@ -11,10 +11,11 @@ import (
 
 // ConversationRepository defines the interface for conversation operations
 type ConversationRepository interface {
-	// Create or get existing conversation
-	GetOrCreate(ctx context.Context, userID1, userID2 string) (*models.Conversation, error)
+	// Create or get existing conversation. businessID nil = personal user-to-user
+	// chat; non-nil = business-scoped chat.
+	GetOrCreate(ctx context.Context, userID1, userID2 string, businessID *string) (*models.Conversation, error)
 	GetByID(ctx context.Context, conversationID string) (*models.Conversation, error)
-	GetByParticipants(ctx context.Context, userID1, userID2 string) (*models.Conversation, error)
+	GetByParticipants(ctx context.Context, userID1, userID2 string, businessID *string) (*models.Conversation, error)
 	List(ctx context.Context, filter *models.GetConversationsFilter) ([]*models.Conversation, error)
 	UpdateLastMessageAt(ctx context.Context, conversationID string) error
 	Delete(ctx context.Context, conversationID string) error
@@ -34,7 +35,7 @@ func NewConversationRepository(db *database.DB) ConversationRepository {
 }
 
 // GetOrCreate gets an existing conversation or creates a new one
-func (r *conversationRepository) GetOrCreate(ctx context.Context, userID1, userID2 string) (*models.Conversation, error) {
+func (r *conversationRepository) GetOrCreate(ctx context.Context, userID1, userID2 string, businessID *string) (*models.Conversation, error) {
 	// Ensure participant1 < participant2 for consistency
 	participant1, participant2 := userID1, userID2
 	if userID1 > userID2 {
@@ -42,23 +43,24 @@ func (r *conversationRepository) GetOrCreate(ctx context.Context, userID1, userI
 	}
 
 	// Try to get existing conversation
-	existing, err := r.GetByParticipants(ctx, participant1, participant2)
+	existing, err := r.GetByParticipants(ctx, participant1, participant2, businessID)
 	if err == nil {
 		return existing, nil
 	}
 
 	// Create new conversation
 	query := `
-		INSERT INTO conversations (participant1_id, participant2_id, created_at)
-		VALUES ($1, $2, NOW())
-		RETURNING id, participant1_id, participant2_id, last_message_at, created_at
+		INSERT INTO conversations (participant1_id, participant2_id, business_id, created_at)
+		VALUES ($1, $2, $3, NOW())
+		RETURNING id, participant1_id, participant2_id, business_id, last_message_at, created_at
 	`
 
 	conversation := &models.Conversation{}
-	err = r.db.Pool.QueryRow(ctx, query, participant1, participant2).Scan(
+	err = r.db.Pool.QueryRow(ctx, query, participant1, participant2, businessID).Scan(
 		&conversation.ID,
 		&conversation.Participant1ID,
 		&conversation.Participant2ID,
+		&conversation.BusinessID,
 		&conversation.LastMessageAt,
 		&conversation.CreatedAt,
 	)
@@ -73,7 +75,7 @@ func (r *conversationRepository) GetOrCreate(ctx context.Context, userID1, userI
 // GetByID retrieves a conversation by ID
 func (r *conversationRepository) GetByID(ctx context.Context, conversationID string) (*models.Conversation, error) {
 	query := `
-		SELECT id, participant1_id, participant2_id, last_message_at, created_at
+		SELECT id, participant1_id, participant2_id, business_id, last_message_at, created_at
 		FROM conversations
 		WHERE id = $1
 	`
@@ -83,6 +85,7 @@ func (r *conversationRepository) GetByID(ctx context.Context, conversationID str
 		&conversation.ID,
 		&conversation.Participant1ID,
 		&conversation.Participant2ID,
+		&conversation.BusinessID,
 		&conversation.LastMessageAt,
 		&conversation.CreatedAt,
 	)
@@ -97,25 +100,39 @@ func (r *conversationRepository) GetByID(ctx context.Context, conversationID str
 	return conversation, nil
 }
 
-// GetByParticipants retrieves a conversation by its participants
-func (r *conversationRepository) GetByParticipants(ctx context.Context, userID1, userID2 string) (*models.Conversation, error) {
+// GetByParticipants retrieves a conversation by its participants and optional business scope.
+// businessID nil → matches the personal chat (business_id IS NULL).
+func (r *conversationRepository) GetByParticipants(ctx context.Context, userID1, userID2 string, businessID *string) (*models.Conversation, error) {
 	// Ensure participant1 < participant2
 	participant1, participant2 := userID1, userID2
 	if userID1 > userID2 {
 		participant1, participant2 = userID2, userID1
 	}
 
-	query := `
-		SELECT id, participant1_id, participant2_id, last_message_at, created_at
-		FROM conversations
-		WHERE participant1_id = $1 AND participant2_id = $2
-	`
+	var query string
+	var args []interface{}
+	if businessID == nil {
+		query = `
+			SELECT id, participant1_id, participant2_id, business_id, last_message_at, created_at
+			FROM conversations
+			WHERE participant1_id = $1 AND participant2_id = $2 AND business_id IS NULL
+		`
+		args = []interface{}{participant1, participant2}
+	} else {
+		query = `
+			SELECT id, participant1_id, participant2_id, business_id, last_message_at, created_at
+			FROM conversations
+			WHERE participant1_id = $1 AND participant2_id = $2 AND business_id = $3
+		`
+		args = []interface{}{participant1, participant2, *businessID}
+	}
 
 	conversation := &models.Conversation{}
-	err := r.db.Pool.QueryRow(ctx, query, participant1, participant2).Scan(
+	err := r.db.Pool.QueryRow(ctx, query, args...).Scan(
 		&conversation.ID,
 		&conversation.Participant1ID,
 		&conversation.Participant2ID,
+		&conversation.BusinessID,
 		&conversation.LastMessageAt,
 		&conversation.CreatedAt,
 	)
@@ -130,17 +147,33 @@ func (r *conversationRepository) GetByParticipants(ctx context.Context, userID1,
 	return conversation, nil
 }
 
-// List retrieves all conversations for a user
+// List retrieves all conversations for a user. When BusinessID is nil, returns
+// only personal chats (business_id IS NULL). When non-nil, returns chats scoped
+// to that business.
 func (r *conversationRepository) List(ctx context.Context, filter *models.GetConversationsFilter) ([]*models.Conversation, error) {
-	query := `
-		SELECT id, participant1_id, participant2_id, last_message_at, created_at
-		FROM conversations
-		WHERE participant1_id = $1 OR participant2_id = $1
-		ORDER BY COALESCE(last_message_at, created_at) DESC
-		LIMIT $2 OFFSET $3
-	`
+	var query string
+	var args []interface{}
+	if filter.BusinessID == nil {
+		query = `
+			SELECT id, participant1_id, participant2_id, business_id, last_message_at, created_at
+			FROM conversations
+			WHERE (participant1_id = $1 OR participant2_id = $1) AND business_id IS NULL
+			ORDER BY COALESCE(last_message_at, created_at) DESC
+			LIMIT $2 OFFSET $3
+		`
+		args = []interface{}{filter.UserID, filter.Limit, filter.Offset}
+	} else {
+		query = `
+			SELECT id, participant1_id, participant2_id, business_id, last_message_at, created_at
+			FROM conversations
+			WHERE (participant1_id = $1 OR participant2_id = $1) AND business_id = $2
+			ORDER BY COALESCE(last_message_at, created_at) DESC
+			LIMIT $3 OFFSET $4
+		`
+		args = []interface{}{filter.UserID, *filter.BusinessID, filter.Limit, filter.Offset}
+	}
 
-	rows, err := r.db.Pool.Query(ctx, query, filter.UserID, filter.Limit, filter.Offset)
+	rows, err := r.db.Pool.Query(ctx, query, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list conversations: %w", err)
 	}
@@ -153,6 +186,7 @@ func (r *conversationRepository) List(ctx context.Context, filter *models.GetCon
 			&conversation.ID,
 			&conversation.Participant1ID,
 			&conversation.Participant2ID,
+			&conversation.BusinessID,
 			&conversation.LastMessageAt,
 			&conversation.CreatedAt,
 		)

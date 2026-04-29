@@ -14,11 +14,13 @@ import (
 
 // ChatService handles chat operations
 type ChatService struct {
-	conversationRepo repositories.ConversationRepository
-	messageRepo      repositories.MessageRepository
-	userRepo         repositories.UserRepository
-	wsHub            *ws.Hub
-	logger           *zap.Logger
+	conversationRepo    repositories.ConversationRepository
+	messageRepo         repositories.MessageRepository
+	userRepo            repositories.UserRepository
+	businessRepo        repositories.BusinessRepository
+	notificationService *NotificationService
+	wsHub               *ws.Hub
+	logger              *zap.Logger
 }
 
 // NewChatService creates a new chat service
@@ -26,15 +28,19 @@ func NewChatService(
 	conversationRepo repositories.ConversationRepository,
 	messageRepo repositories.MessageRepository,
 	userRepo repositories.UserRepository,
+	businessRepo repositories.BusinessRepository,
+	notificationService *NotificationService,
 	wsHub *ws.Hub,
 	logger *zap.Logger,
 ) *ChatService {
 	return &ChatService{
-		conversationRepo: conversationRepo,
-		messageRepo:      messageRepo,
-		userRepo:         userRepo,
-		wsHub:            wsHub,
-		logger:           logger,
+		conversationRepo:    conversationRepo,
+		messageRepo:         messageRepo,
+		userRepo:            userRepo,
+		businessRepo:        businessRepo,
+		notificationService: notificationService,
+		wsHub:               wsHub,
+		logger:              logger,
 	}
 }
 
@@ -59,8 +65,8 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 		return nil, utils.NewBadRequestError("Cannot send a message to yourself", nil)
 	}
 
-	// Get or create conversation
-	conversation, err := s.conversationRepo.GetOrCreate(ctx, senderID, req.RecipientID)
+	// Get or create conversation (optionally scoped to a business)
+	conversation, err := s.conversationRepo.GetOrCreate(ctx, senderID, req.RecipientID, req.BusinessID)
 	if err != nil {
 		s.logger.Error("Failed to get or create conversation",
 			zap.Error(err),
@@ -111,12 +117,14 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 	return s.enrichMessage(ctx, message)
 }
 
-// GetConversations retrieves all conversations for a user
-func (s *ChatService) GetConversations(ctx context.Context, userID string, limit, offset int) ([]*models.ConversationResponse, error) {
+// GetConversations retrieves all conversations for a user. businessID nil =
+// personal chats only; non-nil = chats scoped to that business.
+func (s *ChatService) GetConversations(ctx context.Context, userID string, limit, offset int, businessID *string) ([]*models.ConversationResponse, error) {
 	filter := &models.GetConversationsFilter{
-		UserID: userID,
-		Limit:  limit,
-		Offset: offset,
+		UserID:     userID,
+		BusinessID: businessID,
+		Limit:      limit,
+		Offset:     offset,
 	}
 
 	conversations, err := s.conversationRepo.List(ctx, filter)
@@ -261,6 +269,18 @@ func (s *ChatService) enrichConversation(ctx context.Context, conversation *mode
 		CreatedAt:     conversation.CreatedAt,
 	}
 
+	// Attach business reference when this conversation is business-scoped.
+	if conversation.BusinessID != nil && *conversation.BusinessID != "" && s.businessRepo != nil {
+		biz, berr := s.businessRepo.GetByID(ctx, *conversation.BusinessID)
+		if berr == nil && biz != nil {
+			response.Business = &models.ConversationBizRef{
+				ID:     biz.ID,
+				Name:   biz.Name,
+				Avatar: biz.Avatar,
+			}
+		}
+	}
+
 	// Get other participant ID
 	otherParticipantID, err := s.conversationRepo.GetOtherParticipantID(ctx, conversation.ID, viewerID)
 	if err != nil {
@@ -355,26 +375,84 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 	return response, nil
 }
 
-// notifyMessageSent sends a WebSocket notification to the recipient
+// notifyMessageSent sends a WebSocket notification to the recipient and
+// triggers a persisted notification + FCM push so the user sees it when offline.
 func (s *ChatService) notifyMessageSent(message *models.Message, recipientID string) {
-	if s.wsHub == nil {
-		return
-	}
-	wsMessage := models.WSMessage{
-		Type: "message",
-		Payload: models.WSMessagePayload{
-			ConversationID: message.ConversationID,
-			MessageID:      message.ID,
-			SenderID:       message.SenderID,
-			Content:        message.Content,
-			MessageType:    message.MessageType,
-			CreatedAt:      message.CreatedAt,
-		},
+	// Real-time WebSocket frame for foreground app
+	if s.wsHub != nil {
+		wsMessage := models.WSMessage{
+			Type: "message",
+			Payload: models.WSMessagePayload{
+				ConversationID: message.ConversationID,
+				MessageID:      message.ID,
+				SenderID:       message.SenderID,
+				Content:        message.Content,
+				MessageType:    message.MessageType,
+				CreatedAt:      message.CreatedAt,
+			},
+		}
+		if err := s.wsHub.SendToUser(recipientID, wsMessage); err != nil {
+			s.logger.Debug("Failed to send WebSocket notification",
+				zap.Error(err),
+				zap.String("recipient_id", recipientID),
+			)
+		}
 	}
 
-	if err := s.wsHub.SendToUser(recipientID, wsMessage); err != nil {
-		s.logger.Warn("Failed to send WebSocket notification",
-			zap.Error(err),
+	// Persisted notification + FCM push (for background/closed-app delivery)
+	if s.notificationService == nil {
+		return
+	}
+
+	ctx := context.Background()
+	senderProfile, err := s.userRepo.GetProfileByUserID(ctx, message.SenderID)
+	senderName := "New message"
+	if err == nil && senderProfile != nil {
+		fn := senderProfile.FullName()
+		if fn != "" {
+			senderName = fn
+		}
+	}
+
+	preview := "Sent a message"
+	switch message.MessageType {
+	case models.MessageTypeImage:
+		preview = "📷 Photo"
+	case models.MessageTypeLocation:
+		preview = "📍 Location"
+	case models.MessageTypeFile:
+		preview = "📎 File"
+	default:
+		if message.Content != nil && *message.Content != "" {
+			c := *message.Content
+			if len(c) > 80 {
+				c = c[:80] + "…"
+			}
+			preview = c
+		}
+	}
+
+	data := map[string]interface{}{
+		"actor_id":        message.SenderID,
+		"conversation_id": message.ConversationID,
+		"message_id":      message.ID,
+		"recipient_name":  senderName,
+	}
+	if senderProfile != nil && senderProfile.Avatar != nil {
+		data["recipient_avatar"] = senderProfile.Avatar.URL
+	}
+
+	title := senderName
+	_, nerr := s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
+		UserID:  recipientID,
+		Type:    models.NotificationTypeMessage,
+		Title:   &title,
+		Message: &preview,
+		Data:    data,
+	})
+	if nerr != nil {
+		s.logger.Warn("Failed to create chat notification",
+			zap.Error(nerr),
 			zap.String("recipient_id", recipientID),
 		)
 	}
