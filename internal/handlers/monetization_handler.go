@@ -17,19 +17,60 @@ import (
 // /admin/boosts endpoints. Routes are registered in cmd/server/main.go.
 type MonetizationHandler struct {
 	service   *services.MonetizationService
+	storage   *services.StorageService
 	validator *utils.Validator
 	logger    *zap.Logger
 }
 
 func NewMonetizationHandler(
 	service *services.MonetizationService,
+	storage *services.StorageService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *MonetizationHandler {
-	return &MonetizationHandler{service: service, validator: validator, logger: logger}
+	return &MonetizationHandler{service: service, storage: storage, validator: validator, logger: logger}
 }
 
 // ─── Ads ─────────────────────────────────────────────────────────────────────
+
+// CreateAd accepts a multipart form: required `image` file, plus form fields
+// matching AdCreateRequest (advertiser_id, title, body, target_url, start_at,
+// end_at, auto_approve).
+//
+// @Router /admin/ads [post]
+func (h *MonetizationHandler) CreateAd(c *gin.Context) {
+	var req models.AdCreateRequest
+	if err := c.ShouldBind(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid form data", err)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	imageURL := ""
+	if file, header, err := c.Request.FormFile("image"); err == nil {
+		defer func() { _ = file.Close() }()
+		if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+			return
+		}
+		photo, uErr := h.storage.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)
+		if uErr != nil {
+			h.logger.Error("ad image upload", zap.Error(uErr))
+			utils.SendError(c, http.StatusInternalServerError, "Failed to upload image", uErr)
+			return
+		}
+		imageURL = photo.URL
+	}
+
+	ad, err := h.service.CreateAd(c.Request.Context(), &req, imageURL)
+	if err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusCreated, "Ad created", ad)
+}
 
 // ListAds godoc
 // @Router /admin/ads [get]

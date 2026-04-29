@@ -27,6 +27,22 @@ type Ad struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
+// AdCreateRequest is the admin payload for creating an ad row. The image is
+// uploaded as a multipart file under the "image" field; the rest of the
+// fields ride alongside as form values. AdvertiserID identifies the user the
+// placement belongs to (super_admin can create on behalf of any user).
+type AdCreateRequest struct {
+	AdvertiserID string     `form:"advertiser_id" validate:"required,uuid"`
+	Title        string     `form:"title"         validate:"required,min=2,max=120"`
+	Body         *string    `form:"body"          validate:"omitempty,max=2000"`
+	TargetURL    string     `form:"target_url"    validate:"required,url"`
+	StartAt      *time.Time `form:"start_at"`
+	EndAt        *time.Time `form:"end_at"`
+	// AutoApprove flips the new row from PENDING to ACTIVE on creation —
+	// admin convenience so a super_admin doesn't need a second click.
+	AutoApprove bool `form:"auto_approve"`
+}
+
 // AdReviewRequest is the admin payload for approving / rejecting an ad.
 // `note` is optional and surfaced back to the advertiser. Status transitions:
 //   - PENDING → APPROVED + start/end window may be set, status flips to ACTIVE

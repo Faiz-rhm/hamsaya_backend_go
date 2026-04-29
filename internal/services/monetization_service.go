@@ -18,15 +18,17 @@ import (
 // not implemented here — it will live in a separate user-facing service so
 // the admin path stays focused on review/oversight semantics.
 type MonetizationService struct {
-	repo   repositories.MonetizationRepository
-	logger *zap.Logger
+	repo    repositories.MonetizationRepository
+	storage *StorageService
+	logger  *zap.Logger
 }
 
 func NewMonetizationService(
 	repo repositories.MonetizationRepository,
+	storage *StorageService,
 	logger *zap.Logger,
 ) *MonetizationService {
-	return &MonetizationService{repo: repo, logger: logger}
+	return &MonetizationService{repo: repo, storage: storage, logger: logger}
 }
 
 // ErrAdNotFound is returned when an ad lookup misses.
@@ -40,6 +42,29 @@ var (
 
 func (s *MonetizationService) ListAds(ctx context.Context, status string, page, limit int) ([]*models.Ad, int, error) {
 	return s.repo.ListAds(ctx, normalizeAdStatus(status), page, limit)
+}
+
+// CreateAd inserts a new placement. `imageURL` may be empty when the admin
+// did not attach an image. Status defaults to PENDING; AutoApprove flips it
+// to ACTIVE for super_admin convenience.
+func (s *MonetizationService) CreateAd(
+	ctx context.Context,
+	req *models.AdCreateRequest,
+	imageURL string,
+) (*models.Ad, error) {
+	if err := ValidateTargetURL(req.TargetURL); err != nil {
+		return nil, err
+	}
+	status := "PENDING"
+	if req.AutoApprove {
+		status = "ACTIVE"
+	}
+	body := ""
+	if req.Body != nil {
+		body = *req.Body
+	}
+	return s.repo.CreateAd(ctx, req.AdvertiserID, req.Title, body, imageURL,
+		req.TargetURL, status, req.StartAt, req.EndAt)
 }
 
 func (s *MonetizationService) GetAd(ctx context.Context, id string) (*models.Ad, error) {

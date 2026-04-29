@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 
@@ -20,6 +21,7 @@ type MonetizationRepository interface {
 	// Ads
 	ListAds(ctx context.Context, status string, page, limit int) ([]*models.Ad, int, error)
 	GetAd(ctx context.Context, id string) (*models.Ad, error)
+	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, status string, startAt, endAt *time.Time) (*models.Ad, error)
 	UpdateAdStatus(ctx context.Context, id, status, reviewedBy string, req *models.AdReviewRequest) (*models.Ad, error)
 	DeleteAd(ctx context.Context, id string) error
 
@@ -136,6 +138,25 @@ func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.
 		return nil, fmt.Errorf("ad get: %w", err)
 	}
 	return ad, nil
+}
+
+func (r *monetizationRepository) CreateAd(
+	ctx context.Context,
+	advertiserID, title, body, imageURL, targetURL, status string,
+	startAt, endAt *time.Time,
+) (*models.Ad, error) {
+	const q = `
+		INSERT INTO ads (advertiser_id, title, body, image_url, target_url, status, start_at, end_at)
+		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8)
+		RETURNING id
+	`
+	var id string
+	if err := r.db.Pool.QueryRow(ctx, q,
+		advertiserID, title, body, imageURL, targetURL, status, startAt, endAt,
+	).Scan(&id); err != nil {
+		return nil, fmt.Errorf("ad create: %w", err)
+	}
+	return r.GetAd(ctx, id)
 }
 
 func (r *monetizationRepository) UpdateAdStatus(

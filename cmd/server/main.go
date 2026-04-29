@@ -279,7 +279,7 @@ func main() {
 	categoryService := services.NewCategoryService(categoryRepo, logger)
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
 	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, redisClient, logger)
-	monetizationService := services.NewMonetizationService(monetizationRepo, logger)
+	monetizationService := services.NewMonetizationService(monetizationRepo, storageService, logger)
 	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, dailyLimitService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
@@ -355,7 +355,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminService, validator, logger)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
 	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
-	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, validator, logger)
+	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, storageService, validator, logger)
 	appLogHandler := handlers.NewAppLogHandler(appLogRepo, logger)
 
 	// Health check routes (no versioning)
@@ -721,6 +721,7 @@ func main() {
 			// submission, boost purchase, credit topup) lives elsewhere; these
 			// routes are oversight + ad review only.
 			admin.GET("/ads", adminOnly, monetizationHandler.ListAds)
+			admin.POST("/ads", adminOnly, monetizationHandler.CreateAd)
 			admin.GET("/ads/:ad_id", adminOnly, monetizationHandler.GetAd)
 			admin.PUT("/ads/:ad_id/approve", adminOnly, monetizationHandler.ApproveAd)
 			admin.PUT("/ads/:ad_id/reject", adminOnly, monetizationHandler.RejectAd)
