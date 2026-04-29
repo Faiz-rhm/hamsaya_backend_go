@@ -319,7 +319,10 @@ func GetAdminUser(c *gin.Context) (*models.User, bool) {
 
 // extractAndValidateToken extracts and validates a JWT. Resolution order:
 //  1. Authorization: Bearer <token> header — used by mobile clients.
-//  2. admin_token cookie — used by the admin SPA (HttpOnly, set by
+//  2. ?token= query parameter — used for WebSocket upgrade requests where
+//     Android's dart:io WebSocket does not forward custom headers during the
+//     HTTP→WS handshake.
+//  3. admin_token cookie — used by the admin SPA (HttpOnly, set by
 //     /auth/admin/login). Only consulted when the Authorization header is
 //     absent so legacy callers are unaffected.
 func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTClaims, error) {
@@ -331,6 +334,10 @@ func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTCla
 			return nil, utils.NewUnauthorizedError("Invalid authorization header format", nil)
 		}
 		token = parts[1]
+	} else if queryToken := c.Query("token"); queryToken != "" {
+		// WebSocket upgrade path: Android dart:io drops custom headers during
+		// the HTTP→WS handshake so the token is passed as a query parameter.
+		token = queryToken
 	} else if cookie, err := c.Request.Cookie(utils.CookieAdminAccessToken); err == nil {
 		token = cookie.Value
 	} else {
