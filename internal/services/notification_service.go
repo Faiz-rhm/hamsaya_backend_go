@@ -150,12 +150,17 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 		zap.String("type", string(req.Type)),
 	)
 
-	// Send real-time notification via WebSocket
+	// Send real-time notification via WebSocket. We also include the new
+	// unread count so the mobile badge updates instantly without an extra
+	// API call — same pattern as X/Twitter and Facebook.
 	if s.wsHub != nil {
 		go func() {
+			ctxWS := context.WithoutCancel(ctx)
+			unread, _ := s.notificationRepo.GetUnreadCount(ctxWS, req.UserID, nil)
 			wsPayload := map[string]interface{}{
-				"type":    "notification",
-				"payload": notification.ToNotificationResponse(),
+				"type":          "notification",
+				"payload":       notification.ToNotificationResponse(),
+				"unread_count":  unread,
 			}
 			if err := s.wsHub.SendToUser(req.UserID, wsPayload); err != nil {
 				s.logger.Debug("Failed to send WebSocket notification",

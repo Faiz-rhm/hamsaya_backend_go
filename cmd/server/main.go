@@ -583,19 +583,20 @@ func main() {
 			categories.GET("/:category_id", authMiddleware.RequireAuth(), categoryHandler.GetCategory)
 		}
 
-		// Chat routes (require verified email for sending messages, etc.)
+		// Chat routes — WS uses plain auth (only needs to receive frames, no
+		// email verification required). Send/write endpoints use verifiedAuth.
 		chat := v1.Group("/chat")
-		chat.Use(verifiedAuth)
 		{
-			// WebSocket endpoint for real-time chat
-			chat.GET("/ws", chatHandler.HandleWebSocket)
+			// WebSocket: plain auth — unverified users still need real-time
+			// notification + chat frames.
+			chat.GET("/ws", authMiddleware.RequireAuth(), chatHandler.HandleWebSocket)
 
-			// HTTP endpoints for chat
-			chat.POST("/messages", chatHandler.SendMessage)
-			chat.GET("/conversations", chatHandler.GetConversations)
-			chat.GET("/conversations/:conversation_id/messages", chatHandler.GetMessages)
-			chat.POST("/conversations/:conversation_id/read", chatHandler.MarkConversationAsRead)
-			chat.DELETE("/messages/:message_id", chatHandler.DeleteMessage)
+			// HTTP endpoints — write operations still require verified email
+			chat.POST("/messages", verifiedAuth, chatHandler.SendMessage)
+			chat.GET("/conversations", authMiddleware.RequireAuth(), chatHandler.GetConversations)
+			chat.GET("/conversations/:conversation_id/messages", authMiddleware.RequireAuth(), chatHandler.GetMessages)
+			chat.POST("/conversations/:conversation_id/read", authMiddleware.RequireAuth(), chatHandler.MarkConversationAsRead)
+			chat.DELETE("/messages/:message_id", verifiedAuth, chatHandler.DeleteMessage)
 		}
 
 		// Notification routes (require auth for reads; verified email for writes)
