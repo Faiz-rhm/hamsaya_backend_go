@@ -1221,6 +1221,14 @@ func (m *MockAdminRepository) ListBroadcastHistory(ctx context.Context, limit in
 	return args.Get(0).([]*models.BroadcastHistoryItem), args.Error(1)
 }
 
+func (m *MockAdminRepository) GetInboxCounts(ctx context.Context) (*models.AdminInboxCounts, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.AdminInboxCounts), args.Error(1)
+}
+
 func (m *MockAdminRepository) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error) {
 	args := m.Called(ctx, filter)
 	if args.Get(0) == nil {

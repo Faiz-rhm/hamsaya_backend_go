@@ -1344,6 +1344,16 @@ func (h *AdminHandler) BulkDeleteComments(c *gin.Context) {
 	})
 }
 
+// GetInboxCounts returns pending counts for the admin notification bell.
+func (h *AdminHandler) GetInboxCounts(c *gin.Context) {
+	counts, err := h.adminService.GetInboxCounts(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Inbox counts retrieved", counts)
+}
+
 // ListBroadcastHistory returns past admin broadcast notifications grouped by
 // (title, message, sent_at minute). Each row shows recipient count.
 func (h *AdminHandler) ListBroadcastHistory(c *gin.Context) {

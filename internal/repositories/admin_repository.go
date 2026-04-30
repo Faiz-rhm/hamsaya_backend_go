@@ -69,6 +69,7 @@ type AdminRepository interface {
 	GetAllUserIDs(ctx context.Context) ([]string, error)
 	GetUserIDsByProvince(ctx context.Context, province string) ([]string, error)
 	ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error)
+	GetInboxCounts(ctx context.Context) (*models.AdminInboxCounts, error)
 
 	ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error)
 	ResolveFeedback(ctx context.Context, feedbackID, adminID, status string, notes *string) error
@@ -2061,6 +2062,38 @@ func (r *adminRepository) ListBroadcastHistory(ctx context.Context, limit int) (
 		items = append(items, it)
 	}
 	return items, nil
+}
+
+// GetInboxCounts returns pending counts that drive the admin notification
+// bell. All sub-queries run in a single round-trip via a UNION ALL.
+func (r *adminRepository) GetInboxCounts(ctx context.Context) (*models.AdminInboxCounts, error) {
+	c := &models.AdminInboxCounts{}
+	query := `
+		SELECT
+			(SELECT COUNT(*) FROM post_reports WHERE report_status = 'PENDING'),
+			(SELECT COUNT(*) FROM comment_reports WHERE report_status = 'PENDING'),
+			(SELECT COUNT(*) FROM user_reports WHERE resolved = false),
+			(SELECT COUNT(*) FROM business_reports WHERE report_status = 'PENDING'),
+			(SELECT COUNT(*) FROM user_feedback WHERE status = 'OPEN'),
+			(SELECT COUNT(*) FROM (
+				SELECT DISTINCT ON (user_id) user_id, is_from_user
+				FROM help_chat_messages
+				ORDER BY user_id, created_at DESC
+			) t WHERE is_from_user = true)
+	`
+	row := r.db.Pool.QueryRow(ctx, query)
+	if err := row.Scan(
+		&c.PostReports,
+		&c.CommentReports,
+		&c.UserReports,
+		&c.BusinessReports,
+		&c.OpenFeedback,
+		&c.UnansweredHelp,
+	); err != nil {
+		return nil, err
+	}
+	c.Total = c.PostReports + c.CommentReports + c.UserReports + c.BusinessReports + c.OpenFeedback + c.UnansweredHelp
+	return c, nil
 }
 
 func (r *adminRepository) ListFeedback(ctx context.Context, filter *models.AdminFeedbackFilter) ([]*models.AdminFeedbackResponse, int64, error) {

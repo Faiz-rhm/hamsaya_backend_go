@@ -930,6 +930,16 @@ func (s *AdminService) BroadcastNotification(ctx context.Context, req *models.Br
 	return nil
 }
 
+// GetInboxCounts returns pending-attention counts for the admin header bell.
+func (s *AdminService) GetInboxCounts(ctx context.Context) (*models.AdminInboxCounts, error) {
+	counts, err := s.adminRepo.GetInboxCounts(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get inbox counts", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get inbox counts", err)
+	}
+	return counts, nil
+}
+
 // ListBroadcastHistory returns past admin broadcasts grouped by send batch.
 func (s *AdminService) ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error) {
 	items, err := s.adminRepo.ListBroadcastHistory(ctx, limit)

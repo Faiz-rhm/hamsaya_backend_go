@@ -654,6 +654,7 @@ func main() {
 		{
 			// Dashboard & Analytics — admin-tier (mods don't see analytics).
 			admin.GET("/stats", adminOnly, adminHandler.GetDashboardStats)
+			admin.GET("/inbox-counts", adminHandler.GetInboxCounts)
 			admin.GET("/analytics/users", adminOnly, adminHandler.GetUserAnalytics)
 			admin.GET("/analytics/posts", adminOnly, adminHandler.GetPostAnalytics)
 			admin.GET("/analytics/engagement", adminOnly, adminHandler.GetEngagementAnalytics)

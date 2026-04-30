@@ -460,6 +460,18 @@ type BroadcastNotificationRequest struct {
 	UserIDs  []string `json:"user_ids,omitempty"`
 }
 
+// AdminInboxCounts powers the admin header notification bell. Each field is
+// the count of items needing attention so the UI can render category badges.
+type AdminInboxCounts struct {
+	PostReports     int64 `json:"post_reports"`
+	CommentReports  int64 `json:"comment_reports"`
+	UserReports     int64 `json:"user_reports"`
+	BusinessReports int64 `json:"business_reports"`
+	OpenFeedback    int64 `json:"open_feedback"`
+	UnansweredHelp  int64 `json:"unanswered_help"`
+	Total           int64 `json:"total"`
+}
+
 // BroadcastHistoryItem groups admin broadcast notifications by send batch.
 // Recipients are bucketed by (title, message, minute) so a single broadcast
 // becomes one row regardless of fan-out size.
