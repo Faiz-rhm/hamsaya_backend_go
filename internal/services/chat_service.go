@@ -434,12 +434,17 @@ func (s *ChatService) notifyMessageSent(message *models.Message, recipientID str
 
 	data := map[string]interface{}{
 		"actor_id":        message.SenderID,
+		"actor_name":      senderName, // used by NotificationCard for display name
 		"conversation_id": message.ConversationID,
 		"message_id":      message.ID,
 		"recipient_name":  senderName,
 	}
 	if senderProfile != nil && senderProfile.Avatar != nil {
+		data["actor_avatar"] = senderProfile.Avatar.URL
 		data["recipient_avatar"] = senderProfile.Avatar.URL
+	}
+	if senderProfile != nil && senderProfile.AvatarColor != nil {
+		data["actor_avatar_color"] = *senderProfile.AvatarColor
 	}
 
 	title := senderName
