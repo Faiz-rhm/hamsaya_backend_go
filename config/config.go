@@ -114,6 +114,14 @@ type JWTConfig struct {
 	Secret               string
 	AccessTokenDuration  time.Duration
 	RefreshTokenDuration time.Duration
+	// RefreshGrace is how long a rotated refresh token is still honored. Within
+	// this window, presenting the old token returns the cached new pair instead
+	// of revoking the session. Outside it, presenting a rotated token triggers
+	// reuse detection and revokes the whole session family. 0 disables grace.
+	RefreshGrace time.Duration
+	// DeviceCredentialDuration sets the TTL for /auth/device/login secrets.
+	// 0 means non-expiring (until explicit revoke).
+	DeviceCredentialDuration time.Duration
 }
 
 // OAuthConfig holds OAuth provider configurations
@@ -242,9 +250,11 @@ func Load() (*Config, error) {
 			DB:       viper.GetInt("REDIS_DB"),
 		},
 		JWT: JWTConfig{
-			Secret:               viper.GetString("JWT_SECRET"),
-			AccessTokenDuration:  viper.GetDuration("JWT_ACCESS_TOKEN_DURATION"),
-			RefreshTokenDuration: viper.GetDuration("JWT_REFRESH_TOKEN_DURATION"),
+			Secret:                   viper.GetString("JWT_SECRET"),
+			AccessTokenDuration:      viper.GetDuration("JWT_ACCESS_TOKEN_DURATION"),
+			RefreshTokenDuration:     viper.GetDuration("JWT_REFRESH_TOKEN_DURATION"),
+			RefreshGrace:             viper.GetDuration("JWT_REFRESH_GRACE"),
+			DeviceCredentialDuration: viper.GetDuration("DEVICE_CREDENTIAL_DURATION"),
 		},
 		OAuth: OAuthConfig{
 			Google: GoogleOAuthConfig{

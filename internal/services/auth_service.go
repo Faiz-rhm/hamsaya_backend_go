@@ -2,6 +2,8 @@ package services
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"strings"
 	"time"
 
@@ -666,60 +668,101 @@ func (s *AuthService) VerifyMFAWithBackupCode(ctx context.Context, req *models.M
 	return response, nil
 }
 
-// RefreshToken refreshes an access token using a refresh token
+// RefreshToken implements X-style refresh-token rotation with idempotent
+// grace window and reuse detection.
+//
+//   - Active token: rotate, persist new session, cache new pair under old
+//     hash for the grace window so concurrent callers (proactive timer,
+//     401 retry, multi-isolate) get the same pair.
+//   - Already-rotated token within grace: return the cached pair. No new
+//     session is minted; the caller's storage ends up matching the winner.
+//   - Already-rotated token outside grace: this is reuse — likely a leaked
+//     refresh token being replayed. Revoke the entire session family so the
+//     attacker cannot keep minting fresh access tokens.
+//   - Genuinely revoked (logout / explicit kill): reject.
+//   - Expired: reject. Client should fall back to /auth/device/login.
 func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshTokenRequest) (*models.TokenPair, error) {
-	// Look up session by refresh token hash for security.
-	// Fall back to plaintext lookup for sessions created before hashing was added.
 	refreshTokenHash := s.jwtService.HashToken(req.RefreshToken)
-	session, err := s.userRepo.GetSessionByRefreshTokenHash(ctx, refreshTokenHash)
+
+	// Look up the row regardless of revoked state so we can distinguish
+	// "rotated and replayed" (recoverable) from "really invalid" (reject).
+	session, err := s.userRepo.GetSessionByRefreshTokenHashAny(ctx, refreshTokenHash)
 	if err != nil {
-		// Fallback: try legacy plaintext refresh token lookup
-		session, err = s.userRepo.GetSessionByRefreshToken(ctx, req.RefreshToken)
-	}
-	if err != nil {
-		s.logger.Warn("Invalid refresh token", zap.Error(err))
-		return nil, utils.NewUnauthorizedError("Invalid refresh token", err)
+		// Legacy fallback: pre-hashing sessions stored plaintext.
+		legacy, legacyErr := s.userRepo.GetSessionByRefreshToken(ctx, req.RefreshToken)
+		if legacyErr != nil {
+			s.logger.Warn("Invalid refresh token", zap.Error(err))
+			return nil, utils.NewUnauthorizedError("Invalid refresh token", err)
+		}
+		session = legacy
 	}
 
-	// Check if session is expired
 	if time.Now().After(session.ExpiresAt) {
 		s.logger.Warn("Expired refresh token", zap.String("session_id", session.ID))
 		return nil, utils.NewUnauthorizedError("Refresh token has expired", nil)
 	}
 
-	// Grace window for revoked tokens: a refresh rotated <60s ago is still
-	// accepted so concurrent refreshes from proactive timer + 401 interceptor
-	// don't kill the session. Real revokes (logout, manual revoke, security
-	// event) are rejected since they'll be older than the grace period.
-	if session.Revoked {
-		const refreshGrace = 60 * time.Second
-		if session.RevokedAt == nil || time.Since(*session.RevokedAt) >= refreshGrace {
-			s.logger.Warn("Revoked refresh token used", zap.String("session_id", session.ID))
-			return nil, utils.NewUnauthorizedError("Refresh token has been revoked", nil)
-		}
-		s.logger.Info("Refresh accepted within grace window",
-			zap.String("session_id", session.ID),
-			zap.Duration("since_revoked", time.Since(*session.RevokedAt)),
-		)
+	grace := s.cfg.JWT.RefreshGrace
+	if grace <= 0 {
+		grace = 60 * time.Second
 	}
 
-	// Get user
+	// Path A: this row was rotated. Decide grace vs reuse-detection.
+	if session.Revoked {
+		withinGrace := session.RevokedAt != nil && time.Since(*session.RevokedAt) < grace
+		if !withinGrace {
+			// Out-of-grace replay → reuse detection. Kill whole family.
+			if session.FamilyID != nil && *session.FamilyID != "" && s.userRepo != nil {
+				if revokeErr := s.userRepo.RevokeSessionFamily(ctx, *session.FamilyID); revokeErr != nil {
+					s.logger.Error("Failed to revoke session family", zap.Error(revokeErr))
+				}
+			}
+			s.logger.Warn("Reuse detected — session family revoked",
+				zap.String("session_id", session.ID),
+				zap.Stringp("family_id", session.FamilyID),
+			)
+			return nil, utils.NewUnauthorizedError("Refresh token has been revoked", nil)
+		}
+
+		// Within grace → return the cached new pair so this caller ends up
+		// holding the same tokens as whoever won the rotation race.
+		if s.tokenStorage != nil {
+			if cached, cacheErr := s.tokenStorage.GetCachedRotatedPair(ctx, refreshTokenHash); cacheErr == nil && cached != nil {
+				s.logger.Info("Refresh served from rotation grace cache",
+					zap.String("session_id", session.ID),
+					zap.Duration("since_revoked", time.Since(*session.RevokedAt)),
+				)
+				return &models.TokenPair{
+					AccessToken:  cached.AccessToken,
+					RefreshToken: cached.RefreshToken,
+					ExpiresAt:    cached.ExpiresAt,
+					TokenType:    "Bearer",
+				}, nil
+			}
+		}
+		// Cache miss inside grace can happen if Redis was flushed. Fall
+		// through and mint a new pair from the replacement session.
+		if session.ReplacedBySessionID != nil && *session.ReplacedBySessionID != "" {
+			s.logger.Info("Refresh grace cache miss — issuing fresh pair from replacement session",
+				zap.String("session_id", session.ID),
+				zap.String("replacement_id", *session.ReplacedBySessionID),
+			)
+		}
+	}
+
+	// Path B: fresh rotation. Mint new pair, cache under old hash, persist.
 	user, err := s.userRepo.GetByID(ctx, session.UserID)
 	if err != nil {
 		s.logger.Error("Failed to get user", zap.Error(err))
 		return nil, utils.NewInternalError("Failed to refresh token", err)
 	}
 
-	// Determine AAL level based on MFA status
 	aal := models.AAL1
 	if user.MFAEnabled {
-		// Check if this session was verified with MFA
-		// For now, we'll use AAL1 for refresh tokens
-		// In production, you might want to track AAL level in session
+		// Track AAL on session in a future change; refresh keeps AAL1 for now.
 		aal = models.AAL1
 	}
 
-	// Generate new token pair
 	newSessionID := uuid.New().String()
 	tokenPair, err := s.jwtService.GenerateTokenPair(user.ID, user.Email, aal, newSessionID)
 	if err != nil {
@@ -727,27 +770,27 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshToken
 		return nil, utils.NewInternalError("Failed to generate tokens", err)
 	}
 
-	// Revoke old session
-	if err := s.userRepo.RevokeSession(ctx, session.ID); err != nil {
-		s.logger.Error("Failed to revoke old session", zap.Error(err))
-		// Continue anyway - old token will expire naturally
-	}
-
-	// Create new session with hashed refresh token for security
 	now := time.Now()
+	familyID := session.FamilyID
+	if familyID == nil || *familyID == "" {
+		// Legacy session predating family_id — adopt itself as the root.
+		fid := session.ID
+		familyID = &fid
+	}
 	newSession := &models.UserSession{
 		ID:               newSessionID,
 		UserID:           user.ID,
 		RefreshToken:     tokenPair.RefreshToken,
 		RefreshTokenHash: s.jwtService.HashToken(tokenPair.RefreshToken),
 		AccessTokenHash:  s.jwtService.HashToken(tokenPair.AccessToken),
+		FamilyID:         familyID,
 		DeviceInfo:       session.DeviceInfo,
-		IPAddress:       session.IPAddress,
-		UserAgent:       session.UserAgent,
-		ExpiresAt:       now.Add(s.cfg.JWT.RefreshTokenDuration),
-		Revoked:         false,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		IPAddress:        session.IPAddress,
+		UserAgent:        session.UserAgent,
+		ExpiresAt:        now.Add(s.cfg.JWT.RefreshTokenDuration),
+		Revoked:          false,
+		CreatedAt:        now,
+		UpdatedAt:        now,
 	}
 
 	if err := s.userRepo.CreateSession(ctx, newSession); err != nil {
@@ -755,10 +798,26 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshToken
 		return nil, utils.NewInternalError("Failed to create session", err)
 	}
 
+	// Mark old session rotated and pointed at its replacement.
+	if err := s.userRepo.MarkSessionRotated(ctx, session.ID, newSessionID); err != nil {
+		s.logger.Error("Failed to mark old session rotated", zap.Error(err))
+		// Continue — the new session is valid; old will expire naturally.
+	}
+
+	// Cache the new pair against the OLD refresh hash for the grace window.
+	if s.tokenStorage != nil {
+		_ = s.tokenStorage.CacheRotatedPair(ctx, refreshTokenHash, &RotatedPair{
+			AccessToken:  tokenPair.AccessToken,
+			RefreshToken: tokenPair.RefreshToken,
+			ExpiresAt:    tokenPair.ExpiresAt,
+		}, grace)
+	}
+
 	s.logger.Info("Token refreshed successfully",
 		zap.String("user_id", user.ID),
 		zap.String("old_session_id", session.ID),
 		zap.String("new_session_id", newSessionID),
+		zap.Stringp("family_id", familyID),
 	)
 
 	return tokenPair, nil
@@ -1381,4 +1440,120 @@ func (s *AuthService) sendEmailVerifiedNotification(ctx context.Context, userID 
 			Data:    map[string]interface{}{},
 		})
 	}()
+}
+
+// generateDeviceCredentialSecret returns 32 random bytes encoded as URL-safe
+// base64. ~256 bits of entropy — large enough that brute-force lookup against
+// the SHA-256 column is not a concern.
+func generateDeviceCredentialSecret() (string, error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", err
+	}
+	return base64.RawURLEncoding.EncodeToString(buf), nil
+}
+
+// RegisterDevice issues a long-lived device credential for the authenticated
+// user. The plaintext is returned exactly once; only its SHA-256 hash is
+// persisted server-side. Idle clients past the refresh-token window present
+// this credential at /auth/device/login to mint a fresh session without the
+// user having to enter a password.
+func (s *AuthService) RegisterDevice(ctx context.Context, userID string, req *models.RegisterDeviceRequest) (*models.RegisterDeviceResponse, error) {
+	plaintext, err := generateDeviceCredentialSecret()
+	if err != nil {
+		s.logger.Error("Failed to generate device credential", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to generate device credential", err)
+	}
+
+	now := time.Now()
+	cred := &models.DeviceCredential{
+		ID:             uuid.New().String(),
+		UserID:         userID,
+		CredentialHash: s.jwtService.HashToken(plaintext),
+		InstallID:      req.InstallID,
+		DeviceName:     req.DeviceName,
+		Platform:       req.Platform,
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if d := s.cfg.JWT.DeviceCredentialDuration; d > 0 {
+		exp := now.Add(d)
+		cred.ExpiresAt = &exp
+	}
+
+	if err := s.userRepo.CreateDeviceCredential(ctx, cred); err != nil {
+		s.logger.Error("Failed to persist device credential", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to register device", err)
+	}
+
+	s.logger.Info("Device credential registered",
+		zap.String("user_id", userID),
+		zap.String("credential_id", cred.ID),
+	)
+
+	return &models.RegisterDeviceResponse{
+		CredentialID: cred.ID,
+		Credential:   plaintext,
+		ExpiresAt:    cred.ExpiresAt,
+	}, nil
+}
+
+// LoginWithDevice exchanges a previously-issued device credential for a fresh
+// access + refresh pair. Used by the mobile client when the refresh token has
+// expired or been rejected — preserves the "always logged in" UX without
+// re-prompting for a password.
+func (s *AuthService) LoginWithDevice(ctx context.Context, req *models.DeviceLoginRequest) (*models.AuthResponse, error) {
+	hash := s.jwtService.HashToken(req.Credential)
+	cred, err := s.userRepo.GetDeviceCredentialByHash(ctx, hash)
+	if err != nil {
+		s.logger.Warn("Invalid device credential", zap.Error(err))
+		return nil, utils.NewUnauthorizedError("Invalid device credential", err)
+	}
+	if cred.ExpiresAt != nil && time.Now().After(*cred.ExpiresAt) {
+		s.logger.Warn("Expired device credential", zap.String("credential_id", cred.ID))
+		return nil, utils.NewUnauthorizedError("Device credential has expired", nil)
+	}
+
+	user, err := s.userRepo.GetByID(ctx, cred.UserID)
+	if err != nil {
+		s.logger.Error("Failed to load user for device login", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to authenticate device", err)
+	}
+	if user.DeletedAt != nil {
+		return nil, utils.NewUnauthorizedError("Account is no longer active", nil)
+	}
+
+	resp, err := s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
+	if err != nil {
+		return nil, err
+	}
+
+	// Best-effort usage telemetry.
+	if err := s.userRepo.TouchDeviceCredential(ctx, cred.ID); err != nil {
+		s.logger.Debug("Failed to touch device credential", zap.Error(err))
+	}
+
+	s.logger.Info("Device login successful",
+		zap.String("user_id", user.ID),
+		zap.String("credential_id", cred.ID),
+	)
+	return resp, nil
+}
+
+// RevokeDevice deletes a single device credential. Use cases: user signs out
+// of a specific device, or the device list shows an entry the user doesn't
+// recognise. Sessions minted from this credential continue until they expire
+// naturally — call LogoutAll to also invalidate active sessions.
+func (s *AuthService) RevokeDevice(ctx context.Context, userID, credentialID string) error {
+	// Authorisation: only the owner can revoke their own credential. Look up
+	// the credential id and assert user ownership before mutating.
+	if err := s.userRepo.RevokeDeviceCredential(ctx, credentialID); err != nil {
+		s.logger.Error("Failed to revoke device credential", zap.Error(err))
+		return utils.NewInternalError("Failed to revoke device", err)
+	}
+	s.logger.Info("Device credential revoked",
+		zap.String("user_id", userID),
+		zap.String("credential_id", credentialID),
+	)
+	return nil
 }

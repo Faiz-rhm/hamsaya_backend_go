@@ -337,6 +337,110 @@ func (h *AuthHandler) LogoutAll(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Logged out from all devices successfully", nil)
 }
 
+// RegisterDevice godoc
+// @Summary Register a long-lived device credential
+// @Description Issues a device-bound credential. Plaintext returned exactly once and must be stored in the device Keychain/Keystore.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.RegisterDeviceRequest false "Device metadata"
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /auth/device/register [post]
+func (h *AuthHandler) RegisterDevice(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	var req models.RegisterDeviceRequest
+	// Body is optional — accept empty payload as "anonymous device".
+	if c.Request.ContentLength > 0 {
+		if err := c.ShouldBindJSON(&req); err != nil {
+			utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+			return
+		}
+		if err := h.validator.Validate(&req); err != nil {
+			utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+			return
+		}
+	}
+
+	resp, err := h.authService.RegisterDevice(c.Request.Context(), userID.(string), &req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Device credential registered", resp)
+}
+
+// DeviceLogin godoc
+// @Summary Exchange a device credential for a session
+// @Description Mints a fresh access + refresh pair from a previously-registered device credential. Used when the refresh token has expired.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param request body models.DeviceLoginRequest true "Device credential"
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /auth/device/login [post]
+func (h *AuthHandler) DeviceLogin(c *gin.Context) {
+	var req models.DeviceLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	if ip := c.ClientIP(); ip != "" {
+		req.IPAddress = &ip
+	}
+	if ua := c.Request.UserAgent(); ua != "" {
+		req.UserAgent = &ua
+	}
+
+	resp, err := h.authService.LoginWithDevice(c.Request.Context(), &req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Device login successful", resp)
+}
+
+// RevokeDevice godoc
+// @Summary Revoke a device credential
+// @Description Marks a device credential as revoked. The bearer of that credential can no longer use /auth/device/login.
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "Credential ID"
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /auth/device/{id} [delete]
+func (h *AuthHandler) RevokeDevice(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+	credentialID := c.Param("id")
+	if credentialID == "" {
+		utils.SendError(c, http.StatusBadRequest, "Missing credential id", utils.ErrValidation)
+		return
+	}
+	if err := h.authService.RevokeDevice(c.Request.Context(), userID.(string), credentialID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Device revoked", nil)
+}
+
 // VerifyEmail godoc
 // @Summary Verify email
 // @Description Verify user's email address

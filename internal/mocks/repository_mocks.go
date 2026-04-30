@@ -143,8 +143,54 @@ func (m *MockUserRepository) GetSessionByRefreshTokenHash(ctx context.Context, r
 	return args.Get(0).(*models.UserSession), args.Error(1)
 }
 
+func (m *MockUserRepository) GetSessionByRefreshTokenHashAny(ctx context.Context, refreshTokenHash string) (*models.UserSession, error) {
+	args := m.Called(ctx, refreshTokenHash)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.UserSession), args.Error(1)
+}
+
 func (m *MockUserRepository) RevokeSession(ctx context.Context, sessionID string) error {
 	args := m.Called(ctx, sessionID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) MarkSessionRotated(ctx context.Context, sessionID, replacementSessionID string) error {
+	args := m.Called(ctx, sessionID, replacementSessionID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) RevokeSessionFamily(ctx context.Context, familyID string) error {
+	args := m.Called(ctx, familyID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) CreateDeviceCredential(ctx context.Context, cred *models.DeviceCredential) error {
+	args := m.Called(ctx, cred)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) GetDeviceCredentialByHash(ctx context.Context, hash string) (*models.DeviceCredential, error) {
+	args := m.Called(ctx, hash)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.DeviceCredential), args.Error(1)
+}
+
+func (m *MockUserRepository) TouchDeviceCredential(ctx context.Context, credentialID string) error {
+	args := m.Called(ctx, credentialID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) RevokeDeviceCredential(ctx context.Context, credentialID string) error {
+	args := m.Called(ctx, credentialID)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) RevokeAllUserDeviceCredentials(ctx context.Context, userID string) error {
+	args := m.Called(ctx, userID)
 	return args.Error(0)
 }
 

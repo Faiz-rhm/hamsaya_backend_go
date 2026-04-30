@@ -292,3 +292,54 @@ type SessionCacheData struct {
 	Revoked         bool
 	ExpiresAt       time.Time
 }
+
+// RotatedPair holds the new token pair returned by /auth/refresh, cached by
+// the hash of the OLD refresh token. Within the rotation grace window, any
+// caller presenting the rotated token gets back this exact pair instead of
+// minting a new one — making refresh idempotent across concurrent isolates,
+// proactive timers, and 401 retry interceptors.
+type RotatedPair struct {
+	AccessToken  string    `json:"access_token"`
+	RefreshToken string    `json:"refresh_token"`
+	ExpiresAt    time.Time `json:"expires_at"`
+}
+
+// CacheRotatedPair stores the new token pair against the OLD refresh-token
+// hash for the rotation grace window. ttl should match cfg.JWT.RefreshGrace.
+func (s *TokenStorageService) CacheRotatedPair(ctx context.Context, oldRefreshHash string, pair *RotatedPair, ttl time.Duration) error {
+	key := "auth:rotated:" + oldRefreshHash
+	value := fmt.Sprintf("%s|%s|%d", pair.AccessToken, pair.RefreshToken, pair.ExpiresAt.Unix())
+	if err := s.redis.Set(ctx, key, value, ttl).Err(); err != nil {
+		s.logger.Warn("Failed to cache rotated pair", zap.Error(err))
+		return err
+	}
+	return nil
+}
+
+// GetCachedRotatedPair returns the new pair previously issued for this
+// rotated refresh token, or (nil, nil) on cache miss.
+func (s *TokenStorageService) GetCachedRotatedPair(ctx context.Context, oldRefreshHash string) (*RotatedPair, error) {
+	key := "auth:rotated:" + oldRefreshHash
+	value, err := s.redis.Get(ctx, key).Result()
+	if err == redis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	parts := strings.SplitN(value, "|", 3)
+	if len(parts) != 3 {
+		s.redis.Del(ctx, key)
+		return nil, nil
+	}
+	expiresUnix, err := strconv.ParseInt(parts[2], 10, 64)
+	if err != nil {
+		s.redis.Del(ctx, key)
+		return nil, nil
+	}
+	return &RotatedPair{
+		AccessToken:  parts[0],
+		RefreshToken: parts[1],
+		ExpiresAt:    time.Unix(expiresUnix, 0),
+	}, nil
+}

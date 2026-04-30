@@ -47,6 +47,31 @@ type RefreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token" validate:"required,max=4096"`
 }
 
+// RegisterDeviceRequest registers a device-bound credential for the current
+// authenticated user. Plaintext credential is returned exactly once.
+type RegisterDeviceRequest struct {
+	InstallID  *string `json:"install_id,omitempty" validate:"omitempty,max=128"`
+	DeviceName *string `json:"device_name,omitempty" validate:"omitempty,max=255"`
+	Platform   *string `json:"platform,omitempty" validate:"omitempty,oneof=ios android web"`
+}
+
+// RegisterDeviceResponse returns the plaintext credential and its server-side
+// id. The plaintext is never persisted server-side and never returned again.
+type RegisterDeviceResponse struct {
+	CredentialID string     `json:"credential_id"`
+	Credential   string     `json:"credential"`
+	ExpiresAt    *time.Time `json:"expires_at,omitempty"`
+}
+
+// DeviceLoginRequest exchanges a previously-issued device credential for a
+// fresh token pair. Used when the refresh token has expired or been rejected.
+type DeviceLoginRequest struct {
+	Credential string  `json:"credential" validate:"required,max=4096"`
+	DeviceInfo *string `json:"device_info,omitempty" validate:"omitempty,max=512"`
+	IPAddress  *string `json:"-"`
+	UserAgent  *string `json:"-"`
+}
+
 // ForgotPasswordRequest represents a forgot password request
 type ForgotPasswordRequest struct {
 	Email string `json:"email" validate:"required,email,max=320"`

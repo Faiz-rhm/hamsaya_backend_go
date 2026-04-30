@@ -145,14 +145,41 @@ type UserSession struct {
 	RefreshToken     string     `json:"-"` // Never expose
 	RefreshTokenHash string     `json:"-"` // SHA-256 hash of refresh token for secure lookup
 	AccessTokenHash  string     `json:"-"` // Never expose
-	DeviceInfo       *string    `json:"device_info,omitempty"`
-	IPAddress        *string    `json:"ip_address,omitempty"`
-	UserAgent        *string    `json:"user_agent,omitempty"`
-	ExpiresAt        time.Time  `json:"expires_at"`
-	Revoked          bool       `json:"revoked"`
-	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	// FamilyID groups every session descended from a single login. Reuse
+	// detection on a rotated refresh token revokes the entire family.
+	FamilyID *string `json:"-"`
+	// ReplacedBySessionID points at the session created when this one was
+	// rotated. Used so a refresh call landing on a rotated-but-still-in-grace
+	// token can locate the cached replacement instead of issuing a new pair.
+	ReplacedBySessionID *string    `json:"-"`
+	DeviceInfo          *string    `json:"device_info,omitempty"`
+	IPAddress           *string    `json:"ip_address,omitempty"`
+	UserAgent           *string    `json:"user_agent,omitempty"`
+	ExpiresAt           time.Time  `json:"expires_at"`
+	Revoked             bool       `json:"revoked"`
+	RevokedAt           *time.Time `json:"revoked_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+}
+
+// DeviceCredential represents a long-lived device-bound credential. The
+// plaintext secret is only ever returned once at registration; the DB stores
+// only its SHA-256 hash. Clients keep the plaintext in iOS Keychain / Android
+// Keystore and present it at /auth/device/login to mint a fresh token pair
+// when the refresh token has aged out.
+type DeviceCredential struct {
+	ID             string     `json:"id"`
+	UserID         string     `json:"user_id"`
+	CredentialHash string     `json:"-"`
+	InstallID      *string    `json:"install_id,omitempty"`
+	DeviceName     *string    `json:"device_name,omitempty"`
+	Platform       *string    `json:"platform,omitempty"`
+	ExpiresAt      *time.Time `json:"expires_at,omitempty"`
+	Revoked        bool       `json:"revoked"`
+	RevokedAt      *time.Time `json:"revoked_at,omitempty"`
+	LastUsedAt     *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
 }
 
 // IsLocked checks if the user account is currently locked

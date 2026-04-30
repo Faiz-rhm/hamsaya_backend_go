@@ -46,11 +46,26 @@ type UserRepository interface {
 	GetSessionByID(ctx context.Context, sessionID string) (*models.UserSession, error)
 	GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*models.UserSession, error)
 	GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (*models.UserSession, error)
+	GetSessionByRefreshTokenHashAny(ctx context.Context, refreshTokenHash string) (*models.UserSession, error)
 	RevokeSession(ctx context.Context, sessionID string) error
+	// MarkSessionRotated revokes a session and points it at its successor so a
+	// concurrent refresh-token holder can recover the cached replacement pair.
+	MarkSessionRotated(ctx context.Context, sessionID, replacementSessionID string) error
+	// RevokeSessionFamily revokes every active session sharing familyID. Used
+	// for reuse detection — a rotated refresh token presented out of grace
+	// indicates a leak, so every descendant session is killed.
+	RevokeSessionFamily(ctx context.Context, familyID string) error
 	RevokeAllUserSessions(ctx context.Context, userID string) error
 	RevokeAllUserSessionsExcept(ctx context.Context, userID string, exceptSessionID string) error
 	GetActiveSessions(ctx context.Context, userID string) ([]*models.UserSession, error)
 	DeleteExpiredSessions(ctx context.Context) (int64, error)
+
+	// Device credentials (long-lived, stored in Keychain/Keystore)
+	CreateDeviceCredential(ctx context.Context, cred *models.DeviceCredential) error
+	GetDeviceCredentialByHash(ctx context.Context, credentialHash string) (*models.DeviceCredential, error)
+	TouchDeviceCredential(ctx context.Context, credentialID string) error
+	RevokeDeviceCredential(ctx context.Context, credentialID string) error
+	RevokeAllUserDeviceCredentials(ctx context.Context, userID string) error
 }
 
 type userRepository struct {
@@ -623,8 +638,8 @@ func (r *userRepository) UpdateProfile(ctx context.Context, profile *models.Prof
 func (r *userRepository) CreateSession(ctx context.Context, session *models.UserSession) error {
 	query := `
 		INSERT INTO user_sessions (id, user_id, refresh_token, refresh_token_hash, access_token_hash,
-			device_info, ip_address, user_agent, expires_at, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			family_id, device_info, ip_address, user_agent, expires_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	// Convert device_info string to JSONB format
@@ -639,12 +654,20 @@ func (r *userRepository) CreateSession(ctx context.Context, session *models.User
 		}
 	}
 
+	// Default family to the session id itself for first-of-family rows.
+	familyID := session.FamilyID
+	if familyID == nil || *familyID == "" {
+		familyID = &session.ID
+		session.FamilyID = familyID
+	}
+
 	_, err := r.db.Pool.Exec(ctx, query,
 		session.ID,
 		session.UserID,
 		session.RefreshToken,
 		session.RefreshTokenHash,
 		session.AccessTokenHash,
+		familyID,
 		deviceInfoJSON,
 		session.IPAddress,
 		session.UserAgent,
@@ -656,66 +679,43 @@ func (r *userRepository) CreateSession(ctx context.Context, session *models.User
 	return err
 }
 
+// sessionSelectCols centralises the column list so all session reads have
+// matching scan order. Update this list whenever the columns change.
+const sessionSelectCols = `id, user_id, refresh_token, refresh_token_hash, access_token_hash,
+	family_id, replaced_by_session_id, device_info, ip_address::text, user_agent,
+	expires_at, revoked, revoked_at, created_at, updated_at`
+
+func scanSession(row interface {
+	Scan(dest ...any) error
+}) (*models.UserSession, error) {
+	s := &models.UserSession{}
+	if err := row.Scan(
+		&s.ID, &s.UserID, &s.RefreshToken, &s.RefreshTokenHash, &s.AccessTokenHash,
+		&s.FamilyID, &s.ReplacedBySessionID, &s.DeviceInfo, &s.IPAddress, &s.UserAgent,
+		&s.ExpiresAt, &s.Revoked, &s.RevokedAt, &s.CreatedAt, &s.UpdatedAt,
+	); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
 // GetSessionByID retrieves a session by ID
 func (r *userRepository) GetSessionByID(ctx context.Context, sessionID string) (*models.UserSession, error) {
-	query := `
-		SELECT id, user_id, refresh_token, access_token_hash, device_info,
-			ip_address::text, user_agent, expires_at, revoked, revoked_at, created_at, updated_at
-		FROM user_sessions
-		WHERE id = $1
-	`
-
-	session := &models.UserSession{}
-	err := r.db.Pool.QueryRow(ctx, query, sessionID).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.RefreshToken,
-		&session.AccessTokenHash,
-		&session.DeviceInfo,
-		&session.IPAddress,
-		&session.UserAgent,
-		&session.ExpiresAt,
-		&session.Revoked,
-		&session.RevokedAt,
-		&session.CreatedAt,
-		&session.UpdatedAt,
-	)
-
+	query := `SELECT ` + sessionSelectCols + ` FROM user_sessions WHERE id = $1`
+	session, err := scanSession(r.db.Pool.QueryRow(ctx, query, sessionID))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("session not found")
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
-
 	return session, nil
 }
 
 // GetSessionByRefreshToken retrieves a session by refresh token
 func (r *userRepository) GetSessionByRefreshToken(ctx context.Context, refreshToken string) (*models.UserSession, error) {
-	query := `
-		SELECT id, user_id, refresh_token, access_token_hash, device_info,
-			ip_address::text, user_agent, expires_at, revoked, revoked_at, created_at, updated_at
-		FROM user_sessions
-		WHERE refresh_token = $1 AND revoked = false
-	`
-
-	session := &models.UserSession{}
-	err := r.db.Pool.QueryRow(ctx, query, refreshToken).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.RefreshToken,
-		&session.AccessTokenHash,
-		&session.DeviceInfo,
-		&session.IPAddress,
-		&session.UserAgent,
-		&session.ExpiresAt,
-		&session.Revoked,
-		&session.RevokedAt,
-		&session.CreatedAt,
-		&session.UpdatedAt,
-	)
-
+	query := `SELECT ` + sessionSelectCols + ` FROM user_sessions WHERE refresh_token = $1 AND revoked = false`
+	session, err := scanSession(r.db.Pool.QueryRow(ctx, query, refreshToken))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("session not found")
@@ -726,40 +726,59 @@ func (r *userRepository) GetSessionByRefreshToken(ctx context.Context, refreshTo
 	return session, nil
 }
 
-// GetSessionByRefreshTokenHash retrieves a session by the hashed refresh token.
-// This is the secure lookup method used after the hashing migration.
+// GetSessionByRefreshTokenHash retrieves the active session matching the hash.
 func (r *userRepository) GetSessionByRefreshTokenHash(ctx context.Context, refreshTokenHash string) (*models.UserSession, error) {
-	query := `
-		SELECT id, user_id, refresh_token, access_token_hash, device_info,
-			ip_address::text, user_agent, expires_at, revoked, revoked_at, created_at, updated_at
-		FROM user_sessions
-		WHERE refresh_token_hash = $1 AND revoked = false
-	`
-
-	session := &models.UserSession{}
-	err := r.db.Pool.QueryRow(ctx, query, refreshTokenHash).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.RefreshToken,
-		&session.AccessTokenHash,
-		&session.DeviceInfo,
-		&session.IPAddress,
-		&session.UserAgent,
-		&session.ExpiresAt,
-		&session.Revoked,
-		&session.RevokedAt,
-		&session.CreatedAt,
-		&session.UpdatedAt,
-	)
-
+	query := `SELECT ` + sessionSelectCols + ` FROM user_sessions WHERE refresh_token_hash = $1 AND revoked = false`
+	session, err := scanSession(r.db.Pool.QueryRow(ctx, query, refreshTokenHash))
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, fmt.Errorf("session not found")
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
-
 	return session, nil
+}
+
+// GetSessionByRefreshTokenHashAny finds the session matching the hash even if
+// it has been revoked. Used by /auth/refresh to detect rotated-but-in-grace
+// tokens and to drive reuse-detection on out-of-grace replays.
+func (r *userRepository) GetSessionByRefreshTokenHashAny(ctx context.Context, refreshTokenHash string) (*models.UserSession, error) {
+	query := `SELECT ` + sessionSelectCols + ` FROM user_sessions WHERE refresh_token_hash = $1
+		ORDER BY created_at DESC LIMIT 1`
+	session, err := scanSession(r.db.Pool.QueryRow(ctx, query, refreshTokenHash))
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("session not found")
+		}
+		return nil, fmt.Errorf("failed to get session: %w", err)
+	}
+	return session, nil
+}
+
+// MarkSessionRotated revokes the old session and points it at its replacement
+// in a single statement so concurrent reads always see consistent state.
+func (r *userRepository) MarkSessionRotated(ctx context.Context, sessionID, replacementSessionID string) error {
+	query := `
+		UPDATE user_sessions
+		SET revoked = true, revoked_at = $2, replaced_by_session_id = $3, updated_at = $2
+		WHERE id = $1
+	`
+	now := time.Now()
+	_, err := r.db.Pool.Exec(ctx, query, sessionID, now, replacementSessionID)
+	return err
+}
+
+// RevokeSessionFamily revokes every active session sharing the family. Called
+// when reuse detection trips so a leaked refresh token can't keep minting
+// fresh access tokens through descendant sessions.
+func (r *userRepository) RevokeSessionFamily(ctx context.Context, familyID string) error {
+	query := `
+		UPDATE user_sessions
+		SET revoked = true, revoked_at = $2, updated_at = $2
+		WHERE family_id = $1 AND revoked = false
+	`
+	_, err := r.db.Pool.Exec(ctx, query, familyID, time.Now())
+	return err
 }
 
 // SoftDelete soft-deletes a user by setting deleted_at (deactivate account)
@@ -822,13 +841,9 @@ func (r *userRepository) RevokeAllUserSessions(ctx context.Context, userID strin
 
 // GetActiveSessions retrieves all active sessions for a user
 func (r *userRepository) GetActiveSessions(ctx context.Context, userID string) ([]*models.UserSession, error) {
-	query := `
-		SELECT id, user_id, refresh_token, access_token_hash, device_info,
-			ip_address::text, user_agent, expires_at, revoked, revoked_at, created_at, updated_at
-		FROM user_sessions
+	query := `SELECT ` + sessionSelectCols + ` FROM user_sessions
 		WHERE user_id = $1 AND revoked = false AND expires_at > NOW()
-		ORDER BY created_at DESC
-	`
+		ORDER BY created_at DESC`
 
 	rows, err := r.db.Pool.Query(ctx, query, userID)
 	if err != nil {
@@ -838,21 +853,7 @@ func (r *userRepository) GetActiveSessions(ctx context.Context, userID string) (
 
 	var sessions []*models.UserSession
 	for rows.Next() {
-		session := &models.UserSession{}
-		err := rows.Scan(
-			&session.ID,
-			&session.UserID,
-			&session.RefreshToken,
-			&session.AccessTokenHash,
-			&session.DeviceInfo,
-			&session.IPAddress,
-			&session.UserAgent,
-			&session.ExpiresAt,
-			&session.Revoked,
-			&session.RevokedAt,
-			&session.CreatedAt,
-			&session.UpdatedAt,
-		)
+		session, err := scanSession(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -860,6 +861,71 @@ func (r *userRepository) GetActiveSessions(ctx context.Context, userID string) (
 	}
 
 	return sessions, rows.Err()
+}
+
+// CreateDeviceCredential inserts a new device credential row. The hash is
+// recomputed from the plaintext on every login attempt; plaintext is never
+// persisted server-side.
+func (r *userRepository) CreateDeviceCredential(ctx context.Context, cred *models.DeviceCredential) error {
+	query := `
+		INSERT INTO device_credentials (id, user_id, credential_hash, install_id, device_name,
+			platform, expires_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+	`
+	_, err := r.db.Pool.Exec(ctx, query,
+		cred.ID, cred.UserID, cred.CredentialHash, cred.InstallID, cred.DeviceName,
+		cred.Platform, cred.ExpiresAt, cred.CreatedAt, cred.UpdatedAt,
+	)
+	return err
+}
+
+// GetDeviceCredentialByHash returns the active credential matching the hash.
+func (r *userRepository) GetDeviceCredentialByHash(ctx context.Context, credentialHash string) (*models.DeviceCredential, error) {
+	query := `
+		SELECT id, user_id, credential_hash, install_id, device_name, platform,
+			expires_at, revoked, revoked_at, last_used_at, created_at, updated_at
+		FROM device_credentials
+		WHERE credential_hash = $1 AND revoked = false
+	`
+	c := &models.DeviceCredential{}
+	err := r.db.Pool.QueryRow(ctx, query, credentialHash).Scan(
+		&c.ID, &c.UserID, &c.CredentialHash, &c.InstallID, &c.DeviceName, &c.Platform,
+		&c.ExpiresAt, &c.Revoked, &c.RevokedAt, &c.LastUsedAt, &c.CreatedAt, &c.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("device credential not found")
+		}
+		return nil, fmt.Errorf("failed to get device credential: %w", err)
+	}
+	return c, nil
+}
+
+// TouchDeviceCredential bumps last_used_at for usage telemetry. Failures are
+// non-fatal — callers may log and continue.
+func (r *userRepository) TouchDeviceCredential(ctx context.Context, credentialID string) error {
+	_, err := r.db.Pool.Exec(ctx, `UPDATE device_credentials SET last_used_at = $2, updated_at = $2 WHERE id = $1`,
+		credentialID, time.Now())
+	return err
+}
+
+// RevokeDeviceCredential marks a single credential dead. Existing sessions
+// minted from it remain valid until their natural expiry.
+func (r *userRepository) RevokeDeviceCredential(ctx context.Context, credentialID string) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`UPDATE device_credentials SET revoked = true, revoked_at = $2, updated_at = $2 WHERE id = $1`,
+		credentialID, time.Now())
+	return err
+}
+
+// RevokeAllUserDeviceCredentials revokes every device credential for a user.
+// Used on password reset, account compromise reports, and explicit "log out
+// of every device" actions.
+func (r *userRepository) RevokeAllUserDeviceCredentials(ctx context.Context, userID string) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`UPDATE device_credentials SET revoked = true, revoked_at = $2, updated_at = $2 WHERE user_id = $1 AND revoked = false`,
+		userID, time.Now())
+	return err
 }
 
 // CreateUserWithProfile creates a user and their profile atomically within a transaction.

@@ -411,6 +411,7 @@ func main() {
 			auth.POST("/login", rateLimiter.LimitLoginAttempts(), authHandler.Login)
 			auth.POST("/unified", rateLimiter.LimitLoginAttempts(), authHandler.UnifiedAuth)
 			auth.POST("/refresh", rateLimiter.LimitAuth(), authHandler.RefreshToken)
+			auth.POST("/device/login", rateLimiter.LimitAuth(), authHandler.DeviceLogin)
 
 			// Email and password flows
 			auth.POST("/verify-email", rateLimiter.LimitAuth(), authHandler.VerifyEmail)
@@ -439,6 +440,8 @@ func main() {
 			auth.POST("/send-verification-email", authMiddleware.RequireAuth(), authHandler.SendVerificationEmail)
 			auth.POST("/change-password", verifiedAuth, authHandler.ChangePassword)
 			auth.GET("/sessions", authMiddleware.RequireAuth(), authHandler.GetActiveSessions)
+			auth.POST("/device/register", authMiddleware.RequireAuth(), authHandler.RegisterDevice)
+			auth.DELETE("/device/:id", authMiddleware.RequireAuth(), authHandler.RevokeDevice)
 		}
 
 		// MFA routes (require verified email — enrolling/disabling MFA on an unverified account is an account-takeover vector)
