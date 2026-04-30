@@ -11,13 +11,19 @@ import (
 
 // HelpChatService handles the support chat between users and admins.
 type HelpChatService struct {
-	repo   repositories.HelpChatRepository
-	logger *zap.Logger
+	repo                repositories.HelpChatRepository
+	notificationService *NotificationService
+	logger              *zap.Logger
 }
 
 // NewHelpChatService creates a new HelpChatService.
 func NewHelpChatService(repo repositories.HelpChatRepository, logger *zap.Logger) *HelpChatService {
 	return &HelpChatService{repo: repo, logger: logger}
+}
+
+// SetNotificationService wires the notification service post-construction.
+func (s *HelpChatService) SetNotificationService(n *NotificationService) {
+	s.notificationService = n
 }
 
 // SendUserMessage stores a message sent by a user.
@@ -52,7 +58,7 @@ func (s *HelpChatService) GetUserMessages(ctx context.Context, userID string, pa
 	return msgs, total, nil
 }
 
-// AdminReply stores a support reply from an admin.
+// AdminReply stores a support reply from an admin and notifies the user.
 func (s *HelpChatService) AdminReply(ctx context.Context, adminID, targetUserID string, req *models.AdminReplyRequest) (*models.HelpChatMessage, error) {
 	msg := &models.HelpChatMessage{
 		UserID:     targetUserID,
@@ -62,6 +68,32 @@ func (s *HelpChatService) AdminReply(ctx context.Context, adminID, targetUserID 
 	if err := s.repo.CreateMessage(ctx, msg); err != nil {
 		s.logger.Error("HelpChatService: admin reply", zap.String("admin_id", adminID), zap.String("target_user", targetUserID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to send reply", err)
+	}
+
+	// Notify the user via push notification. Best-effort.
+	if s.notificationService != nil {
+		go func() {
+			ctxDetach := context.WithoutCancel(ctx)
+			title := "Support reply"
+			preview := req.Content
+			if len(preview) > 100 {
+				preview = preview[:100] + "…"
+			}
+			_, nerr := s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+				UserID:  targetUserID,
+				Type:    models.NotificationTypeAdmin,
+				Title:   &title,
+				Message: &preview,
+				Data: map[string]interface{}{
+					"admin_id": adminID,
+					"route":    "help-chat-screen",
+				},
+			})
+			if nerr != nil {
+				s.logger.Warn("HelpChatService: failed to notify user of admin reply",
+					zap.String("target_user", targetUserID), zap.Error(nerr))
+			}
+		}()
 	}
 	return msg, nil
 }

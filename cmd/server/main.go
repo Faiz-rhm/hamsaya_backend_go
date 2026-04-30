@@ -293,6 +293,7 @@ func main() {
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
 	adminService := services.NewAdminService(adminRepo, fcmClient, notificationService, logger)
 	helpChatService := services.NewHelpChatService(helpChatRepo, logger)
+	helpChatService.SetNotificationService(notificationService)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")

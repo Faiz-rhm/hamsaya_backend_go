@@ -687,10 +687,20 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshToken
 		return nil, utils.NewUnauthorizedError("Refresh token has expired", nil)
 	}
 
-	// Check if session is revoked
+	// Grace window for revoked tokens: a refresh rotated <60s ago is still
+	// accepted so concurrent refreshes from proactive timer + 401 interceptor
+	// don't kill the session. Real revokes (logout, manual revoke, security
+	// event) are rejected since they'll be older than the grace period.
 	if session.Revoked {
-		s.logger.Warn("Revoked refresh token used", zap.String("session_id", session.ID))
-		return nil, utils.NewUnauthorizedError("Refresh token has been revoked", nil)
+		const refreshGrace = 60 * time.Second
+		if session.RevokedAt == nil || time.Since(*session.RevokedAt) >= refreshGrace {
+			s.logger.Warn("Revoked refresh token used", zap.String("session_id", session.ID))
+			return nil, utils.NewUnauthorizedError("Refresh token has been revoked", nil)
+		}
+		s.logger.Info("Refresh accepted within grace window",
+			zap.String("session_id", session.ID),
+			zap.Duration("since_revoked", time.Since(*session.RevokedAt)),
+		)
 	}
 
 	// Get user
