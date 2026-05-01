@@ -254,8 +254,13 @@ func main() {
 	}
 	defer db.Close()
 
-	// Only seed business_categories (no truncate).
+	// Only seed business_categories (truncate first for clean slate).
 	if os.Getenv("SEED_BUSINESS_CATEGORIES_ONLY") == "1" {
+		_, err = db.Pool.Exec(ctx, `TRUNCATE TABLE business_categories CASCADE;`)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to truncate business_categories: %v\n", err)
+			os.Exit(1)
+		}
 		_, err = db.Pool.Exec(ctx, seedBusinessCategoriesSQL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to seed business_categories: %v\n", err)
@@ -270,8 +275,13 @@ func main() {
 		return
 	}
 
-	// Only seed both category tables (no truncate).
+	// Only seed both category tables (truncate categories first for clean slate).
 	if os.Getenv("SEED_CATEGORIES_ONLY") == "1" {
+		_, err = db.Pool.Exec(ctx, `TRUNCATE TABLE sell_categories, business_categories CASCADE;`)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to truncate category tables: %v\n", err)
+			os.Exit(1)
+		}
 		_, err = db.Pool.Exec(ctx, seedSellCategoriesSQL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Failed to seed sell_categories: %v\n", err)
@@ -292,7 +302,11 @@ func main() {
 	}
 
 	// Full reset: truncate then seed all.
+	// Truncate sell_categories and business_categories first so the fixed-UUID
+	// seeder always produces exactly one row per category (no leftover rows from
+	// earlier seeds that used random UUIDs).
 	_, err = db.Pool.Exec(ctx, `
+		TRUNCATE TABLE sell_categories, business_categories CASCADE;
 		TRUNCATE TABLE users, token_blacklist RESTART IDENTITY CASCADE;
 	`)
 	if err != nil {
