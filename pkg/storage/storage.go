@@ -248,7 +248,7 @@ func (c *Client) Transcode(ctx context.Context, sourceKey, targetKey, format str
 	if err != nil {
 		return fmt.Errorf("transcode get: %w", err)
 	}
-	defer obj.Close()
+	defer func() { _ = obj.Close() }()
 
 	img, _, err := ValidateImage(obj, 50*1024*1024)
 	if err != nil {

@@ -835,18 +835,15 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				res, err := db.Pool.Exec(context.Background(), `
-					UPDATE boosts SET status = 'EXPIRED'
-					WHERE status = 'ACTIVE' AND expires_at < NOW()
-				`)
-				if err != nil {
-					sugaredLogger.Warnw("boost expiry sweep failed", "error", err)
-				} else if res.RowsAffected() > 0 {
-					sugaredLogger.Infow("boost expiry sweep", "expired", res.RowsAffected())
-				}
+		for range ticker.C {
+			res, err := db.Pool.Exec(context.Background(), `
+				UPDATE boosts SET status = 'EXPIRED'
+				WHERE status = 'ACTIVE' AND expires_at < NOW()
+			`)
+			if err != nil {
+				sugaredLogger.Warnw("boost expiry sweep failed", "error", err)
+			} else if res.RowsAffected() > 0 {
+				sugaredLogger.Infow("boost expiry sweep", "expired", res.RowsAffected())
 			}
 		}
 	}()

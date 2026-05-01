@@ -348,15 +348,17 @@ func TestAuthService_RefreshToken(t *testing.T) {
 			name: "rotated outside grace triggers reuse detection — revokes family",
 			setupMocks: func(userRepo *mocks.MockUserRepository) {
 				revokedAt := time.Now().Add(-5 * time.Minute) // Far past grace.
+				replacement := "session-2"
 				session := &models.UserSession{
-					ID:               "session-1",
-					UserID:           "user-1",
-					RefreshToken:     validRefreshToken,
-					RefreshTokenHash: validTokenHash,
-					FamilyID:         &familyID,
-					ExpiresAt:        time.Now().Add(1 * time.Hour),
-					Revoked:          true,
-					RevokedAt:        &revokedAt,
+					ID:                   "session-1",
+					UserID:               "user-1",
+					RefreshToken:         validRefreshToken,
+					RefreshTokenHash:     validTokenHash,
+					FamilyID:             &familyID,
+					ExpiresAt:            time.Now().Add(1 * time.Hour),
+					Revoked:              true,
+					RevokedAt:            &revokedAt,
+					ReplacedBySessionID:  &replacement,
 				}
 				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(session, nil)
 				userRepo.On("RevokeSessionFamily", mock.Anything, familyID).Return(nil)
@@ -368,15 +370,17 @@ func TestAuthService_RefreshToken(t *testing.T) {
 			name: "rotated within grace + cache miss falls through and mints new pair",
 			setupMocks: func(userRepo *mocks.MockUserRepository) {
 				revokedAt := time.Now().Add(-1 * time.Second) // Inside 60s grace.
+				replacement := "session-2"
 				session := &models.UserSession{
-					ID:               "session-1",
-					UserID:           "user-1",
-					RefreshToken:     validRefreshToken,
-					RefreshTokenHash: validTokenHash,
-					FamilyID:         &familyID,
-					ExpiresAt:        time.Now().Add(1 * time.Hour),
-					Revoked:          true,
-					RevokedAt:        &revokedAt,
+					ID:                   "session-1",
+					UserID:               "user-1",
+					RefreshToken:         validRefreshToken,
+					RefreshTokenHash:     validTokenHash,
+					FamilyID:             &familyID,
+					ExpiresAt:            time.Now().Add(1 * time.Hour),
+					Revoked:              true,
+					RevokedAt:            &revokedAt,
+					ReplacedBySessionID:  &replacement,
 				}
 				user := testutil.CreateTestUser("user-1", "test@example.com")
 				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(session, nil)
@@ -932,15 +936,17 @@ func TestAuthService_RefreshToken_GraceCacheHit(t *testing.T) {
 
 	userRepo := new(mocks.MockUserRepository)
 	revokedAt := time.Now().Add(-5 * time.Second)
+	replacement := "session-2"
 	rotated := &models.UserSession{
-		ID:               "session-1",
-		UserID:           "user-1",
-		RefreshToken:     oldRefresh,
-		RefreshTokenHash: oldHash,
-		FamilyID:         &familyID,
-		ExpiresAt:        time.Now().Add(1 * time.Hour),
-		Revoked:          true,
-		RevokedAt:        &revokedAt,
+		ID:                  "session-1",
+		UserID:              "user-1",
+		RefreshToken:        oldRefresh,
+		RefreshTokenHash:    oldHash,
+		FamilyID:            &familyID,
+		ExpiresAt:           time.Now().Add(1 * time.Hour),
+		Revoked:             true,
+		RevokedAt:           &revokedAt,
+		ReplacedBySessionID: &replacement,
 	}
 	userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(rotated, nil)
 

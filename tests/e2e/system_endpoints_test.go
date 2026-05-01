@@ -2,11 +2,13 @@ package e2e
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -51,6 +53,18 @@ func TestE2E_System_RoleGating(t *testing.T) {
 func TestE2E_System_FeatureFlagToggle(t *testing.T) {
 	env := setupE2E(t)
 	defer env.cleanupTestData(t, "flagtoggle+%@example.com")
+
+	// Idempotently seed the flag in case the migration's seed got wiped or
+	// never ran on this DB. Uses ON CONFLICT to stay safe against re-runs.
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if _, err := env.db.Pool.Exec(ctx, `
+		INSERT INTO feature_flags (key, enabled, description) VALUES
+			('registration_open', TRUE, 'Allow new user registrations.')
+		ON CONFLICT (key) DO NOTHING
+	`); err != nil {
+		t.Fatalf("seed feature_flags: %v", err)
+	}
 
 	email := fmt.Sprintf("flagtoggle+%d@example.com", testNonce(t))
 	toks := register(t, env, email, "Pass123!@#xyz")

@@ -400,7 +400,7 @@ func (r *monetizationRepository) AdjustCredits(
 	if err != nil {
 		return nil, fmt.Errorf("credits begin: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	txType := "ADJUST_ADD"
 	if req.Amount < 0 {

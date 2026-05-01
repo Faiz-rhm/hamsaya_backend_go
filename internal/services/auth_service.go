@@ -707,8 +707,17 @@ func (s *AuthService) RefreshToken(ctx context.Context, req *models.RefreshToken
 		grace = 60 * time.Second
 	}
 
-	// Path A: this row was rotated. Decide grace vs reuse-detection.
+	// Path A: this row was rotated or explicitly logged out.
 	if session.Revoked {
+		// Logout sets Revoked=true with no ReplacedBySessionID. Always reject
+		// — there is nothing to fall through to, and grace only applies to
+		// rotation races where the new pair was just issued.
+		if session.ReplacedBySessionID == nil || *session.ReplacedBySessionID == "" {
+			s.logger.Warn("Refresh attempted on logged-out session",
+				zap.String("session_id", session.ID),
+			)
+			return nil, utils.NewUnauthorizedError("Refresh token has been revoked", nil)
+		}
 		withinGrace := session.RevokedAt != nil && time.Since(*session.RevokedAt) < grace
 		if !withinGrace {
 			// Out-of-grace replay → reuse detection. Kill whole family.

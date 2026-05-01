@@ -3,7 +3,6 @@ package transcode
 import (
 	"context"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -14,7 +13,6 @@ import (
 )
 
 type fakeEncoder struct {
-	mu        sync.Mutex
 	calls     atomic.Int32
 	failTimes int32 // first N calls fail with err
 	err       error

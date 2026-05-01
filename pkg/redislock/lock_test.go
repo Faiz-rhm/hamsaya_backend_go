@@ -41,7 +41,7 @@ func TestAcquire_Contention_SecondCallerFails(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first Acquire: %v", err)
 	}
-	defer first.Release(ctx)
+	defer func() { _ = first.Release(ctx) }()
 
 	_, err = Acquire(ctx, c, "lock:job:contend", time.Minute)
 	if !errors.Is(err, ErrNotAcquired) {

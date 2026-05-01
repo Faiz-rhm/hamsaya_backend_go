@@ -30,7 +30,6 @@ type DBLogSink struct {
 type bufferedEntry struct {
 	entry  zapcore.Entry
 	fields []zapcore.Field
-	ctx    []zapcore.Field // accumulated With(...) fields
 }
 
 // NewDBLogSink wires a sink for `level` and above. `bufferSize` bounds the

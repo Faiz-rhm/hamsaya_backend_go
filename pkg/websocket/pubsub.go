@@ -73,7 +73,7 @@ func (f *Fanout) Start() {
 	f.wg.Add(1)
 	go func() {
 		defer f.wg.Done()
-		defer pubsub.Close()
+		defer func() { _ = pubsub.Close() }()
 		ch := pubsub.Channel()
 		for {
 			select {

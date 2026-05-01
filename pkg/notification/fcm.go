@@ -135,7 +135,7 @@ func (f *FCMClient) SendNotification(ctx context.Context, token string, payload 
 		// storage. messaging.IsRegistrationTokenNotRegistered covers both
 		// classical "NotRegistered" (token revoked / app uninstalled) and
 		// "InvalidArgument" / "InvalidRegistration" responses.
-		if messaging.IsRegistrationTokenNotRegistered(err) ||
+		if messaging.IsUnregistered(err) ||
 			messaging.IsInvalidArgument(err) {
 			return ErrTokenInvalid
 		}
