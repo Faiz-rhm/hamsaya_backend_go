@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/hamsaya/backend/internal/models"
@@ -17,6 +18,9 @@ type ProfileService struct {
 	postRepo          repositories.PostRepository
 	commentRepo       repositories.CommentRepository
 	relationshipsRepo repositories.RelationshipsRepository
+	emailService      *EmailService
+	tokenStorage      *TokenStorageService
+	jwtService        *JWTService
 	logger            *zap.Logger
 }
 
@@ -26,6 +30,9 @@ func NewProfileService(
 	postRepo repositories.PostRepository,
 	commentRepo repositories.CommentRepository,
 	relationshipsRepo repositories.RelationshipsRepository,
+	emailService *EmailService,
+	tokenStorage *TokenStorageService,
+	jwtService *JWTService,
 	logger *zap.Logger,
 ) *ProfileService {
 	return &ProfileService{
@@ -33,6 +40,9 @@ func NewProfileService(
 		postRepo:          postRepo,
 		commentRepo:       commentRepo,
 		relationshipsRepo: relationshipsRepo,
+		emailService:      emailService,
+		tokenStorage:      tokenStorage,
+		jwtService:        jwtService,
 		logger:            logger,
 	}
 }
@@ -114,7 +124,10 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID string, viewerID
 	return response, nil
 }
 
-// UpdateProfile updates a user's profile
+// UpdateProfile updates a user's profile.
+// When IsComplete transitions from false → true and the user's email is not yet
+// verified, an OTP verification email is sent so users confirm their email only
+// after they have a real profile (name + location).
 func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *models.UpdateProfileRequest) (*models.FullProfileResponse, error) {
 	// Get current profile
 	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
@@ -122,6 +135,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 		s.logger.Error("Failed to get profile", zap.String("user_id", userID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get profile", err)
 	}
+	wasComplete := profile.IsComplete
 
 	// Update fields if provided
 	if req.FirstName != nil {
@@ -192,6 +206,39 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 		zap.String("user_id", userID),
 		zap.Bool("is_complete", profile.IsComplete),
 	)
+
+	// Send OTP verification email when profile becomes complete for the first time.
+	if !wasComplete && profile.IsComplete {
+		user, userErr := s.userRepo.GetByID(ctx, userID)
+		if userErr == nil && !user.EmailVerified {
+			go func() {
+				bgCtx := context.Background()
+				code, codeErr := s.jwtService.GenerateVerificationCode()
+				if codeErr != nil {
+					s.logger.Warn("Failed to generate verification code after profile complete", zap.Error(codeErr))
+					return
+				}
+				const ttl = 24 * time.Hour
+				if storeErr := s.tokenStorage.StoreVerificationToken(bgCtx, userID, code, ttl); storeErr != nil {
+					s.logger.Warn("Failed to store verification token after profile complete", zap.Error(storeErr))
+					return
+				}
+				name := strings.TrimSpace(func() string {
+					if profile.FirstName != nil && profile.LastName != nil {
+						return *profile.FirstName + " " + *profile.LastName
+					}
+					if profile.FirstName != nil {
+						return *profile.FirstName
+					}
+					return user.Email
+				}())
+				if sendErr := s.emailService.SendVerificationEmail(user.Email, name, code); sendErr != nil {
+					s.logger.Warn("Failed to send verification email after profile complete",
+						zap.String("user_id", userID), zap.Error(sendErr))
+				}
+			}()
+		}
+	}
 
 	// Return updated profile
 	return s.GetProfile(ctx, userID, nil)

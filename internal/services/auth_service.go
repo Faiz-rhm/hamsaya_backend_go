@@ -117,22 +117,29 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			UpdatedAt:           now,
 		}
 
-		// Create complete profile with location and random avatar color
+		// Create minimal profile — IsComplete is false until the user finishes
+		// the name+location onboarding step (UpdateProfile with is_complete=true),
+		// which then triggers OTP email.
 		avatarColor := models.RandomAvatarColor()
 		profile := &models.Profile{
 			ID:          userID,
-			FirstName:   &req.FirstName,
-			LastName:    &req.LastName,
 			AvatarColor: &avatarColor,
-			IsComplete:  true, // Profile is complete with all required fields
+			IsComplete:  false,
 			CreatedAt:   now,
 			UpdatedAt:   now,
 		}
-
-		// Set location from request
-		profile.Location = &pgtype.Point{
-			P:     pgtype.Vec2{X: req.Longitude, Y: req.Latitude},
-			Valid: true,
+		// Populate optional fields if the client sent them.
+		if req.FirstName != "" {
+			profile.FirstName = &req.FirstName
+		}
+		if req.LastName != "" {
+			profile.LastName = &req.LastName
+		}
+		if req.Latitude != 0 || req.Longitude != 0 {
+			profile.Location = &pgtype.Point{
+				P:     pgtype.Vec2{X: req.Longitude, Y: req.Latitude},
+				Valid: true,
+			}
 		}
 
 		// Create user and profile atomically in a transaction
@@ -141,28 +148,13 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			return nil, utils.NewInternalError("Failed to create user", err)
 		}
 
-		s.logger.Info("User registered with complete profile",
+		s.logger.Info("User registered — profile pending completion",
 			zap.String("user_id", userID),
 			zap.String("email", email),
 		)
 
-		// Welcome notification — best-effort; failures don't break registration.
-		s.sendWelcomeNotification(ctx, userID, req.FirstName)
-
-		// Send verification code email (Resend or SMTP)
-		verificationCode, err := s.jwtService.GenerateVerificationCode()
-		if err == nil {
-			ttl := 24 * time.Hour
-			if storeErr := s.tokenStorage.StoreVerificationToken(ctx, userID, verificationCode, ttl); storeErr == nil {
-				name := strings.TrimSpace(req.FirstName + " " + req.LastName)
-				if name == "" {
-					name = email
-				}
-				if sendErr := s.emailService.SendVerificationEmail(email, name, verificationCode); sendErr != nil {
-					s.logger.Warn("Failed to send verification email after registration", zap.String("email", email), zap.Error(sendErr))
-				}
-			}
-		}
+		// OTP is sent after profile completion (UpdateProfile with is_complete=true),
+		// not at registration, so users verify only after they have a real profile.
 
 		// Generate AAL1 token pair
 		return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)

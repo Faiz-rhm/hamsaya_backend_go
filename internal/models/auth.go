@@ -6,14 +6,17 @@ import "time"
 // larger only serves as a DoS vector. Tokens capped at 4096 chars — well above
 // any JWT/OAuth ID token we expect, but bounded enough to reject payload bombs.
 
-// RegisterRequest represents a user registration request
+// RegisterRequest represents a user registration request.
+// Only email and password are required for initial account creation.
+// FirstName, LastName, Latitude, Longitude are optional — they are set later
+// via UpdateProfile (profile-completion step), which triggers OTP email.
 type RegisterRequest struct {
 	Email      string   `json:"email" validate:"required,email,max=320"`
 	Password   string   `json:"password" validate:"required,min=8,max=128"`
-	FirstName  string   `json:"first_name" validate:"required,min=2,max=100"`
-	LastName   string   `json:"last_name" validate:"required,min=2,max=100"`
-	Latitude   float64  `json:"latitude" validate:"required,latitude"`
-	Longitude  float64  `json:"longitude" validate:"required,longitude"`
+	FirstName  string   `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
+	LastName   string   `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
+	Latitude   float64  `json:"latitude,omitempty" validate:"omitempty,latitude"`
+	Longitude  float64  `json:"longitude,omitempty" validate:"omitempty,longitude"`
 	DeviceInfo *string  `json:"device_info,omitempty" validate:"omitempty,max=512"`
 	IPAddress  *string  `json:"-"` // Set from request context
 	UserAgent  *string  `json:"-"` // Set from request context
