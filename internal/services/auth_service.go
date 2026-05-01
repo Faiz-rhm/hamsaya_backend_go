@@ -153,6 +153,9 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			zap.String("email", email),
 		)
 
+		// Welcome notification — best-effort; failures don't break registration.
+		s.sendWelcomeNotification(ctx, userID, req.FirstName)
+
 		// OTP is sent after profile completion (UpdateProfile with is_complete=true),
 		// not at registration, so users verify only after they have a real profile.
 
