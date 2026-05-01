@@ -1,4 +1,4 @@
-// Command db-reset truncates all application tables (keeps schema) and re-seeds sell_categories and business_categories.
+// Command db-reset truncates all application tables (keeps schema) and re-seeds sell_categories, business_categories, and daily_post_limits.
 // With env SEED_CATEGORIES_ONLY=1 it only runs both category seeds (no truncate).
 // With env SEED_BUSINESS_CATEGORIES_ONLY=1 it only runs business_categories seed (no truncate).
 // Uses the same .env config as the rest of the app.
@@ -223,6 +223,20 @@ INSERT INTO business_categories (id, name, is_active, created_at) VALUES
 ON CONFLICT (id) DO NOTHING;
 `
 
+const seedDailyPostLimitsSQL = `
+INSERT INTO daily_post_limits (post_type, user_limit, business_multiplier, description)
+VALUES
+    ('FEED',  5,  2.0, 'Standard social posts'),
+    ('EVENT', 2,  2.0, 'Event posts — naturally low frequency'),
+    ('SELL',  3,  2.0, 'Marketplace listings — capped to discourage spam'),
+    ('PULL',  3,  2.0, 'Polls')
+ON CONFLICT (post_type) DO UPDATE
+    SET user_limit           = EXCLUDED.user_limit,
+        business_multiplier  = EXCLUDED.business_multiplier,
+        description          = EXCLUDED.description,
+        updated_at           = NOW();
+`
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -247,7 +261,12 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Failed to seed business_categories: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Business categories seeded successfully.")
+		_, err = db.Pool.Exec(ctx, seedDailyPostLimitsSQL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to seed daily_post_limits: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Business categories and daily post limits seeded successfully.")
 		return
 	}
 
@@ -263,11 +282,16 @@ func main() {
 			fmt.Fprintf(os.Stderr, "Failed to seed business_categories: %v\n", err)
 			os.Exit(1)
 		}
-		fmt.Println("Sell and business categories seeded successfully.")
+		_, err = db.Pool.Exec(ctx, seedDailyPostLimitsSQL)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to seed daily_post_limits: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("Sell and business categories and daily post limits seeded successfully.")
 		return
 	}
 
-	// Full reset: truncate then seed both.
+	// Full reset: truncate then seed all.
 	_, err = db.Pool.Exec(ctx, `
 		TRUNCATE TABLE users, token_blacklist RESTART IDENTITY CASCADE;
 	`)
@@ -285,5 +309,10 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to seed business_categories: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("All data removed. Sell and business categories re-seeded.")
+	_, err = db.Pool.Exec(ctx, seedDailyPostLimitsSQL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to seed daily_post_limits: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Println("All data removed. Sell and business categories and daily post limits re-seeded.")
 }
