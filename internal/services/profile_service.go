@@ -208,7 +208,7 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 	)
 
 	// Send OTP verification email when profile becomes complete for the first time.
-	if !wasComplete && profile.IsComplete {
+	if !wasComplete && profile.IsComplete && s.emailService != nil && s.tokenStorage != nil && s.jwtService != nil {
 		user, userErr := s.userRepo.GetByID(ctx, userID)
 		if userErr == nil && !user.EmailVerified {
 			go func() {

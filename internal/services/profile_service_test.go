@@ -23,7 +23,7 @@ func newTestProfileService(
 	relRepo *mocks.MockRelationshipsRepository,
 ) *ProfileService {
 	commentRepo := &mocks.MockCommentRepository{}
-	return NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
+	return NewProfileService(userRepo, postRepo, commentRepo, relRepo, nil, nil, nil, zap.NewNop())
 }
 
 func TestProfileService_GetProfile(t *testing.T) {
@@ -384,7 +384,7 @@ func TestProfileService_ExportUserData(t *testing.T) {
 		postRepo := new(mocks.MockPostRepository)
 		commentRepo := new(mocks.MockCommentRepository)
 		relRepo := new(mocks.MockRelationshipsRepository)
-		svc := NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
+		svc := NewProfileService(userRepo, postRepo, commentRepo, relRepo, nil, nil, nil, zap.NewNop())
 
 		userID := "user-1"
 		now := time.Now()
@@ -441,7 +441,7 @@ func TestProfileService_ExportUserData(t *testing.T) {
 		postRepo := new(mocks.MockPostRepository)
 		commentRepo := new(mocks.MockCommentRepository)
 		relRepo := new(mocks.MockRelationshipsRepository)
-		svc := NewProfileService(userRepo, postRepo, commentRepo, relRepo, zap.NewNop())
+		svc := NewProfileService(userRepo, postRepo, commentRepo, relRepo, nil, nil, nil, zap.NewNop())
 
 		userRepo.On("GetByID", mock.Anything, "ghost").Return((*models.User)(nil), errors.New("not found"))
 
