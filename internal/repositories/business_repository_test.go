@@ -130,6 +130,50 @@ func TestBusinessRepository_IncrementViews_Success(t *testing.T) {
 	require.NoError(t, err)
 }
 
+// TestBusinessRepository_GetCategoriesByBusinessIDs_Batched verifies that the
+// new batched lookup groups categories by business id correctly. This is the
+// load-bearing query for the discover N+1 elimination — one call replaces
+// N per-business GetCategoriesByBusinessID calls.
+func TestBusinessRepository_GetCategoriesByBusinessIDs_Batched(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newBusinessRepo(pool)
+
+	pool.On("Query", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return(testutil.NewFuncRows(
+			func(dest ...any) error {
+				*dest[0].(*string) = "biz-1"
+				*dest[1].(*string) = "Food"
+				return nil
+			},
+			func(dest ...any) error {
+				*dest[0].(*string) = "biz-1"
+				*dest[1].(*string) = "Coffee"
+				return nil
+			},
+			func(dest ...any) error {
+				*dest[0].(*string) = "biz-2"
+				*dest[1].(*string) = "Retail"
+				return nil
+			},
+		), nil)
+
+	out, err := repo.GetCategoriesByBusinessIDs(context.Background(), []string{"biz-1", "biz-2"})
+	require.NoError(t, err)
+	require.Equal(t, []string{"Food", "Coffee"}, out["biz-1"])
+	require.Equal(t, []string{"Retail"}, out["biz-2"])
+}
+
+func TestBusinessRepository_GetCategoriesByBusinessIDs_EmptyInput(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newBusinessRepo(pool)
+
+	out, err := repo.GetCategoriesByBusinessIDs(context.Background(), []string{})
+	require.NoError(t, err)
+	require.Empty(t, out)
+	// No DB call should have happened for an empty id list.
+	pool.AssertNotCalled(t, "Query", mock.Anything, mock.Anything, mock.Anything)
+}
+
 func TestBusinessRepository_GetCategoriesByBusinessID_Success(t *testing.T) {
 	pool := new(testutil.MockPool)
 	repo := newBusinessRepo(pool)

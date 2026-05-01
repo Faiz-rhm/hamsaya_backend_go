@@ -173,6 +173,10 @@ func TestSearchService_Discover(t *testing.T) {
 			Return([]*models.Post{{ID: "p-1", Type: models.PostTypeEvent}}, nil)
 		searchRepo.On("GetDiscoverBusinesses", mock.Anything, 34.5, 69.2, 10.0, 100).
 			Return([]*models.BusinessProfile{{ID: "biz-1", Name: "Biz"}}, nil)
+		postRepo.On("GetAttachmentsByPostIDs", mock.Anything, []string{"p-1"}).
+			Return(map[string][]*models.Attachment{}, nil)
+		businessRepo.On("GetCategoriesByBusinessIDs", mock.Anything, []string{"biz-1"}).
+			Return(map[string][]string{}, nil)
 
 		svc := newTestSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relRepo)
 		resp, err := svc.Discover(context.Background(), nil, &models.DiscoverRequest{

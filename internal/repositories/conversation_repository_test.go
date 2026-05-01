@@ -25,8 +25,9 @@ func makeConversationScanFn(c *models.Conversation) func(dest ...any) error {
 		*dest[0].(*string) = c.ID
 		*dest[1].(*string) = c.Participant1ID
 		*dest[2].(*string) = c.Participant2ID
-		*dest[3].(**time.Time) = c.LastMessageAt
-		*dest[4].(*time.Time) = c.CreatedAt
+		*dest[3].(**string) = c.BusinessID
+		*dest[4].(**time.Time) = c.LastMessageAt
+		*dest[5].(*time.Time) = c.CreatedAt
 		return nil
 	}
 }
@@ -69,7 +70,7 @@ func TestConversationRepository_GetByParticipants_Success(t *testing.T) {
 	pool.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
 		Return(testutil.NewMockRow(makeConversationScanFn(conv)))
 
-	result, err := repo.GetByParticipants(context.Background(), "user-a", "user-b")
+	result, err := repo.GetByParticipants(context.Background(), "user-a", "user-b", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "conv-1", result.ID)
 }

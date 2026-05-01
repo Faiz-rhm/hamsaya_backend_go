@@ -26,7 +26,7 @@ func newAdminRouter(t *testing.T, adminRepo *mocks.MockAdminRepository) *gin.Eng
 	t.Helper()
 	// AdminService takes nil fcmClient and nil notificationService (nil-guarded)
 	svc := services.NewAdminService(adminRepo, nil, nil, zap.NewNop())
-	h := NewAdminHandler(svc, testutil.CreateTestValidator(), zap.NewNop())
+	h := NewAdminHandler(svc, nil, testutil.CreateTestValidator(), zap.NewNop())
 
 	authed := authContextMiddleware(adminTestUserID, "admin-sess-001")
 	r := gin.New()
@@ -211,6 +211,7 @@ func TestAdminHandler_ListPosts(t *testing.T) {
 func TestAdminHandler_DeletePost(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		adminRepo := &mocks.MockAdminRepository{}
+		adminRepo.On("GetPostByID", mock.Anything, adminTestPostID).Return(nil, nil).Maybe()
 		adminRepo.On("DeletePost", mock.Anything, adminTestPostID).Return(nil)
 		adminRepo.On("CreateAuditLog", mock.Anything, mock.Anything).Return(nil).Maybe()
 		r := newAdminRouter(t, adminRepo)

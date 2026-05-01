@@ -363,8 +363,10 @@ func TestAuthHandler_RefreshToken(t *testing.T) {
 			name: "token not found in DB — both lookups fail",
 			body: map[string]interface{}{"refresh_token": "nonexistent-token"},
 			setupMocks: func(r *mocks.MockUserRepository) {
-				r.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).
+				r.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("not found"))
+				// Legacy fallback path also fails — covers the pre-hashing
+				// migration code path.
 				r.On("GetSessionByRefreshToken", mock.Anything, mock.Anything).
 					Return(nil, fmt.Errorf("not found"))
 			},
@@ -381,7 +383,7 @@ func TestAuthHandler_RefreshToken(t *testing.T) {
 					Revoked:   true,
 					ExpiresAt: time.Now().Add(time.Hour),
 				}
-				r.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).
+				r.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).
 					Return(session, nil)
 			},
 			wantCode:    http.StatusUnauthorized,
@@ -397,7 +399,7 @@ func TestAuthHandler_RefreshToken(t *testing.T) {
 					Revoked:   false,
 					ExpiresAt: time.Now().Add(-time.Hour),
 				}
-				r.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).
+				r.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).
 					Return(session, nil)
 			},
 			wantCode:    http.StatusUnauthorized,
@@ -959,4 +961,105 @@ func TestAuthHandler_VerifyMFAWithBackupCode(t *testing.T) {
 		r.ServeHTTP(w, req)
 		assert.Equal(t, http.StatusUnauthorized, w.Code)
 	})
+}
+
+// newDeviceTestRouter wires the three device-credential endpoints. Production
+// wiring lives in cmd/server/main.go; here we mount them directly so the
+// handlers can be exercised in isolation.
+func newDeviceTestRouter(t *testing.T, userRepo *mocks.MockUserRepository) *gin.Engine {
+	t.Helper()
+	h := buildAuthHandler(t, userRepo)
+	r := gin.New()
+	v1 := r.Group("/api/v1")
+	auth := v1.Group("/auth")
+	auth.POST("/device/login", h.DeviceLogin)
+	auth.POST("/device/register", authContextMiddleware(authTestUserID, authTestSessionID), h.RegisterDevice)
+	auth.DELETE("/device/:id", authContextMiddleware(authTestUserID, authTestSessionID), h.RevokeDevice)
+	return r
+}
+
+func TestAuthHandler_RegisterDevice(t *testing.T) {
+	userRepo := new(mocks.MockUserRepository)
+	userRepo.On("CreateDeviceCredential", mock.Anything, mock.AnythingOfType("*models.DeviceCredential")).
+		Return(nil)
+
+	r := newDeviceTestRouter(t, userRepo)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device/register",
+		jsonBody(t, map[string]interface{}{"install_id": "iOS-test", "platform": "ios"}))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	body := assertResponse(t, w, http.StatusOK, true)
+	data := body["data"].(map[string]interface{})
+	require.NotEmpty(t, data["credential"], "plaintext returned exactly once")
+	require.NotEmpty(t, data["credential_id"])
+	userRepo.AssertExpectations(t)
+}
+
+func TestAuthHandler_DeviceLogin(t *testing.T) {
+	userRepo := new(mocks.MockUserRepository)
+	jwtSvc := services.NewJWTService(&authTestConfig().JWT)
+
+	credPlain := "device-credential-plaintext"
+	cred := &models.DeviceCredential{
+		ID:             "cred-1",
+		UserID:         authTestUserID,
+		CredentialHash: jwtSvc.HashToken(credPlain),
+	}
+	user := testutil.CreateTestUser(authTestUserID, "test@example.com")
+
+	userRepo.On("GetDeviceCredentialByHash", mock.Anything, mock.Anything).Return(cred, nil)
+	userRepo.On("GetByID", mock.Anything, authTestUserID).Return(user, nil)
+	userRepo.On("GetProfileByUserID", mock.Anything, authTestUserID).
+		Return(testutil.CreateTestProfile(authTestUserID, "Test", "User"), nil)
+	userRepo.On("CreateSession", mock.Anything, mock.AnythingOfType("*models.UserSession")).Return(nil)
+	userRepo.On("UpdateLastLogin", mock.Anything, authTestUserID).Return(nil)
+	userRepo.On("TouchDeviceCredential", mock.Anything, "cred-1").Return(nil)
+
+	r := newDeviceTestRouter(t, userRepo)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device/login",
+		jsonBody(t, map[string]interface{}{"credential": credPlain}))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	body := assertResponse(t, w, http.StatusOK, true)
+	data := body["data"].(map[string]interface{})
+	tokens := data["tokens"].(map[string]interface{})
+	require.NotEmpty(t, tokens["access_token"])
+	require.NotEmpty(t, tokens["refresh_token"])
+	userRepo.AssertExpectations(t)
+}
+
+func TestAuthHandler_DeviceLogin_RejectsBogus(t *testing.T) {
+	userRepo := new(mocks.MockUserRepository)
+	userRepo.On("GetDeviceCredentialByHash", mock.Anything, mock.Anything).
+		Return(nil, fmt.Errorf("not found"))
+
+	r := newDeviceTestRouter(t, userRepo)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodPost, "/api/v1/auth/device/login",
+		jsonBody(t, map[string]interface{}{"credential": "bogus"}))
+	req.Header.Set("Content-Type", "application/json")
+	r.ServeHTTP(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthHandler_RevokeDevice(t *testing.T) {
+	userRepo := new(mocks.MockUserRepository)
+	userRepo.On("RevokeDeviceCredential", mock.Anything, "cred-1").Return(nil)
+
+	r := newDeviceTestRouter(t, userRepo)
+
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest(http.MethodDelete, "/api/v1/auth/device/cred-1", nil)
+	r.ServeHTTP(w, req)
+
+	assertResponse(t, w, http.StatusOK, true)
+	userRepo.AssertExpectations(t)
 }

@@ -516,6 +516,7 @@ func TestAdminService_DeletePost(t *testing.T) {
 			postID:  "post-1",
 			adminID: "admin-1",
 			setupMocks: func(r *mocks.MockAdminRepository) {
+				r.On("GetPostByID", mock.Anything, "post-1").Return(nil, nil)
 				r.On("DeletePost", mock.Anything, "post-1").Return(nil)
 				r.On("CreateAuditLog", mock.Anything, mock.AnythingOfType("*models.CreateAuditLogRequest")).
 					Return(nil)
@@ -1384,6 +1385,7 @@ func TestAdminService_ListComments(t *testing.T) {
 func TestAdminService_AdminDeleteComment(t *testing.T) {
 	t.Run("repo error", func(t *testing.T) {
 		adminRepo := &mocks.MockAdminRepository{}
+		adminRepo.On("GetCommentByID", mock.Anything, "c-1").Return(nil, nil)
 		adminRepo.On("DeleteComment", mock.Anything, "c-1").Return(errors.New("db error"))
 		svc := newTestAdminService(adminRepo)
 		err := svc.DeleteComment(context.Background(), "c-1", "admin-1")
@@ -1391,6 +1393,7 @@ func TestAdminService_AdminDeleteComment(t *testing.T) {
 	})
 	t.Run("success", func(t *testing.T) {
 		adminRepo := &mocks.MockAdminRepository{}
+		adminRepo.On("GetCommentByID", mock.Anything, "c-1").Return(nil, nil)
 		adminRepo.On("DeleteComment", mock.Anything, "c-1").Return(nil)
 		adminRepo.On("ResolveCommentReportsByCommentID", mock.Anything, "c-1").Return(nil)
 		adminRepo.On("CreateAuditLog", mock.Anything, mock.AnythingOfType("*models.CreateAuditLogRequest")).Return(nil)
@@ -1470,6 +1473,7 @@ func TestAdminService_UpdateBusinessStatus(t *testing.T) {
 func TestAdminService_AdminDeleteBusiness(t *testing.T) {
 	t.Run("repo error", func(t *testing.T) {
 		adminRepo := &mocks.MockAdminRepository{}
+		adminRepo.On("GetBusinessByID", mock.Anything, "b-1").Return(nil, nil)
 		adminRepo.On("DeleteBusiness", mock.Anything, "b-1").Return(errors.New("db error"))
 		svc := newTestAdminService(adminRepo)
 		err := svc.DeleteBusiness(context.Background(), "b-1", "admin-1")
@@ -1477,6 +1481,7 @@ func TestAdminService_AdminDeleteBusiness(t *testing.T) {
 	})
 	t.Run("success", func(t *testing.T) {
 		adminRepo := &mocks.MockAdminRepository{}
+		adminRepo.On("GetBusinessByID", mock.Anything, "b-1").Return(nil, nil)
 		adminRepo.On("DeleteBusiness", mock.Anything, "b-1").Return(nil)
 		adminRepo.On("CreateAuditLog", mock.Anything, mock.AnythingOfType("*models.CreateAuditLogRequest")).Return(nil)
 		svc := newTestAdminService(adminRepo)

@@ -258,7 +258,7 @@ func buildRouter(
 	commentSvc := services.NewCommentService(
 		commentRepo, postRepo, userRepo, businessRepo, notifSvc, logger,
 	)
-	chatSvc := services.NewChatService(conversationRepo, messageRepo, userRepo, wsHub, logger)
+	chatSvc := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, notifSvc, wsHub, logger)
 	searchSvc := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	profileSvc := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, logger)
 	relationshipsSvc := services.NewRelationshipsService(relationshipsRepo, userRepo, notifSvc, logger)
@@ -278,7 +278,8 @@ func buildRouter(
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authSvc, validator, logger)
 	adminCookieCfg := utils.NewCookieConfig(cfg.Server.Env, cfg.Server.AdminCookieDomain)
-	adminAuthHandler := handlers.NewAdminAuthHandler(authSvc, validator, logger, adminCookieCfg, cfg.JWT)
+	customRoleRepo := repositories.NewCustomRoleRepository(db)
+	adminAuthHandler := handlers.NewAdminAuthHandler(authSvc, customRoleRepo, validator, logger, adminCookieCfg, cfg.JWT)
 	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
 	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, logger)
 	postHandler := handlers.NewPostHandler(postSvc, nil, validator, logger)
@@ -295,7 +296,7 @@ func buildRouter(
 	reportHandler := handlers.NewReportHandler(reportSvc)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackSvc)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatSvc, validator, logger)
-	adminHandler := handlers.NewAdminHandler(adminSvc, validator, logger)
+	adminHandler := handlers.NewAdminHandler(adminSvc, mfaSvc, validator, logger)
 	oauthHandler := handlers.NewOAuthHandler(authSvc, oauthSvc, validator, logger)
 	mfaHandler := handlers.NewMFAHandler(mfaSvc, validator, logger)
 

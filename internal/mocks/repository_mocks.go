@@ -1073,6 +1073,11 @@ func (m *MockAdminRepository) UpdatePostStatus(ctx context.Context, postID, stat
 	return args.Error(0)
 }
 
+func (m *MockAdminRepository) UpdatePost(ctx context.Context, postID string, req *models.AdminUpdatePostRequest) error {
+	args := m.Called(ctx, postID, req)
+	return args.Error(0)
+}
+
 func (m *MockAdminRepository) DeletePost(ctx context.Context, postID string) error {
 	args := m.Called(ctx, postID)
 	return args.Error(0)
@@ -1101,6 +1106,11 @@ func (m *MockAdminRepository) DeleteComment(ctx context.Context, commentID strin
 
 func (m *MockAdminRepository) RestoreComment(ctx context.Context, commentID string) error {
 	args := m.Called(ctx, commentID)
+	return args.Error(0)
+}
+
+func (m *MockAdminRepository) UpdateCommentContent(ctx context.Context, commentID, content string) error {
+	args := m.Called(ctx, commentID, content)
 	return args.Error(0)
 }
 
@@ -1627,8 +1637,8 @@ type MockConversationRepository struct {
 	mock.Mock
 }
 
-func (m *MockConversationRepository) GetOrCreate(ctx context.Context, userID1, userID2 string) (*models.Conversation, error) {
-	args := m.Called(ctx, userID1, userID2)
+func (m *MockConversationRepository) GetOrCreate(ctx context.Context, userID1, userID2 string, businessID *string) (*models.Conversation, error) {
+	args := m.Called(ctx, userID1, userID2, businessID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -1643,8 +1653,8 @@ func (m *MockConversationRepository) GetByID(ctx context.Context, conversationID
 	return args.Get(0).(*models.Conversation), args.Error(1)
 }
 
-func (m *MockConversationRepository) GetByParticipants(ctx context.Context, userID1, userID2 string) (*models.Conversation, error) {
-	args := m.Called(ctx, userID1, userID2)
+func (m *MockConversationRepository) GetByParticipants(ctx context.Context, userID1, userID2 string, businessID *string) (*models.Conversation, error) {
+	args := m.Called(ctx, userID1, userID2, businessID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

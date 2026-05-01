@@ -309,6 +309,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 	validRefreshToken, err := jwtSvc.GenerateRefreshToken()
 	require.NoError(t, err)
 	validTokenHash := jwtSvc.HashToken(validRefreshToken)
+	familyID := "fam-1"
 
 	tests := []struct {
 		name          string
@@ -320,7 +321,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 		{
 			name: "invalid refresh token",
 			setupMocks: func(userRepo *mocks.MockUserRepository) {
-				userRepo.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
+				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 				userRepo.On("GetSessionByRefreshToken", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
 			},
 			request:       &models.RefreshTokenRequest{RefreshToken: "invalid-token"},
@@ -334,46 +335,83 @@ func TestAuthService_RefreshToken(t *testing.T) {
 					UserID:           "user-1",
 					RefreshToken:     validRefreshToken,
 					RefreshTokenHash: validTokenHash,
+					FamilyID:         &familyID,
 					ExpiresAt:        time.Now().Add(-1 * time.Hour),
 					Revoked:          false,
 				}
-				userRepo.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).Return(session, nil)
+				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(session, nil)
 			},
 			request:       &models.RefreshTokenRequest{RefreshToken: validRefreshToken},
 			expectedError: "expired",
 		},
 		{
-			name: "revoked session",
+			name: "rotated outside grace triggers reuse detection — revokes family",
 			setupMocks: func(userRepo *mocks.MockUserRepository) {
+				revokedAt := time.Now().Add(-5 * time.Minute) // Far past grace.
 				session := &models.UserSession{
 					ID:               "session-1",
 					UserID:           "user-1",
 					RefreshToken:     validRefreshToken,
 					RefreshTokenHash: validTokenHash,
+					FamilyID:         &familyID,
 					ExpiresAt:        time.Now().Add(1 * time.Hour),
 					Revoked:          true,
+					RevokedAt:        &revokedAt,
 				}
-				userRepo.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).Return(session, nil)
+				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(session, nil)
+				userRepo.On("RevokeSessionFamily", mock.Anything, familyID).Return(nil)
 			},
 			request:       &models.RefreshTokenRequest{RefreshToken: validRefreshToken},
 			expectedError: "revoked",
 		},
 		{
-			name: "successful refresh",
+			name: "rotated within grace + cache miss falls through and mints new pair",
+			setupMocks: func(userRepo *mocks.MockUserRepository) {
+				revokedAt := time.Now().Add(-1 * time.Second) // Inside 60s grace.
+				session := &models.UserSession{
+					ID:               "session-1",
+					UserID:           "user-1",
+					RefreshToken:     validRefreshToken,
+					RefreshTokenHash: validTokenHash,
+					FamilyID:         &familyID,
+					ExpiresAt:        time.Now().Add(1 * time.Hour),
+					Revoked:          true,
+					RevokedAt:        &revokedAt,
+				}
+				user := testutil.CreateTestUser("user-1", "test@example.com")
+				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(session, nil)
+				userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
+				userRepo.On("CreateSession", mock.Anything, mock.AnythingOfType("*models.UserSession")).Return(nil)
+				userRepo.On("MarkSessionRotated", mock.Anything, "session-1", mock.AnythingOfType("string")).Return(nil)
+			},
+			request:       &models.RefreshTokenRequest{RefreshToken: validRefreshToken},
+			expectedError: "",
+			checkResponse: func(t *testing.T, tokens *models.TokenPair) {
+				require.NotNil(t, tokens)
+				assert.NotEmpty(t, tokens.AccessToken)
+				assert.NotEmpty(t, tokens.RefreshToken)
+			},
+		},
+		{
+			name: "successful refresh — active session rotates and persists family",
 			setupMocks: func(userRepo *mocks.MockUserRepository) {
 				session := &models.UserSession{
 					ID:               "session-1",
 					UserID:           "user-1",
 					RefreshToken:     validRefreshToken,
 					RefreshTokenHash: validTokenHash,
+					FamilyID:         &familyID,
 					ExpiresAt:        time.Now().Add(1 * time.Hour),
 					Revoked:          false,
 				}
 				user := testutil.CreateTestUser("user-1", "test@example.com")
-				userRepo.On("GetSessionByRefreshTokenHash", mock.Anything, mock.Anything).Return(session, nil)
+				userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(session, nil)
 				userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
-				userRepo.On("RevokeSession", mock.Anything, "session-1").Return(nil)
-				userRepo.On("CreateSession", mock.Anything, mock.AnythingOfType("*models.UserSession")).Return(nil)
+				userRepo.On("CreateSession", mock.Anything, mock.MatchedBy(func(s *models.UserSession) bool {
+					// New session inherits the family id from the rotated parent.
+					return s.FamilyID != nil && *s.FamilyID == familyID
+				})).Return(nil)
+				userRepo.On("MarkSessionRotated", mock.Anything, "session-1", mock.AnythingOfType("string")).Return(nil)
 			},
 			request:       &models.RefreshTokenRequest{RefreshToken: validRefreshToken},
 			expectedError: "",
@@ -390,7 +428,7 @@ func TestAuthService_RefreshToken(t *testing.T) {
 			userRepo := new(mocks.MockUserRepository)
 			tt.setupMocks(userRepo)
 
-			ts := newFailingTokenStorage()
+			ts, _ := newTestTokenStorage(t)
 			svc := newTestAuthService(userRepo, ts)
 
 			tokens, err := svc.RefreshToken(context.Background(), tt.request)
@@ -874,5 +912,160 @@ func TestAuthService_GetActiveSessions(t *testing.T) {
 		svc := newTestAuthService(userRepo, tokenStorage)
 		_, err := svc.GetActiveSessions(context.Background(), "u-1")
 		require.Error(t, err)
+	})
+}
+
+// TestAuthService_RefreshToken_GraceCacheHit verifies that when /auth/refresh
+// is called with a refresh token that was rotated <60s ago AND the rotated
+// pair is still in the Redis grace cache, the service returns the cached
+// pair instead of minting a new session. This makes concurrent refreshes
+// from the same client idempotent.
+func TestAuthService_RefreshToken_GraceCacheHit(t *testing.T) {
+	cfg := getTestConfig()
+	cfg.JWT.RefreshGrace = 60 * time.Second
+	jwtSvc := NewJWTService(&cfg.JWT)
+
+	oldRefresh, err := jwtSvc.GenerateRefreshToken()
+	require.NoError(t, err)
+	oldHash := jwtSvc.HashToken(oldRefresh)
+	familyID := "fam-1"
+
+	userRepo := new(mocks.MockUserRepository)
+	revokedAt := time.Now().Add(-5 * time.Second)
+	rotated := &models.UserSession{
+		ID:               "session-1",
+		UserID:           "user-1",
+		RefreshToken:     oldRefresh,
+		RefreshTokenHash: oldHash,
+		FamilyID:         &familyID,
+		ExpiresAt:        time.Now().Add(1 * time.Hour),
+		Revoked:          true,
+		RevokedAt:        &revokedAt,
+	}
+	userRepo.On("GetSessionByRefreshTokenHashAny", mock.Anything, mock.Anything).Return(rotated, nil)
+
+	tokenStorage, _ := newTestTokenStorage(t)
+	// Pre-seed the cache with the replacement pair (simulates a winning
+	// concurrent refresh that landed first).
+	cachedPair := &RotatedPair{
+		AccessToken:  "cached-access",
+		RefreshToken: "cached-refresh",
+		ExpiresAt:    time.Now().Add(15 * time.Minute),
+	}
+	require.NoError(t, tokenStorage.CacheRotatedPair(context.Background(), oldHash, cachedPair, cfg.JWT.RefreshGrace))
+
+	svc := NewAuthService(userRepo, nil, NewPasswordService(), jwtSvc,
+		NewEmailService(&config.EmailConfig{}, zap.NewNop()), tokenStorage, nil, cfg, zap.NewNop())
+
+	pair, err := svc.RefreshToken(context.Background(), &models.RefreshTokenRequest{RefreshToken: oldRefresh})
+	require.NoError(t, err)
+	assert.Equal(t, "cached-access", pair.AccessToken)
+	assert.Equal(t, "cached-refresh", pair.RefreshToken)
+	// No CreateSession / MarkSessionRotated should be called when the cache hits.
+	userRepo.AssertNotCalled(t, "CreateSession", mock.Anything, mock.Anything)
+	userRepo.AssertNotCalled(t, "MarkSessionRotated", mock.Anything, mock.Anything, mock.Anything)
+}
+
+// TestAuthService_DeviceCredential exercises the register / login / revoke
+// flow for long-lived device credentials. Plaintext is returned exactly once
+// at registration; only the SHA-256 hash is persisted server-side.
+func TestAuthService_DeviceCredential(t *testing.T) {
+	cfg := getTestConfig()
+	jwtSvc := NewJWTService(&cfg.JWT)
+
+	t.Run("RegisterDevice issues a plaintext credential and persists hash", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		var capturedHash string
+		userRepo.On("CreateDeviceCredential", mock.Anything, mock.MatchedBy(func(c *models.DeviceCredential) bool {
+			capturedHash = c.CredentialHash
+			return c.UserID == "user-1" && c.CredentialHash != ""
+		})).Return(nil)
+
+		ts, _ := newTestTokenStorage(t)
+		svc := newTestAuthService(userRepo, ts)
+
+		install := "install-xyz"
+		platform := "ios"
+		resp, err := svc.RegisterDevice(context.Background(), "user-1", &models.RegisterDeviceRequest{
+			InstallID: &install,
+			Platform:  &platform,
+		})
+		require.NoError(t, err)
+		require.NotEmpty(t, resp.Credential, "plaintext credential must be returned exactly once")
+		require.NotEmpty(t, resp.CredentialID)
+		// Hash is deterministic — recomputing matches what was persisted.
+		assert.Equal(t, jwtSvc.HashToken(resp.Credential), capturedHash)
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("LoginWithDevice mints a fresh session for valid credential", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		credPlain := "device-credential-plaintext"
+		credHash := jwtSvc.HashToken(credPlain)
+		cred := &models.DeviceCredential{
+			ID:             "cred-1",
+			UserID:         "user-1",
+			CredentialHash: credHash,
+		}
+		user := testutil.CreateTestUser("user-1", "test@example.com")
+		userRepo.On("GetDeviceCredentialByHash", mock.Anything, credHash).Return(cred, nil)
+		userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
+		userRepo.On("GetProfileByUserID", mock.Anything, "user-1").Return(testutil.CreateTestProfile("user-1", "Test", "User"), nil)
+		userRepo.On("CreateSession", mock.Anything, mock.AnythingOfType("*models.UserSession")).Return(nil)
+		userRepo.On("UpdateLastLogin", mock.Anything, "user-1").Return(nil)
+		userRepo.On("TouchDeviceCredential", mock.Anything, "cred-1").Return(nil)
+
+		ts, _ := newTestTokenStorage(t)
+		svc := newTestAuthService(userRepo, ts)
+
+		resp, err := svc.LoginWithDevice(context.Background(), &models.DeviceLoginRequest{Credential: credPlain})
+		require.NoError(t, err)
+		require.NotNil(t, resp.Tokens)
+		assert.NotEmpty(t, resp.Tokens.AccessToken)
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("LoginWithDevice rejects unknown credential", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		userRepo.On("GetDeviceCredentialByHash", mock.Anything, mock.Anything).Return(nil, errors.New("not found"))
+
+		ts, _ := newTestTokenStorage(t)
+		svc := newTestAuthService(userRepo, ts)
+
+		_, err := svc.LoginWithDevice(context.Background(), &models.DeviceLoginRequest{Credential: "bogus"})
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "invalid")
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("LoginWithDevice rejects expired credential", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		expired := time.Now().Add(-1 * time.Hour)
+		cred := &models.DeviceCredential{
+			ID:             "cred-1",
+			UserID:         "user-1",
+			CredentialHash: "h",
+			ExpiresAt:      &expired,
+		}
+		userRepo.On("GetDeviceCredentialByHash", mock.Anything, mock.Anything).Return(cred, nil)
+
+		ts, _ := newTestTokenStorage(t)
+		svc := newTestAuthService(userRepo, ts)
+
+		_, err := svc.LoginWithDevice(context.Background(), &models.DeviceLoginRequest{Credential: "anything"})
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "expired")
+		userRepo.AssertExpectations(t)
+	})
+
+	t.Run("RevokeDevice marks credential dead", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		userRepo.On("RevokeDeviceCredential", mock.Anything, "cred-1").Return(nil)
+
+		ts, _ := newTestTokenStorage(t)
+		svc := newTestAuthService(userRepo, ts)
+
+		require.NoError(t, svc.RevokeDevice(context.Background(), "user-1", "cred-1"))
+		userRepo.AssertExpectations(t)
 	})
 }

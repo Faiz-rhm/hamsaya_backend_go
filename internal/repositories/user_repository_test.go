@@ -257,3 +257,53 @@ func TestUserRepository_CreateProfile(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestUserRepository_MarkSessionRotated(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newUserRepo(pool)
+
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"),
+		mock.MatchedBy(func(args []any) bool {
+			// args = [sessionID, now, replacementID]
+			return len(args) == 3 && args[0] == "s-old" && args[2] == "s-new"
+		})).Return(pgconn.NewCommandTag("UPDATE 1"), nil).Maybe()
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything, mock.Anything).
+		Return(pgconn.NewCommandTag("UPDATE 1"), nil)
+
+	err := repo.MarkSessionRotated(context.Background(), "s-old", "s-new")
+	require.NoError(t, err)
+}
+
+func TestUserRepository_RevokeSessionFamily(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newUserRepo(pool)
+
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).
+		Return(pgconn.NewCommandTag("UPDATE 3"), nil)
+
+	err := repo.RevokeSessionFamily(context.Background(), "fam-1")
+	require.NoError(t, err)
+}
+
+func TestUserRepository_DeviceCredential_CreateAndRevoke(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newUserRepo(pool)
+
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"),
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
+		mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(pgconn.NewCommandTag("INSERT 1"), nil).Maybe()
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).
+		Return(pgconn.NewCommandTag("UPDATE 1"), nil)
+
+	cred := &models.DeviceCredential{
+		ID:             "cred-1",
+		UserID:         "u-1",
+		CredentialHash: "hash",
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	require.NoError(t, repo.CreateDeviceCredential(context.Background(), cred))
+	require.NoError(t, repo.RevokeDeviceCredential(context.Background(), "cred-1"))
+}
+

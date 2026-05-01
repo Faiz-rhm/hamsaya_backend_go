@@ -92,7 +92,7 @@ func TestChatHandler_SendMessage(t *testing.T) {
 		msgRepo := &mocks.MockMessageRepository{}
 		userRepo := &mocks.MockUserRepository{}
 		conv := &models.Conversation{ID: chatTestConvID}
-		convRepo.On("GetOrCreate", mock.Anything, chatTestUserID, chatTestRecipientID).Return(conv, nil)
+		convRepo.On("GetOrCreate", mock.Anything, chatTestUserID, chatTestRecipientID, mock.Anything).Return(conv, nil)
 		msgRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
 		convRepo.On("UpdateLastMessageAt", mock.Anything, chatTestConvID).Return(nil)
 		userRepo.On("GetProfileByUserID", mock.Anything, mock.Anything).Return(&models.Profile{}, nil).Maybe()

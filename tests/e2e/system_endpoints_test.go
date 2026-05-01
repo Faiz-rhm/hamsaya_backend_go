@@ -21,10 +21,10 @@ func TestE2E_System_RoleGating(t *testing.T) {
 
 	cases := []struct {
 		name       string
-		promote    func(*testing.T, *testEnv, string)
+		promote    func(*testEnv, *testing.T, string)
 		wantStatus int
 	}{
-		{name: "regular user", promote: func(*testing.T, *testEnv, string) {}, wantStatus: http.StatusForbidden},
+		{name: "regular user", promote: func(*testEnv, *testing.T, string) {}, wantStatus: http.StatusForbidden},
 		{name: "moderator", promote: (*testEnv).makeModerator, wantStatus: http.StatusForbidden},
 		{name: "admin", promote: (*testEnv).makeAdmin, wantStatus: http.StatusForbidden},
 		{name: "super_admin", promote: (*testEnv).makeSuperAdmin, wantStatus: http.StatusOK},
@@ -35,7 +35,7 @@ func TestE2E_System_RoleGating(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			email := fmt.Sprintf("sysrole+%d-%d@example.com", testNonce(t), i)
 			toks := register(t, env, email, "Pass123!@#xyz")
-			tc.promote(t, env, toks.UserID)
+			tc.promote(env, t, toks.UserID)
 
 			req, _ := http.NewRequest(http.MethodGet, env.url("/api/v1/admin/system/build-info"), nil)
 			req.Header.Set("Authorization", "Bearer "+toks.AccessToken)
@@ -66,7 +66,7 @@ func TestE2E_System_FeatureFlagToggle(t *testing.T) {
 	require.Contains(t, listBody, "registration_open", "seeded flag missing")
 
 	// 2. Toggle registration_open OFF
-	put, _ := http.NewRequest(http.MethodPUT, env.url("/api/v1/admin/system/flags/registration_open"),
+	put, _ := http.NewRequest(http.MethodPut, env.url("/api/v1/admin/system/flags/registration_open"),
 		bytes.NewBufferString(`{"enabled": false}`))
 	put.Header.Set("Authorization", auth)
 	put.Header.Set("Content-Type", "application/json")
@@ -99,7 +99,7 @@ func TestE2E_System_FeatureFlagToggle(t *testing.T) {
 	assert.True(t, found, "registration_open not in list response")
 
 	// 4. Restore for repeatability.
-	restore, _ := http.NewRequest(http.MethodPUT, env.url("/api/v1/admin/system/flags/registration_open"),
+	restore, _ := http.NewRequest(http.MethodPut, env.url("/api/v1/admin/system/flags/registration_open"),
 		bytes.NewBufferString(`{"enabled": true}`))
 	restore.Header.Set("Authorization", auth)
 	restore.Header.Set("Content-Type", "application/json")
@@ -116,7 +116,7 @@ func TestE2E_System_RejectUnknownFlag(t *testing.T) {
 	toks := register(t, env, email, "Pass123!@#xyz")
 	env.makeSuperAdmin(t, toks.UserID)
 
-	req, _ := http.NewRequest(http.MethodPUT,
+	req, _ := http.NewRequest(http.MethodPut,
 		env.url("/api/v1/admin/system/flags/this_flag_does_not_exist"),
 		strings.NewReader(`{"enabled": true}`))
 	req.Header.Set("Authorization", "Bearer "+toks.AccessToken)

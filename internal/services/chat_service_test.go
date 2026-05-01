@@ -16,7 +16,7 @@ import (
 )
 
 func newTestChatService(convRepo *mocks.MockConversationRepository, msgRepo *mocks.MockMessageRepository, userRepo *mocks.MockUserRepository) *ChatService {
-	return NewChatService(convRepo, msgRepo, userRepo, nil, zap.NewNop())
+	return NewChatService(convRepo, msgRepo, userRepo, nil, nil, nil, zap.NewNop())
 }
 
 func newTestConversation(id string) *models.Conversation {
@@ -75,7 +75,7 @@ func TestChatService_SendMessage(t *testing.T) {
 		msgRepo := &mocks.MockMessageRepository{}
 		userRepo := new(mocks.MockUserRepository)
 
-		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1").
+		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1", mock.Anything).
 			Return(nil, errors.New("db error"))
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
@@ -96,7 +96,7 @@ func TestChatService_SendMessage(t *testing.T) {
 		userRepo := new(mocks.MockUserRepository)
 
 		conv := newTestConversation("conv-1")
-		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1").Return(conv, nil)
+		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1", mock.Anything).Return(conv, nil)
 		msgRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Message")).Return(errors.New("db error"))
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
@@ -117,7 +117,7 @@ func TestChatService_SendMessage(t *testing.T) {
 		userRepo := new(mocks.MockUserRepository)
 
 		conv := newTestConversation("conv-1")
-		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1").Return(conv, nil)
+		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1", mock.Anything).Return(conv, nil)
 		msgRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
 		convRepo.On("UpdateLastMessageAt", mock.Anything, "conv-1").Return(nil)
 		// enrichMessage calls GetProfileByUserID
@@ -150,7 +150,7 @@ func TestChatService_GetConversations(t *testing.T) {
 			Return(nil, errors.New("db error"))
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
-		result, err := svc.GetConversations(context.Background(), "user-1", 10, 0)
+		result, err := svc.GetConversations(context.Background(), "user-1", 10, 0, nil)
 
 		require.Error(t, err)
 		assert.Nil(t, result)
@@ -165,7 +165,7 @@ func TestChatService_GetConversations(t *testing.T) {
 			Return([]*models.Conversation{}, nil)
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
-		result, err := svc.GetConversations(context.Background(), "user-1", 10, 0)
+		result, err := svc.GetConversations(context.Background(), "user-1", 10, 0, nil)
 
 		require.NoError(t, err)
 		_ = result // nil for empty slice is fine
@@ -185,7 +185,7 @@ func TestChatService_GetConversations(t *testing.T) {
 		msgRepo.On("GetUnreadCount", mock.Anything, "conv-1", "user-1").Return(0, nil)
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
-		result, err := svc.GetConversations(context.Background(), "user-1", 10, 0)
+		result, err := svc.GetConversations(context.Background(), "user-1", 10, 0, nil)
 
 		require.NoError(t, err)
 		assert.Len(t, result, 1)
