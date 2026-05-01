@@ -765,6 +765,14 @@ func (m *MockBusinessRepository) GetCategoriesByBusinessID(ctx context.Context, 
 	return args.Get(0).([]*models.BusinessCategory), args.Error(1)
 }
 
+func (m *MockBusinessRepository) GetCategoriesByBusinessIDs(ctx context.Context, businessIDs []string) (map[string][]string, error) {
+	args := m.Called(ctx, businessIDs)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string][]string), args.Error(1)
+}
+
 func (m *MockBusinessRepository) AddCategories(ctx context.Context, businessID string, categoryIDs []string) error {
 	args := m.Called(ctx, businessID, categoryIDs)
 	return args.Error(0)

@@ -25,6 +25,7 @@ type BusinessRepository interface {
 
 	// Categories
 	GetCategoriesByBusinessID(ctx context.Context, businessID string) ([]*models.BusinessCategory, error)
+	GetCategoriesByBusinessIDs(ctx context.Context, businessIDs []string) (map[string][]string, error)
 	AddCategories(ctx context.Context, businessID string, categoryIDs []string) error
 	RemoveCategories(ctx context.Context, businessID string) error
 
@@ -585,6 +586,36 @@ func (r *businessRepository) GetCategoriesByBusinessID(ctx context.Context, busi
 	}
 
 	return categories, rows.Err()
+}
+
+// GetCategoriesByBusinessIDs returns category-name lists for multiple businesses
+// in a single query. Used by the discover enrichment path to avoid an N+1 of
+// per-business category lookups when rendering map cards.
+func (r *businessRepository) GetCategoriesByBusinessIDs(ctx context.Context, businessIDs []string) (map[string][]string, error) {
+	out := make(map[string][]string, len(businessIDs))
+	if len(businessIDs) == 0 {
+		return out, nil
+	}
+	query := `
+		SELECT bpc.business_profile_id, bc.name
+		FROM business_profile_categories bpc
+		INNER JOIN business_categories bc ON bc.id = bpc.business_category_id
+		WHERE bpc.business_profile_id = ANY($1)
+		ORDER BY bpc.business_profile_id, bc.name ASC
+	`
+	rows, err := r.db.Pool.Query(ctx, query, businessIDs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var bid, name string
+		if err := rows.Scan(&bid, &name); err != nil {
+			return nil, err
+		}
+		out[bid] = append(out[bid], name)
+	}
+	return out, rows.Err()
 }
 
 // AddCategories adds categories to a business

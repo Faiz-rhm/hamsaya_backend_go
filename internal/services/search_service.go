@@ -335,9 +335,25 @@ func (s *SearchService) enrichBusinesses(ctx context.Context, businesses []*mode
 	return results
 }
 
-// enrichDiscoverPosts enriches discover post results
+// enrichDiscoverPosts enriches discover post results. Fetches first
+// attachment per post in a single batched query so the mobile client doesn't
+// have to issue one /posts/{id}/attachments request per marker card.
 func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models.Post) []*models.DiscoverPost {
 	results := make([]*models.DiscoverPost, 0, len(posts))
+
+	// Batched fetch of first attachment per post.
+	postIDs := make([]string, 0, len(posts))
+	for _, p := range posts {
+		postIDs = append(postIDs, p.ID)
+	}
+	attachmentsByPost := map[string][]*models.Attachment{}
+	if len(postIDs) > 0 {
+		if a, err := s.postRepo.GetAttachmentsByPostIDs(ctx, postIDs); err == nil {
+			attachmentsByPost = a
+		} else {
+			s.logger.Warn("Failed to batch-load post attachments for discover", zap.Error(err))
+		}
+	}
 
 	for _, post := range posts {
 		var location *models.Location
@@ -361,12 +377,20 @@ func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models
 			startTime = &timeStr
 		}
 
+		var thumbnail *models.Photo
+		if attachments := attachmentsByPost[post.ID]; len(attachments) > 0 {
+			photo := attachments[0].Photo
+			if photo.URL != "" {
+				thumbnail = &photo
+			}
+		}
+
 		result := &models.DiscoverPost{
 			ID:          post.ID,
 			Type:        post.Type,
 			Title:       post.Title,
 			Description: post.Description,
-			Thumbnail:   nil,
+			Thumbnail:   thumbnail,
 			Location:    location,
 			Price:       post.Price,
 			StartDate:   startDate,
@@ -380,9 +404,25 @@ func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models
 	return results
 }
 
-// enrichDiscoverBusinesses enriches discover business results
+// enrichDiscoverBusinesses enriches discover business results. Fetches
+// category-name lists for all businesses in a single batched query so the
+// mobile client doesn't have to issue one /businesses/{id}/categories
+// request per marker card.
 func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses []*models.BusinessProfile) []*models.DiscoverBusiness {
 	results := make([]*models.DiscoverBusiness, 0, len(businesses))
+
+	businessIDs := make([]string, 0, len(businesses))
+	for _, b := range businesses {
+		businessIDs = append(businessIDs, b.ID)
+	}
+	categoriesByBusiness := map[string][]string{}
+	if len(businessIDs) > 0 {
+		if c, err := s.businessRepo.GetCategoriesByBusinessIDs(ctx, businessIDs); err == nil {
+			categoriesByBusiness = c
+		} else {
+			s.logger.Warn("Failed to batch-load business categories for discover", zap.Error(err))
+		}
+	}
 
 	for _, business := range businesses {
 		var location *models.Location
@@ -396,6 +436,11 @@ func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses
 			}
 		}
 
+		categories := categoriesByBusiness[business.ID]
+		if categories == nil {
+			categories = []string{}
+		}
+
 		result := &models.DiscoverBusiness{
 			ID:          business.ID,
 			Name:        business.Name,
@@ -403,7 +448,7 @@ func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses
 			Avatar:      business.Avatar,
 			Cover:       business.Cover,
 			Location:    location,
-			Categories:  []string{},
+			Categories:  categories,
 			TotalFollow: business.TotalFollow,
 		}
 
