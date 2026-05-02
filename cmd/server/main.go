@@ -237,6 +237,7 @@ func main() {
 	pollRepo := repositories.NewPollRepository(db)
 	eventRepo := repositories.NewEventRepository(db)
 	businessRepo := repositories.NewBusinessRepository(db)
+	businessReviewRepo := repositories.NewBusinessReviewRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	conversationRepo := repositories.NewConversationRepository(db)
 	messageRepo := repositories.NewMessageRepository(db)
@@ -277,6 +278,7 @@ func main() {
 	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
+	businessReviewService := services.NewBusinessReviewService(businessReviewRepo, businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
 	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, redisClient, logger)
@@ -365,6 +367,7 @@ func main() {
 	pollHandler := handlers.NewPollHandler(pollService, validator, logger)
 	eventHandler := handlers.NewEventHandler(eventService, validator, logger)
 	businessHandler := handlers.NewBusinessHandler(businessService, storageService, validator, logger)
+	businessReviewHandler := handlers.NewBusinessReviewHandler(businessReviewService, userRepo, validator, logger)
 	categoryHandler := handlers.NewCategoryHandler(categoryService, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatService, wsHub, validator, logger, cfg)
 	notificationHandler := handlers.NewNotificationHandler(notificationService, validator, logger)
@@ -577,6 +580,15 @@ func main() {
 
 			// Business reporting (require verified email + rate limiting)
 			businesses.POST("/:business_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportBusiness)
+
+			// Business reviews. List + stats are public (cached/owner discovery).
+			// Write paths require verified email so spam reviews are gated.
+			businesses.GET("/:business_id/reviews", businessReviewHandler.ListReviews)
+			businesses.GET("/:business_id/reviews/stats", businessReviewHandler.GetStats)
+			businesses.GET("/:business_id/reviews/me", authMiddleware.RequireAuth(), businessReviewHandler.GetMyReview)
+			businesses.POST("/:business_id/reviews", verifiedAuth, businessReviewHandler.SubmitReview)
+			businesses.PUT("/:business_id/reviews/:review_id", verifiedAuth, businessReviewHandler.UpdateReview)
+			businesses.DELETE("/:business_id/reviews/:review_id", verifiedAuth, businessReviewHandler.DeleteReview)
 		}
 
 		// Category routes (marketplace categories)
@@ -790,6 +802,11 @@ func main() {
 			// Application logs — super_admin only. Backed by the DBLogSink
 			// (pkg/observability) which mirrors warn+ entries to app_logs.
 			admin.GET("/logs", superOnly, appLogHandler.List)
+
+			// Business review moderation. Hide/unhide a review without deleting
+			// it (preserves audit trail; trigger updates aggregates).
+			admin.PATCH("/business-reviews/:review_id/hidden", businessReviewHandler.SetHidden)
+			admin.DELETE("/business-reviews/:review_id", businessReviewHandler.DeleteReview)
 		}
 
 		// Public-facing ads — mobile feed fetches active placements without

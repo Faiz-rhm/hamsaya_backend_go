@@ -30,6 +30,8 @@ type BusinessProfile struct {
 	ShowLocation    bool          `json:"show_location"`
 	TotalViews      int           `json:"total_views"`
 	TotalFollow     int           `json:"total_follow"`
+	AvgRating       float64       `json:"avg_rating"`
+	ReviewCount     int           `json:"review_count"`
 	CreatedAt       time.Time     `json:"created_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
 	DeletedAt       *time.Time    `json:"-"`

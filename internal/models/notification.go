@@ -16,6 +16,7 @@ const (
 	NotificationTypeEventInterest   NotificationType = "EVENT_INTEREST"
 	NotificationTypeEventGoing      NotificationType = "EVENT_GOING"
 	NotificationTypeBusinessFollow  NotificationType = "BUSINESS_FOLLOW"
+	NotificationTypeBusinessReview  NotificationType = "BUSINESS_REVIEW"
 	NotificationTypePostShare       NotificationType = "POST_SHARE"
 	NotificationTypePollVote        NotificationType = "POLL_VOTE"
 	NotificationTypeNewPost         NotificationType = "NEW_POST"

@@ -161,7 +161,7 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
-			show_location, total_views, total_follow, created_at, updated_at
+			show_location, total_views, total_follow, avg_rating, review_count, created_at, updated_at
 		FROM business_profiles
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -192,6 +192,8 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 		&business.ShowLocation,
 		&business.TotalViews,
 		&business.TotalFollow,
+		&business.AvgRating,
+		&business.ReviewCount,
 		&business.CreatedAt,
 		&business.UpdatedAt,
 	)
@@ -219,7 +221,7 @@ func (r *businessRepository) GetByIDs(ctx context.Context, businessIDs []string)
 			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
-			show_location, total_views, total_follow, created_at, updated_at
+			show_location, total_views, total_follow, avg_rating, review_count, created_at, updated_at
 		FROM business_profiles
 		WHERE id = ANY($1) AND deleted_at IS NULL
 	`
@@ -258,6 +260,8 @@ func (r *businessRepository) GetByIDs(ctx context.Context, businessIDs []string)
 			&business.ShowLocation,
 			&business.TotalViews,
 			&business.TotalFollow,
+			&business.AvgRating,
+			&business.ReviewCount,
 			&business.CreatedAt,
 			&business.UpdatedAt,
 		); err != nil {
@@ -278,7 +282,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
-			show_location, total_views, total_follow, created_at, updated_at
+			show_location, total_views, total_follow, avg_rating, review_count, created_at, updated_at
 		FROM business_profiles
 		WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
