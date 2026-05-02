@@ -323,6 +323,8 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 			&business.ShowLocation,
 			&business.TotalViews,
 			&business.TotalFollow,
+			&business.AvgRating,
+			&business.ReviewCount,
 			&business.CreatedAt,
 			&business.UpdatedAt,
 		)
@@ -460,7 +462,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 			bp.additional_info, ST_X(bp.address_location::geometry), ST_Y(bp.address_location::geometry),
 			bp.country, bp.province,
 			bp.district, bp.neighborhood, bp.show_location, bp.total_views,
-			bp.total_follow, bp.created_at, bp.updated_at
+			bp.total_follow, bp.avg_rating, bp.review_count, bp.created_at, bp.updated_at
 		FROM business_profiles bp
 	`
 
@@ -550,6 +552,8 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 			&business.ShowLocation,
 			&business.TotalViews,
 			&business.TotalFollow,
+			&business.AvgRating,
+			&business.ReviewCount,
 			&business.CreatedAt,
 			&business.UpdatedAt,
 		)
