@@ -111,6 +111,34 @@ func (h *BusinessHandler) CreateBusiness(c *gin.Context) {
 			req.AvatarColor = &s
 		}
 	}
+	if v, ok := raw["additional_info"]; ok && v != nil {
+		if s, ok := v.(string); ok {
+			req.AdditionalInfo = &s
+		}
+	}
+	// Structured address levels — clients (mobile) reverse-geocode their
+	// chosen pin and send these alongside lat/lng. Without explicit copies
+	// here, the manual map-to-struct loop drops them silently.
+	if v, ok := raw["country"]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			req.Country = &s
+		}
+	}
+	if v, ok := raw["province"]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			req.Province = &s
+		}
+	}
+	if v, ok := raw["district"]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			req.District = &s
+		}
+	}
+	if v, ok := raw["neighborhood"]; ok && v != nil {
+		if s, ok := v.(string); ok && s != "" {
+			req.Neighborhood = &s
+		}
+	}
 	// Support both "lat"/"lng" and "latitude"/"longitude"
 	if v, ok := raw["lat"]; ok && v != nil {
 		if f, ok := v.(float64); ok {
