@@ -71,6 +71,67 @@ func NewTestDB(pool *MockPool) *database.DB {
 	return &database.DB{Pool: pool}
 }
 
+// MockTx is a testify/mock implementation of pgx.Tx covering the subset of
+// methods used by repository code (Exec, Query, QueryRow, Commit, Rollback).
+// The unused methods return zero values so the type satisfies pgx.Tx.
+type MockTx struct {
+	mock.Mock
+}
+
+func (m *MockTx) Begin(ctx context.Context) (pgx.Tx, error) {
+	ret := m.Called(ctx)
+	if ret.Get(0) == nil {
+		return nil, ret.Error(1)
+	}
+	return ret.Get(0).(pgx.Tx), ret.Error(1)
+}
+
+func (m *MockTx) Commit(ctx context.Context) error {
+	return m.Called(ctx).Error(0)
+}
+
+func (m *MockTx) Rollback(ctx context.Context) error {
+	return m.Called(ctx).Error(0)
+}
+
+func (m *MockTx) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+	ret := m.Called(ctx, sql, args)
+	return ret.Get(0).(pgconn.CommandTag), ret.Error(1)
+}
+
+func (m *MockTx) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+	ret := m.Called(ctx, sql, args)
+	if ret.Get(0) == nil {
+		return nil, ret.Error(1)
+	}
+	return ret.Get(0).(pgx.Rows), ret.Error(1)
+}
+
+func (m *MockTx) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+	ret := m.Called(ctx, sql, args)
+	return ret.Get(0).(pgx.Row)
+}
+
+func (m *MockTx) CopyFrom(ctx context.Context, tableName pgx.Identifier, columnNames []string, rowSrc pgx.CopyFromSource) (int64, error) {
+	return 0, nil
+}
+
+func (m *MockTx) SendBatch(ctx context.Context, b *pgx.Batch) pgx.BatchResults {
+	return nil
+}
+
+func (m *MockTx) LargeObjects() pgx.LargeObjects {
+	return pgx.LargeObjects{}
+}
+
+func (m *MockTx) Prepare(ctx context.Context, name, sql string) (*pgconn.StatementDescription, error) {
+	return nil, nil
+}
+
+func (m *MockTx) Conn() *pgx.Conn {
+	return nil
+}
+
 // MockRow implements pgx.Row for stubbing QueryRow results.
 type MockRow struct {
 	scanFn func(dest ...any) error

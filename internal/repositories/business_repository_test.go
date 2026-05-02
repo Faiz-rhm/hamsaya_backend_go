@@ -51,13 +51,21 @@ func TestBusinessRepository_Create_DBError(t *testing.T) {
 
 func TestBusinessRepository_Delete_Success(t *testing.T) {
 	pool := new(testutil.MockPool)
+	tx := new(testutil.MockTx)
 	repo := newBusinessRepo(pool)
 
-	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
-		Return(pgconn.NewCommandTag("UPDATE 1"), nil)
+	pool.On("Begin", mock.Anything).Return(tx, nil)
+	tx.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return(pgconn.NewCommandTag("UPDATE 1"), nil).Twice()
+	tx.On("Commit", mock.Anything).Return(nil)
+	// Deferred rollback runs after a successful commit; pgx normally returns
+	// ErrTxClosed and the repo ignores it.
+	tx.On("Rollback", mock.Anything).Return(nil)
 
 	err := repo.Delete(context.Background(), "biz-1")
 	require.NoError(t, err)
+	pool.AssertExpectations(t)
+	tx.AssertExpectations(t)
 }
 
 func TestBusinessRepository_Follow_Success(t *testing.T) {
