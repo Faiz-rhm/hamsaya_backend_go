@@ -1988,3 +1988,116 @@ func (m *MockBusinessReviewRepository) GetStats(ctx context.Context, businessID 
 	}
 	return args.Get(0).(*models.BusinessReviewStats), args.Error(1)
 }
+
+// MockMonetizationRepository is a mock implementation of MonetizationRepository.
+type MockMonetizationRepository struct {
+	mock.Mock
+}
+
+func (m *MockMonetizationRepository) ListAds(ctx context.Context, status string, page, limit int) ([]*models.Ad, int, error) {
+	args := m.Called(ctx, status, page, limit)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Ad), args.Int(1), args.Error(2)
+}
+
+func (m *MockMonetizationRepository) ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error) {
+	args := m.Called(ctx, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.Ad), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) GetAd(ctx context.Context, id string) (*models.Ad, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Ad), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, status string, startAt, endAt *time.Time) (*models.Ad, error) {
+	args := m.Called(ctx, advertiserID, title, body, imageURL, targetURL, status, startAt, endAt)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Ad), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) UpdateAdStatus(ctx context.Context, id, status, reviewedBy string, req *models.AdReviewRequest) (*models.Ad, error) {
+	args := m.Called(ctx, id, status, reviewedBy, req)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Ad), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) DeleteAd(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+
+func (m *MockMonetizationRepository) IncrementAdImpression(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+
+func (m *MockMonetizationRepository) IncrementAdClick(ctx context.Context, id string) error {
+	return m.Called(ctx, id).Error(0)
+}
+
+func (m *MockMonetizationRepository) ListBalances(ctx context.Context, search string, page, limit int) ([]*models.CreditBalance, int, error) {
+	args := m.Called(ctx, search, page, limit)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.CreditBalance), args.Int(1), args.Error(2)
+}
+
+func (m *MockMonetizationRepository) GetBalance(ctx context.Context, userID string) (*models.CreditBalance, error) {
+	args := m.Called(ctx, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.CreditBalance), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) ListUserTransactions(ctx context.Context, userID string, limit int) ([]*models.CreditTransaction, error) {
+	args := m.Called(ctx, userID, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.CreditTransaction), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) AdjustCredits(ctx context.Context, userID string, req *models.AdjustCreditsRequest, adminID string) (*models.CreditBalance, error) {
+	args := m.Called(ctx, userID, req, adminID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.CreditBalance), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) ListBoosts(ctx context.Context, status string, page, limit int) ([]*models.Boost, int, error) {
+	args := m.Called(ctx, status, page, limit)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.Boost), args.Int(1), args.Error(2)
+}
+
+func (m *MockMonetizationRepository) GetBoost(ctx context.Context, id string) (*models.Boost, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Boost), args.Error(1)
+}
+
+func (m *MockMonetizationRepository) CancelBoost(ctx context.Context, id, adminID, reason string) (*models.Boost, error) {
+	args := m.Called(ctx, id, adminID, reason)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Boost), args.Error(1)
+}
