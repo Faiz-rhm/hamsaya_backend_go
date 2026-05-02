@@ -145,10 +145,17 @@ func (s *BusinessReviewService) notifyOwner(business *models.BusinessProfile, re
 	}()
 
 	ctx := context.Background()
-	title := "New review on your business"
+	reviewerName := "Someone"
+	if actor, err := s.userRepo.GetProfileByUserID(ctx, reviewerID); err == nil && actor != nil {
+		if name := actor.FullName(); name != "" {
+			reviewerName = name
+		}
+	}
+	title := reviewerName + " left a review on your business"
 	msg := title
 	data := map[string]interface{}{
 		"actor_id":    reviewerID,
+		"actor_name":  reviewerName,
 		"business_id": business.ID,
 		"review_id":   review.ID,
 		"rating":      review.Rating,

@@ -199,6 +199,9 @@ func (s *PollService) VotePoll(ctx context.Context, pollID, userID, optionID str
 				return
 			}
 			actorName := actor.FullName()
+			if actorName == "" {
+				actorName = "Someone"
+			}
 			actorAvatarColor := ""
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor
