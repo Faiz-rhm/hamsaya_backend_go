@@ -167,7 +167,9 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
-				actorName = actor.FullName()
+				if name := actor.FullName(); name != "" {
+					actorName = name
+				}
 				actorAvatar = actor.Avatar
 				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 					actorAvatarColor = *actor.AvatarColor
@@ -217,7 +219,9 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
-				actorName = actor.FullName()
+				if name := actor.FullName(); name != "" {
+					actorName = name
+				}
 				actorAvatar = actor.Avatar
 				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 					actorAvatarColor = *actor.AvatarColor
@@ -255,7 +259,9 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
-				actorName = actor.FullName()
+				if name := actor.FullName(); name != "" {
+					actorName = name
+				}
 				actorAvatar = actor.Avatar
 				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 					actorAvatarColor = *actor.AvatarColor
@@ -472,7 +478,9 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
-				actorName = actor.FullName()
+				if name := actor.FullName(); name != "" {
+					actorName = name
+				}
 				actorAvatar = actor.Avatar
 				if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 					actorAvatarColor = *actor.AvatarColor

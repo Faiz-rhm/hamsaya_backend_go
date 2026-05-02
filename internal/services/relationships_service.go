@@ -82,6 +82,9 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 				return
 			}
 			actorName := actor.FullName()
+			if actorName == "" {
+				actorName = "Someone"
+			}
 			actorAvatarColor := ""
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor

@@ -98,6 +98,9 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 				return
 			}
 			actorName := actor.FullName()
+			if actorName == "" {
+				actorName = "Someone"
+			}
 			actorAvatarColor := ""
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor

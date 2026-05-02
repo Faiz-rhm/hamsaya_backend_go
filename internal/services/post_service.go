@@ -1445,7 +1445,9 @@ func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, rec
 	var actorAvatar interface{}
 	var actorAvatarColor string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, actorUserID); err == nil {
-		actorName = actor.FullName()
+		if name := actor.FullName(); name != "" {
+			actorName = name
+		}
 		actorAvatar = actor.Avatar
 		if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 			actorAvatarColor = *actor.AvatarColor
@@ -1505,7 +1507,9 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 	var actorAvatar interface{}
 	var actorAvatarColor string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, posterUserID); err == nil {
-		actorName = actor.FullName()
+		if name := actor.FullName(); name != "" {
+			actorName = name
+		}
 		actorAvatar = actor.Avatar
 		if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 			actorAvatarColor = *actor.AvatarColor
