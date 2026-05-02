@@ -497,21 +497,13 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 			return nil, utils.NewInternalError("Failed to create user", err)
 		}
 
-		s.logger.Info("User auto-registered successfully",
+		s.logger.Info("User auto-registered successfully — verification email deferred until profile complete",
 			zap.String("user_id", userID),
 			zap.String("email", email),
 		)
 
-		// Send verification email (OTP)
-		verificationCode, vcErr := s.jwtService.GenerateVerificationCode()
-		if vcErr == nil {
-			ttl := 24 * time.Hour
-			if storeErr := s.tokenStorage.StoreVerificationToken(ctx, userID, verificationCode, ttl); storeErr == nil {
-				if sendErr := s.emailService.SendVerificationEmail(email, email, verificationCode); sendErr != nil {
-					s.logger.Warn("Failed to send verification email after auto-register", zap.String("email", email), zap.Error(sendErr))
-				}
-			}
-		}
+		// Verification email is sent by profile_service when is_complete transitions
+		// false → true, so new users verify only after finishing onboarding.
 
 		// Return auth response for newly created user
 		return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
