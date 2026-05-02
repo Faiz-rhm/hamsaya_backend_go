@@ -250,14 +250,18 @@ type AdminCommentDetailResponse struct {
 
 // AdminBusinessFilter contains filters for listing businesses in admin panel
 type AdminBusinessFilter struct {
-	Search   string `form:"search"`
-	Status   string `form:"status"`
-	Category string `form:"category"`
-	Province string `form:"province"`
-	SortBy   string `form:"sort_by"`
-	SortDir  string `form:"sort_dir"`
-	Page     int    `form:"page"`
-	Limit    int    `form:"limit"`
+	Search          string `form:"search"`
+	Status          string `form:"status"`
+	Category        string `form:"category"`
+	Province        string `form:"province"`
+	SortBy          string `form:"sort_by"`
+	SortDir         string `form:"sort_dir"`
+	// IncludeDeleted, when true, returns soft-deleted rows alongside live ones.
+	// When false (default) only live rows are returned.
+	// Status="DELETED" implies deleted-only and overrides this flag.
+	IncludeDeleted  bool   `form:"include_deleted"`
+	Page            int    `form:"page"`
+	Limit           int    `form:"limit"`
 }
 
 // AdminBusinessResponse is the business data returned in admin API

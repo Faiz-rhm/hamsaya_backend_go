@@ -1141,15 +1141,24 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 	var args []interface{}
 	argIndex := 1
 	
-	conditions = append(conditions, "b.deleted_at IS NULL")
-	
+	// Soft-delete handling: status=DELETED → only deleted rows; include_deleted
+	// flag → both live and deleted; otherwise live only.
+	switch {
+	case filter.Status == "DELETED":
+		conditions = append(conditions, "b.deleted_at IS NOT NULL")
+	case filter.IncludeDeleted:
+		// no deleted_at filter — show both
+	default:
+		conditions = append(conditions, "b.deleted_at IS NULL")
+	}
+
 	if filter.Search != "" {
 		conditions = append(conditions, fmt.Sprintf("(b.name ILIKE $%d OR b.description ILIKE $%d)", argIndex, argIndex))
 		args = append(args, "%"+filter.Search+"%")
 		argIndex++
 	}
-	
-	if filter.Status != "" {
+
+	if filter.Status != "" && filter.Status != "DELETED" {
 		// Convert string status to boolean (status column is boolean in DB)
 		// ACTIVE = true, anything else (PENDING, SUSPENDED, REJECTED) = false
 		statusBool := filter.Status == "ACTIVE"
@@ -1176,8 +1185,14 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 		argIndex++
 	}
 
+	// Guard against empty conditions: include_deleted with no other filters
+	// removes every WHERE-clause member, which would produce `WHERE ` —
+	// invalid SQL. Pin a tautology so the clause stays well-formed.
+	if len(conditions) == 0 {
+		conditions = append(conditions, "1=1")
+	}
 	whereClause := strings.Join(conditions, " AND ")
-	
+
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM business_profiles b WHERE %s`, whereClause)
 	
 	var totalCount int64
@@ -1198,9 +1213,13 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 	offset := (page - 1) * limit
 	
 	query := fmt.Sprintf(`
-		SELECT 
-			b.id, b.name, b.description, 
-			CASE WHEN b.status = true THEN 'ACTIVE' ELSE 'INACTIVE' END as status,
+		SELECT
+			b.id, b.name, b.description,
+			CASE
+				WHEN b.deleted_at IS NOT NULL THEN 'DELETED'
+				WHEN b.status = true THEN 'ACTIVE'
+				ELSE 'INACTIVE'
+			END as status,
 			b.user_id, u.email, COALESCE(pr.first_name || ' ' || pr.last_name, u.email) as owner_name,
 			b.avatar, b.province, b.total_follow, b.total_views,
 			(SELECT COUNT(*) FROM business_reports WHERE business_id = b.id) as report_count,
@@ -1246,7 +1265,11 @@ func (r *adminRepository) GetBusinessByID(ctx context.Context, businessID string
 			b.id, b.name, b.license_no, b.description, b.address,
 			b.phone_number, b.email, b.website,
 			b.avatar, b.avatar_color, b.cover,
-			CASE WHEN b.status = true THEN 'ACTIVE' ELSE 'INACTIVE' END as status,
+			CASE
+				WHEN b.deleted_at IS NOT NULL THEN 'DELETED'
+				WHEN b.status = true THEN 'ACTIVE'
+				ELSE 'INACTIVE'
+			END as status,
 			b.additional_info,
 			b.country, b.province, b.district, b.neighborhood,
 			ST_X(b.address_location::geometry) as longitude,
@@ -1262,7 +1285,7 @@ func (r *adminRepository) GetBusinessByID(ctx context.Context, businessID string
 		FROM business_profiles b
 		JOIN users u ON b.user_id = u.id
 		LEFT JOIN profiles pr ON u.id = pr.id
-		WHERE b.id = $1 AND b.deleted_at IS NULL
+		WHERE b.id = $1
 	`
 
 	business := &models.AdminBusinessDetailResponse{}

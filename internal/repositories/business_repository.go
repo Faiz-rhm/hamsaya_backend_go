@@ -441,16 +441,35 @@ func (r *businessRepository) Update(ctx context.Context, business *models.Busine
 	return err
 }
 
-// Delete soft deletes a business profile
+// Delete soft deletes a business profile and cascades the soft-delete to its
+// posts so they stop surfacing in feeds, search, and the business's own feed
+// list. Done in one transaction so a half-applied state can't leave orphan
+// posts pointing at a deleted business.
 func (r *businessRepository) Delete(ctx context.Context, businessID string) error {
-	query := `
+	now := time.Now()
+	tx, err := r.db.Pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	if _, err := tx.Exec(ctx, `
 		UPDATE business_profiles
 		SET deleted_at = $2
 		WHERE id = $1 AND deleted_at IS NULL
-	`
+	`, businessID, now); err != nil {
+		return fmt.Errorf("soft delete business: %w", err)
+	}
 
-	_, err := r.db.Pool.Exec(ctx, query, businessID, time.Now())
-	return err
+	if _, err := tx.Exec(ctx, `
+		UPDATE posts
+		SET deleted_at = $2
+		WHERE business_id = $1 AND deleted_at IS NULL
+	`, businessID, now); err != nil {
+		return fmt.Errorf("cascade soft delete posts: %w", err)
+	}
+
+	return tx.Commit(ctx)
 }
 
 // List lists business profiles with filters
