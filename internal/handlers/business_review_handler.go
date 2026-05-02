@@ -241,6 +241,50 @@ func (h *BusinessReviewHandler) GetStats(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Stats", stats)
 }
 
+// AdminListReviews returns paginated reviews for a business including hidden ones.
+// Used by the admin panel review moderation page.
+// @Tags         admin
+// @Security     BearerAuth
+// @Param        business_id path string true "Business profile id"
+// @Param        limit query int false "Page size (default 20, max 100)"
+// @Param        offset query int false "Offset (default 0)"
+// @Success      200 {object} utils.Response
+// @Router       /admin/businesses/{business_id}/reviews [get]
+func (h *BusinessReviewHandler) AdminListReviews(c *gin.Context) {
+	businessID := c.Param("business_id")
+	if businessID == "" {
+		utils.SendError(c, http.StatusBadRequest, "business_id is required", utils.ErrBadRequest)
+		return
+	}
+
+	limit := 20
+	offset := 0
+	if v := c.Query("limit"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 100 {
+			limit = n
+		}
+	}
+	if v := c.Query("offset"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+
+	reviews, total, err := h.service.List(c.Request.Context(), businessID, true, limit, offset)
+	if err != nil {
+		h.sendErr(c, err)
+		return
+	}
+	stats, _ := h.service.Stats(c.Request.Context(), businessID)
+	utils.SendSuccess(c, http.StatusOK, "Reviews", gin.H{
+		"items":  reviews,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+		"stats":  stats,
+	})
+}
+
 // SetHidden toggles moderation visibility (admin only).
 // @Tags         admin
 // @Security     BearerAuth

@@ -1928,3 +1928,63 @@ func (m *MockHelpChatRepository) GetUserMessages(ctx context.Context, userID str
 	}
 	return args.Get(0).([]*models.HelpChatMessage), args.Get(1).(int64), args.Error(2)
 }
+
+// MockBusinessReviewRepository is a mock implementation of BusinessReviewRepository
+type MockBusinessReviewRepository struct {
+	mock.Mock
+}
+
+func (m *MockBusinessReviewRepository) Upsert(ctx context.Context, review *models.BusinessReview) error {
+	args := m.Called(ctx, review)
+	return args.Error(0)
+}
+
+func (m *MockBusinessReviewRepository) Update(ctx context.Context, reviewID, userID string, rating *int, comment *string) (*models.BusinessReview, error) {
+	args := m.Called(ctx, reviewID, userID, rating, comment)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessReview), args.Error(1)
+}
+
+func (m *MockBusinessReviewRepository) Delete(ctx context.Context, reviewID, userID string, allowAdmin bool) error {
+	args := m.Called(ctx, reviewID, userID, allowAdmin)
+	return args.Error(0)
+}
+
+func (m *MockBusinessReviewRepository) SetHidden(ctx context.Context, reviewID string, hidden bool) error {
+	args := m.Called(ctx, reviewID, hidden)
+	return args.Error(0)
+}
+
+func (m *MockBusinessReviewRepository) GetByID(ctx context.Context, reviewID string) (*models.BusinessReview, error) {
+	args := m.Called(ctx, reviewID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessReview), args.Error(1)
+}
+
+func (m *MockBusinessReviewRepository) GetByBusinessAndUser(ctx context.Context, businessID, userID string) (*models.BusinessReview, error) {
+	args := m.Called(ctx, businessID, userID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessReview), args.Error(1)
+}
+
+func (m *MockBusinessReviewRepository) ListByBusiness(ctx context.Context, businessID string, includeHidden bool, limit, offset int) ([]*models.BusinessReviewWithAuthor, int, error) {
+	args := m.Called(ctx, businessID, includeHidden, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.BusinessReviewWithAuthor), args.Int(1), args.Error(2)
+}
+
+func (m *MockBusinessReviewRepository) GetStats(ctx context.Context, businessID string) (*models.BusinessReviewStats, error) {
+	args := m.Called(ctx, businessID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessReviewStats), args.Error(1)
+}

@@ -805,6 +805,7 @@ func main() {
 
 			// Business review moderation. Hide/unhide a review without deleting
 			// it (preserves audit trail; trigger updates aggregates).
+			admin.GET("/businesses/:business_id/reviews", businessReviewHandler.AdminListReviews)
 			admin.PATCH("/business-reviews/:review_id/hidden", businessReviewHandler.SetHidden)
 			admin.DELETE("/business-reviews/:review_id", businessReviewHandler.DeleteReview)
 		}
