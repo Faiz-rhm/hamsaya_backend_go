@@ -584,8 +584,7 @@ func (s *PostService) UnlikePost(ctx context.Context, userID, postID string) err
 // BookmarkPost bookmarks a post
 func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) error {
 	// Check if post exists
-	post, err := s.postRepo.GetByID(ctx, postID)
-	if err != nil {
+	if _, err := s.postRepo.GetByID(ctx, postID); err != nil {
 		return utils.NewNotFoundError("Post not found", err)
 	}
 
@@ -593,19 +592,6 @@ func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) e
 	if err := s.postRepo.BookmarkPost(ctx, userID, postID); err != nil {
 		s.logger.Error("Failed to bookmark post", zap.String("post_id", postID), zap.Error(err))
 		return utils.NewInternalError("Failed to bookmark post", err)
-	}
-
-	// Notify SELL post owner that someone is interested.
-	// Skip self-bookmarks. Best-effort — failures must not break the bookmark.
-	if post != nil && post.Type == models.PostTypeSell && post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
-		go s.sendPostNotification(
-			context.WithoutCancel(ctx),
-			userID,
-			*post.UserID,
-			postID,
-			models.NotificationTypeSellInterested,
-			"saved your listing",
-		)
 	}
 
 	s.logger.Info("Post bookmarked", zap.String("post_id", postID), zap.String("user_id", userID))
