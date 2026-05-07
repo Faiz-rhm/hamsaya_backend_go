@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/hamsaya/backend/config"
 	"github.com/hamsaya/backend/internal/models"
@@ -135,19 +136,85 @@ func (s *OAuthService) VerifyGoogleToken(ctx context.Context, idToken string) (*
 	}, nil
 }
 
-// VerifyAppleToken verifies an Apple ID token and returns user info
+// VerifyAppleToken verifies an Apple ID token and returns user info.
+//
+// Steps:
+//  1. Parse the JWT header to extract the `kid`.
+//  2. Fetch Apple's public keys (cached) and look up the matching key.
+//  3. Verify the RS256 signature using that key.
+//  4. Validate `iss`, `aud`, and `exp` claims.
+//  5. Extract `sub`, `email`, `email_verified`.
 func (s *OAuthService) VerifyAppleToken(ctx context.Context, idToken string) (*OAuthUserInfo, error) {
-	// Apple Sign In requires validating the JWT token with Apple's public keys
-	// This is more complex and typically requires a JWT library
-	// For now, we'll return a not implemented error
-	// In production, you would:
-	// 1. Fetch Apple's public keys from https://appleid.apple.com/auth/keys
-	// 2. Validate the JWT signature
-	// 3. Verify claims (iss, aud, exp, etc.)
-	// 4. Extract user info from the token
+	clientID := s.cfg.OAuth.Apple.ClientID
+	if clientID == "" {
+		return nil, utils.NewInternalError("Apple OAuth not configured (APPLE_CLIENT_ID missing)", nil)
+	}
 
-	s.logger.Warn("Apple Sign In not yet fully implemented")
-	return nil, utils.NewNotImplementedError("Apple Sign In not yet fully implemented", nil)
+	parser := jwt.NewParser(
+		jwt.WithValidMethods([]string{"RS256"}),
+		jwt.WithIssuer("https://appleid.apple.com"),
+		jwt.WithAudience(clientID),
+		jwt.WithExpirationRequired(),
+	)
+
+	token, err := parser.Parse(idToken, func(t *jwt.Token) (interface{}, error) {
+		kid, _ := t.Header["kid"].(string)
+		if kid == "" {
+			return nil, fmt.Errorf("apple token missing kid header")
+		}
+		return appleKeys.publicKey(ctx, kid)
+	})
+	if err != nil {
+		// Decode-only parse so we can log the actual `aud`/`iss` claims when
+		// strict verification fails — easier than hex-dumping the JWT.
+		debugParser := jwt.NewParser(jwt.WithoutClaimsValidation())
+		if dbg, _, dbgErr := debugParser.ParseUnverified(idToken, jwt.MapClaims{}); dbgErr == nil {
+			if dbgClaims, ok := dbg.Claims.(jwt.MapClaims); ok {
+				s.logger.Warn("Apple token verification failed",
+					zap.Error(err),
+					zap.Any("aud", dbgClaims["aud"]),
+					zap.Any("iss", dbgClaims["iss"]),
+					zap.Any("sub", dbgClaims["sub"]),
+					zap.String("expected_aud", clientID),
+				)
+			} else {
+				s.logger.Warn("Apple token verification failed", zap.Error(err))
+			}
+		} else {
+			s.logger.Warn("Apple token verification failed", zap.Error(err))
+		}
+		return nil, utils.NewUnauthorizedError("Invalid Apple identity token", err)
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok || !token.Valid {
+		return nil, utils.NewUnauthorizedError("Invalid Apple identity token claims", nil)
+	}
+
+	sub, _ := claims["sub"].(string)
+	if sub == "" {
+		return nil, utils.NewUnauthorizedError("Apple token missing sub claim", nil)
+	}
+	email, _ := claims["email"].(string)
+	// `email_verified` is sometimes a bool, sometimes the string "true"/"false".
+	emailVerified := false
+	switch v := claims["email_verified"].(type) {
+	case bool:
+		emailVerified = v
+	case string:
+		emailVerified = v == "true"
+	}
+
+	s.logger.Info("Apple token verified",
+		zap.String("sub", sub),
+		zap.String("email", email),
+	)
+
+	return &OAuthUserInfo{
+		ProviderUserID: sub,
+		Email:          email,
+		EmailVerified:  emailVerified,
+		Provider:       "apple",
+	}, nil
 }
 
 // VerifyFacebookToken verifies a Facebook access token and returns user info
