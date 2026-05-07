@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -928,8 +929,14 @@ func (h *PostHandler) UploadPostImage(c *gin.Context) {
 	}
 	defer func() { _ = file.Close() }()
 
-	// Per-file size cap. Rejects oversized images before WebP encode burns CPU.
-	if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+	// Per-file size cap. Branch on declared content type — videos get the
+	// larger cap, images stay tight to avoid burning CPU on WebP re-encode.
+	contentType := header.Header.Get("Content-Type")
+	maxBytes := int64(utils.MaxImageUploadBytes)
+	if strings.HasPrefix(strings.ToLower(contentType), "video/") {
+		maxBytes = utils.MaxVideoUploadBytes
+	}
+	if !utils.EnforceUploadSize(c, header.Size, maxBytes) {
 		return
 	}
 
