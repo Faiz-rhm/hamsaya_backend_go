@@ -25,7 +25,6 @@ help:
 	@echo "  make migrate-create - Create a new migration (name=migration_name)"
 	@echo "  make migrate-status - Check migration status"
 	@echo "  make seed           - Seed database with sample data"
-	@echo "  make seed-demo      - Seed database with comprehensive demo data"
 	@echo "  make db-reset       - Remove all data from database (keeps schema)"
 	@echo "  make seed-sell-categories - Seed sell_categories only (no data wipe)"
 	@echo ""
@@ -199,12 +198,6 @@ seed:
 	@echo "Seeding database with sample data..."
 	go run cmd/seed/main.go
 	@echo "Database seeding complete"
-
-# Seed database with comprehensive demo data
-seed-demo:
-	@echo "Seeding database with comprehensive demo data..."
-	go run cmd/seed-demo/main.go
-	@echo "Demo database seeding complete"
 
 # Remove all data from database (keeps schema)
 db-reset:

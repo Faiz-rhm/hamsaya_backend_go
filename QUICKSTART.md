@@ -105,7 +105,7 @@ make migrate-up       # Apply migrations
 make migrate-down     # Rollback last migration
 make migrate-status   # Check migration status
 make seed             # Seed sample data
-make seed-demo        # Seed comprehensive demo data
+make seed-admin       # Create / fix super-admin user
 
 # Docker
 make docker-up        # Start all services

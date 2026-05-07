@@ -218,6 +218,84 @@ INSERT INTO business_categories (id, name, is_active, created_at) VALUES
   ('b2000001-0000-4000-8000-0000000000e2', 'Religious Teacher', true, NOW()),
   ('b2000001-0000-4000-8000-0000000000e3', 'Social Worker', true, NOW()),
   
+  -- Retail Specialty
+  ('b2000001-0000-4000-8000-000000000100', 'Mobile Phone Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000101', 'Mobile Phone Repair', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000102', 'Computer Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000103', 'Computer Repair', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000104', 'Internet Cafe', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000105', 'Stationery Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000106', 'Toy Store', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000107', 'Gift Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000108', 'Optical & Eyewear Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000109', 'Carpet Store', true, NOW()),
+  ('b2000001-0000-4000-8000-00000000010a', 'Curtain Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-00000000010b', 'Kitchenware Store', true, NOW()),
+  ('b2000001-0000-4000-8000-00000000010c', 'Mattress Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-00000000010d', 'Antique Shop', true, NOW()),
+
+  -- Food Specialty
+  ('b2000001-0000-4000-8000-000000000110', 'Butcher Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000111', 'Fish Market', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000112', 'Sweets Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000113', 'Ice Cream Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000114', 'Juice Bar', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000115', 'Tea House', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000116', 'Spice & Dry Fruit Shop', true, NOW()),
+
+  -- Auto Specialty
+  ('b2000001-0000-4000-8000-000000000120', 'Car Wash', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000121', 'Tire Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000122', 'Gas Station', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000123', 'Auto Spare Parts', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000124', 'Battery Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000125', 'Motorcycle Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000126', 'Bicycle Shop', true, NOW()),
+
+  -- Building & Construction Supplies
+  ('b2000001-0000-4000-8000-000000000130', 'Cement & Building Materials', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000131', 'Paint Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000132', 'Steel & Iron Supplier', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000133', 'Tile Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000134', 'Sanitary Ware Shop', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000135', 'Solar Installer', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000136', 'Generator Repair', true, NOW()),
+
+  -- Money & Finance Extras
+  ('b2000001-0000-4000-8000-000000000140', 'Money Exchange', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000141', 'Hawala / Money Transfer', true, NOW()),
+
+  -- Travel & Religious
+  ('b2000001-0000-4000-8000-000000000150', 'Hajj & Umrah Agency', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000151', 'Wedding Hall', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000152', 'Funeral Services', true, NOW()),
+
+  -- Afghan Crafts
+  ('b2000001-0000-4000-8000-000000000160', 'Carpet Weaver', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000161', 'Embroidery', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000162', 'Pottery', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000163', 'Calligrapher', true, NOW()),
+
+  -- Agriculture Sub-Categories
+  ('b2000001-0000-4000-8000-000000000170', 'Farmer', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000171', 'Livestock & Cattle', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000172', 'Poultry Farm', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000173', 'Beekeeper', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000174', 'Dairy', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000175', 'Fishery', true, NOW()),
+
+  -- Education Extras
+  ('b2000001-0000-4000-8000-000000000180', 'Daycare', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000181', 'Kindergarten', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000182', 'Tuition Center', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000183', 'Driving School', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000184', 'Music School', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000185', 'Language School', true, NOW()),
+
+  -- Beauty & Wellness Extras
+  ('b2000001-0000-4000-8000-000000000190', 'Spa & Wellness', true, NOW()),
+  ('b2000001-0000-4000-8000-000000000191', 'Nail Salon', true, NOW()),
+
   -- Other
   ('b2000001-0000-4000-8000-0000000000ff', 'Other', true, NOW())
 ON CONFLICT (id) DO NOTHING;

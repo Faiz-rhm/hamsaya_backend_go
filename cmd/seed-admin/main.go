@@ -1,6 +1,6 @@
-// seed-admin creates or fixes the admin user for the admin panel.
+// seed-admin creates or fixes the super-admin user for the admin panel.
 // Email: admin@hamsaya.af, Password: Admin123!
-// If the user already exists (e.g. auto-created by login with role=user), updates role to admin and resets password.
+// If the user already exists (e.g. auto-created by login with role=user), upgrades role to super_admin and resets password.
 package main
 
 import (
@@ -58,7 +58,7 @@ func main() {
 
 	if existing != nil {
 		// Ensure role is admin and password is Admin123! (fixes auto-registered-as-user case)
-		existing.Role = models.RoleAdmin
+		existing.Role = models.RoleSuperAdmin
 		existing.PasswordHash = &hashedPassword
 		existing.EmailVerified = true
 		if existing.DeletedAt != nil {
@@ -93,7 +93,7 @@ func main() {
 		Email:         adminEmail,
 		PasswordHash:  &hashedPassword,
 		EmailVerified: true,
-		Role:          models.RoleAdmin,
+		Role:          models.RoleSuperAdmin,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}

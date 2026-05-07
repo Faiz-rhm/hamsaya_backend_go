@@ -105,7 +105,7 @@ Strict rule: **services never call DB directly; repositories never call other re
 cmd/
   server/main.go                    # API entry point
   migrate/main.go                   # golang-migrate runner
-  seed/, seed-demo/, seed-admin/    # seeders
+  seed/, seed-admin/                # seeders
   db-reset/                         # data wipe (keeps schema)
   backfill-notifications/           # one-shot backfill job
 
@@ -200,7 +200,7 @@ Optional integrations:
 ```bash
 make docker-up         # postgres + redis + minio
 make migrate-up        # apply 33 migrations
-make seed-demo         # comprehensive demo data (or: make seed)
+make seed              # baseline data; or `make seed-admin` for super-admin only
 make run               # → http://localhost:8080
 # OR
 make dev               # hot reload via air
@@ -434,9 +434,9 @@ Production tip: use `CREATE INDEX CONCURRENTLY` for indexes on large tables; `go
 ### Seeders
 
 - `make seed` — basic
-- `make seed-demo` — comprehensive (recommended for local UI work)
+- `make seed-admin` — creates / fixes the super-admin user
 - `make seed-sell-categories` — categories only, no wipe
-- `make db-reset` — truncates all tables, retains schema
+- `make db-reset` — truncates all tables, reseeds categories + daily_post_limits
 
 ---
 
@@ -735,7 +735,7 @@ Repo is unusually clean of TODO/FIXME/HACK markers — substantive work tracked 
 
 ```bash
 # Daily dev
-make docker-up && make migrate-up && make seed-demo && make dev
+make docker-up && make migrate-up && make db-reset && make seed-admin && make dev
 
 # Tests
 make test
