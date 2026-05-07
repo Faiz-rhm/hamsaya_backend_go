@@ -443,6 +443,7 @@ func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses
 
 		result := &models.DiscoverBusiness{
 			ID:          business.ID,
+			UserID:      business.UserID,
 			Name:        business.Name,
 			Description: business.Description,
 			Avatar:      business.Avatar,

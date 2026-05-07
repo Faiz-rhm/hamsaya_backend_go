@@ -96,6 +96,7 @@ type DiscoverPost struct {
 // DiscoverBusiness represents a business marker on the map
 type DiscoverBusiness struct {
 	ID          string    `json:"id"`
+	UserID      string    `json:"user_id"` // Owner — clients use this to detect own businesses and route to BusinessTabs
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
 	Avatar      *Photo    `json:"avatar,omitempty"`
