@@ -4,13 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	firebase "firebase.google.com/go/v4"
 	"firebase.google.com/go/v4/messaging"
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 )
+
+// apnsExpirationSeconds is how long APNs should retry delivery if the device
+// is offline or asleep. Without this header, APNs uses an opaque default and
+// can silently drop messages — the root cause of inconsistent iOS push
+// delivery (some notifications arrive, others never do). 1 hour is a safe
+// default for chat/alert notifications where staleness >1h has no value.
+const apnsExpirationSeconds = 3600
 
 // FCMClient represents a Firebase Cloud Messaging client
 type FCMClient struct {
@@ -109,14 +118,18 @@ func (f *FCMClient) SendNotification(ctx context.Context, token string, payload 
 	}
 
 	// iOS: always include APNS headers for reliable immediate delivery.
+	// `apns-expiration` is a Unix timestamp; without it APNs may silently
+	// drop messages when the device is briefly offline.
 	message.APNS = &messaging.APNSConfig{
 		Headers: map[string]string{
-			"apns-push-type": "alert",
-			"apns-priority":  "10",
+			"apns-push-type":   "alert",
+			"apns-priority":    "10",
+			"apns-expiration":  strconv.FormatInt(time.Now().Add(apnsExpirationSeconds*time.Second).Unix(), 10),
 		},
 		Payload: &messaging.APNSPayload{
 			Aps: &messaging.Aps{
-				Sound: apnsSound,
+				Sound:          apnsSound,
+				MutableContent: true,
 			},
 		},
 	}
@@ -194,14 +207,17 @@ func (f *FCMClient) SendMulticast(ctx context.Context, tokens []string, payload 
 	}
 
 	// iOS: always include APNS headers for reliable immediate delivery.
+	// `apns-expiration` ensures APNs retries delivery when device is offline.
 	message.APNS = &messaging.APNSConfig{
 		Headers: map[string]string{
-			"apns-push-type": "alert",
-			"apns-priority":  "10",
+			"apns-push-type":   "alert",
+			"apns-priority":    "10",
+			"apns-expiration":  strconv.FormatInt(time.Now().Add(apnsExpirationSeconds*time.Second).Unix(), 10),
 		},
 		Payload: &messaging.APNSPayload{
 			Aps: &messaging.Aps{
-				Sound: multicastAPNSSound,
+				Sound:          multicastAPNSSound,
+				MutableContent: true,
 			},
 		},
 	}
