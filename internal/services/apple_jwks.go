@@ -36,24 +36,31 @@ type appleJWKS struct {
 }
 
 // appleKeyCache fetches and caches Apple's public keys. Safe for concurrent
-// use; refreshes on demand once the TTL elapses.
+// use; refreshes on demand once the TTL elapses. The URL is a field so tests
+// can point it at an httptest.Server instead of the real Apple endpoint.
 type appleKeyCache struct {
 	mu        sync.RWMutex
 	keys      map[string]*rsa.PublicKey
 	fetchedAt time.Time
 	httpc     *http.Client
+	url       string
+	ttl       time.Duration
 }
 
-// global singleton — there's no per-request state worth duplicating.
-var appleKeys = &appleKeyCache{
-	httpc: &http.Client{Timeout: 5 * time.Second},
+// newAppleKeyCache builds a cache pointed at the live Apple JWKS endpoint.
+func newAppleKeyCache() *appleKeyCache {
+	return &appleKeyCache{
+		httpc: &http.Client{Timeout: 5 * time.Second},
+		url:   appleJWKSURL,
+		ttl:   appleJWKSCacheTTL,
+	}
 }
 
 // publicKey returns the RSA public key for the given kid, refreshing the
 // cache from Apple if needed.
 func (c *appleKeyCache) publicKey(ctx context.Context, kid string) (*rsa.PublicKey, error) {
 	c.mu.RLock()
-	if k, ok := c.keys[kid]; ok && time.Since(c.fetchedAt) < appleJWKSCacheTTL {
+	if k, ok := c.keys[kid]; ok && time.Since(c.fetchedAt) < c.ttl {
 		c.mu.RUnlock()
 		return k, nil
 	}
@@ -73,7 +80,7 @@ func (c *appleKeyCache) publicKey(ctx context.Context, kid string) (*rsa.PublicK
 }
 
 func (c *appleKeyCache) refresh(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, appleJWKSURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
 	if err != nil {
 		return fmt.Errorf("apple jwks request: %w", err)
 	}

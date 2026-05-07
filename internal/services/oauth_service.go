@@ -20,9 +20,10 @@ import (
 
 // OAuthService handles OAuth authentication with third-party providers
 type OAuthService struct {
-	cfg      *config.Config
-	userRepo repositories.UserRepository
-	logger   *zap.Logger
+	cfg       *config.Config
+	userRepo  repositories.UserRepository
+	logger    *zap.Logger
+	appleKeys *appleKeyCache
 }
 
 // NewOAuthService creates a new OAuth service
@@ -32,9 +33,10 @@ func NewOAuthService(
 	logger *zap.Logger,
 ) *OAuthService {
 	return &OAuthService{
-		cfg:      cfg,
-		userRepo: userRepo,
-		logger:   logger,
+		cfg:       cfg,
+		userRepo:  userRepo,
+		logger:    logger,
+		appleKeys: newAppleKeyCache(),
 	}
 }
 
@@ -162,7 +164,7 @@ func (s *OAuthService) VerifyAppleToken(ctx context.Context, idToken string) (*O
 		if kid == "" {
 			return nil, fmt.Errorf("apple token missing kid header")
 		}
-		return appleKeys.publicKey(ctx, kid)
+		return s.appleKeys.publicKey(ctx, kid)
 	})
 	if err != nil {
 		// Decode-only parse so we can log the actual `aud`/`iss` claims when
