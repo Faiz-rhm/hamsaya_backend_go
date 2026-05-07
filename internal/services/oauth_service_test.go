@@ -178,12 +178,29 @@ func TestOAuthService_AuthenticateWithOAuth(t *testing.T) {
 }
 
 func TestOAuthService_VerifyAppleToken(t *testing.T) {
-	userRepo := new(mocks.MockUserRepository)
-	svc := newTestOAuthService(userRepo)
+	t.Run("missing client id config", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		// Default fixture leaves Apple config empty.
+		svc := newTestOAuthService(userRepo)
 
-	_, err := svc.VerifyAppleToken(context.Background(), "any-token")
-	require.Error(t, err)
-	assert.Contains(t, strings.ToLower(err.Error()), "not yet fully implemented")
+		_, err := svc.VerifyAppleToken(context.Background(), "any-token")
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "apple_client_id")
+	})
+
+	t.Run("malformed token rejected", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		cfg := &config.Config{
+			OAuth: config.OAuthConfig{
+				Apple: config.AppleOAuthConfig{ClientID: "af.hamsaya"},
+			},
+		}
+		svc := NewOAuthService(cfg, userRepo, zap.NewNop())
+
+		_, err := svc.VerifyAppleToken(context.Background(), "not-a-jwt")
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "invalid apple identity token")
+	})
 }
 
 func TestOAuthService_VerifyGoogleToken(t *testing.T) {
