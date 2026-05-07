@@ -30,7 +30,10 @@ func newMonetizationRouter(t *testing.T, repo *mocks.MockMonetizationRepository)
 	// storage is nil — these tests never exercise the image-upload path, so
 	// the handler never dereferences it.
 	svc := services.NewMonetizationService(repo, nil, zap.NewNop())
-	h := NewMonetizationHandler(svc, nil, testutil.CreateTestValidator(), zap.NewNop())
+	// nil redis: handler short-circuits dedupe to "always record" when redis
+	// is unavailable, which is the desired test behaviour (we want every
+	// impression/click in the test to count).
+	h := NewMonetizationHandler(svc, nil, testutil.CreateTestValidator(), zap.NewNop(), nil)
 
 	auth := authContextMiddleware(monAdminID, "sess-mon-001")
 	r := gin.New()

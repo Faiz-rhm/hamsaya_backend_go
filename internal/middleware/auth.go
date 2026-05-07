@@ -104,6 +104,26 @@ func (m *AuthMiddleware) RequireAAL2() gin.HandlerFunc {
 			return
 		}
 
+		// Mirror RequireAuth: load user and reject if suspended. Without this,
+		// an admin who suspends a user only blocks new logins; existing AAL2
+		// tokens still grant access until session expiry.
+		user, err := m.userRepo.GetByID(c.Request.Context(), claims.UserID)
+		if err != nil {
+			m.logger.Error("Failed to get user", zap.Error(err))
+			utils.SendError(c, http.StatusUnauthorized, "Invalid user", utils.ErrUnauthorized)
+			c.Abort()
+			return
+		}
+		if user.IsLocked() {
+			m.logger.Warn("Suspended user attempted AAL2 access",
+				zap.String("user_id", user.ID),
+				zap.Time("locked_until", *user.LockedUntil),
+			)
+			utils.SendError(c, http.StatusForbidden, "Your account has been suspended", utils.ErrForbidden)
+			c.Abort()
+			return
+		}
+
 		// Add claims to context
 		c.Set("user_id", claims.UserID)
 		c.Set("email", claims.Email)

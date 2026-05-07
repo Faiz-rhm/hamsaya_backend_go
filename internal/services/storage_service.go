@@ -10,6 +10,7 @@ import (
 	_ "image/png"
 	"io"
 	"mime/multipart"
+	"net/http"
 	"strings"
 
 	"github.com/hamsaya/backend/config"
@@ -190,10 +191,33 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 // maxPostVideoSize is the max size for post video uploads (50MB).
 const maxPostVideoSize = 50 * 1024 * 1024
 
+// allowedVideoMimes is the strict allowlist of MIME types we re-derive from
+// the file's first 512 bytes via http.DetectContentType. The client-supplied
+// Content-Type is treated as a hint only — never as the authoritative type.
+var allowedVideoMimes = map[string]struct{}{
+	"video/mp4":       {},
+	"video/quicktime": {},
+	"video/webm":      {},
+	"video/x-m4v":     {}, // some encoders mislabel mp4 as m4v; same container.
+}
+
 // isVideoContentType returns true if contentType is a video type (e.g. "video/mp4").
 func isVideoContentType(contentType string) bool {
 	base := strings.TrimSpace(strings.Split(contentType, ";")[0])
 	return strings.HasPrefix(base, "video/")
+}
+
+// detectVideoMime sniffs the first 512 bytes via net/http's content-type
+// detector and returns the resolved MIME if it's in our allowlist; "" otherwise.
+// Defends against polyglot files labelled `video/mp4` that actually contain
+// arbitrary executable payload.
+func detectVideoMime(head []byte) string {
+	mime := http.DetectContentType(head)
+	base := strings.TrimSpace(strings.Split(mime, ";")[0])
+	if _, ok := allowedVideoMimes[base]; ok {
+		return base
+	}
+	return ""
 }
 
 // UploadPostAttachment uploads an image or video for a post. Images are limited to 10MB and processed;
@@ -216,6 +240,24 @@ func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipar
 		if size > maxPostVideoSize {
 			return nil, utils.NewBadRequestError("Video file size exceeds 50MB limit", nil)
 		}
+		// Magic-byte enforcement: re-derive MIME from first 512 bytes. The
+		// client-supplied Content-Type is just a hint — without this check
+		// a polyglot file labelled `video/mp4` could be served via the CDN.
+		head := data
+		if len(head) > 512 {
+			head = head[:512]
+		}
+		detected := detectVideoMime(head)
+		if detected == "" {
+			s.logger.Warn("Rejecting non-allowlisted video upload",
+				zap.String("client_content_type", contentType),
+				zap.Int("size", int(size)),
+			)
+			return nil, utils.NewBadRequestError("Unsupported video format", nil)
+		}
+		// Use the SERVER-DERIVED type for storage and metadata so attackers
+		// can't poison the CDN response Content-Type.
+		contentType = detected
 		var result *storage.UploadResult
 		if s.client != nil {
 			result, err = s.client.UploadFile(ctx, bytes.NewReader(data), size, contentType, string(ImageTypePost), header.Filename)

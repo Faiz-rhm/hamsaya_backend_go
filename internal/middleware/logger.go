@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -8,12 +9,41 @@ import (
 	"go.uber.org/zap"
 )
 
+// sensitiveQueryKeys are query parameters whose values must never appear in
+// access logs. The WS endpoint accepts `?token=<JWT>` for browser clients
+// (Android also uses it as a fallback), and password-reset/email-verify links
+// surface short-lived `code`/`token` values.
+var sensitiveQueryKeys = map[string]struct{}{
+	"token":  {},
+	"code":   {},
+	"email":  {},
+	"secret": {},
+}
+
+// redactQuery returns the request's RawQuery with sensitive values replaced
+// by "REDACTED". On parse error, returns "REDACTED" entirely (fail-closed).
+func redactQuery(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return "REDACTED"
+	}
+	for k := range values {
+		if _, ok := sensitiveQueryKeys[k]; ok {
+			values.Set(k, "REDACTED")
+		}
+	}
+	return values.Encode()
+}
+
 // Logger returns a gin middleware that logs HTTP requests with trace correlation
 func Logger(logger *zap.SugaredLogger) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		path := c.Request.URL.Path
-		query := c.Request.URL.RawQuery
+		query := redactQuery(c.Request.URL.RawQuery)
 
 		// Process request
 		c.Next()

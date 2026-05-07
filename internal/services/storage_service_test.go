@@ -164,7 +164,17 @@ func TestStorageService_UploadPostAttachment(t *testing.T) {
 
 	t.Run("video bypasses image processing", func(t *testing.T) {
 		svc := newTestStorageService()
-		data := []byte("fake video bytes")
+		// Real MP4 ftyp atom — http.DetectContentType requires legitimate
+		// magic bytes to classify as video/mp4. The bytes below are the
+		// minimum valid ISO base media file format header (mp42 brand).
+		data := []byte{
+			0x00, 0x00, 0x00, 0x18, // box size = 24
+			'f', 't', 'y', 'p',
+			'm', 'p', '4', '2', // major brand
+			0x00, 0x00, 0x00, 0x00, // minor version
+			'm', 'p', '4', '2',
+			'i', 's', 'o', 'm', // compatible brands
+		}
 		photo, err := svc.UploadPostAttachment(ctx, makeTestFile(data),
 			makeHeader("video.mp4", "video/mp4", int64(len(data))))
 		require.NoError(t, err)
@@ -172,6 +182,17 @@ func TestStorageService_UploadPostAttachment(t *testing.T) {
 		assert.Equal(t, "video/mp4", photo.MimeType)
 		assert.Equal(t, 0, photo.Width)
 		assert.Equal(t, 0, photo.Height)
+	})
+
+	t.Run("video with bogus magic bytes rejected", func(t *testing.T) {
+		// New defence: client-supplied Content-Type=video/mp4 but the bytes
+		// don't match — could be a polyglot. Must be rejected.
+		svc := newTestStorageService()
+		data := []byte("definitely not a real video file")
+		_, err := svc.UploadPostAttachment(ctx, makeTestFile(data),
+			makeHeader("fake.mp4", "video/mp4", int64(len(data))))
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Unsupported video format")
 	})
 
 	t.Run("video too large rejected", func(t *testing.T) {

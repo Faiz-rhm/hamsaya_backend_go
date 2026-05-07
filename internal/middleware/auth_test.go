@@ -249,6 +249,12 @@ func TestRequireAAL2(t *testing.T) {
 			// verifySession always hits DB when tokenStorage is nil
 			session := buildValidSession(sessionID, userID, token)
 			userRepo.On("GetSessionByID", mock.Anything, sessionID).Return(session, nil)
+			// RequireAAL2 now mirrors RequireAuth and loads the user to enforce
+			// IsLocked. Stub a non-locked user so the AAL2-success path resolves.
+			if tt.aal >= models.AAL2 {
+				normalUser := testutil.CreateTestUser(userID, email)
+				userRepo.On("GetByID", mock.Anything, userID).Return(normalUser, nil)
+			}
 
 			m := newTestAuthMiddleware(userRepo)
 

@@ -1,9 +1,13 @@
 package middleware
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -11,6 +15,26 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
+
+// failClosedKeyPrefixes lists rate-limit keys whose underlying endpoints are
+// security-critical: when Redis errors out, refuse the request rather than
+// silently letting unlimited traffic through. Endpoints that aren't on this
+// list (e.g. ad-tracking, default browse limits) keep fail-open behaviour
+// since blocking them on a Redis blip would degrade UX more than it'd help.
+var failClosedKeyPrefixes = map[string]struct{}{
+	"ratelimit:auth:":           {},
+	"ratelimit:strict:":         {},
+	"ratelimit:pwreset:":        {},
+	"ratelimit:login:":          {},
+	"ratelimit:login-email:":    {},
+}
+
+// shouldFailClosed reports whether a rate-limit error on this config should
+// 503 the request instead of waving it through.
+func shouldFailClosed(prefix string) bool {
+	_, ok := failClosedKeyPrefixes[prefix]
+	return ok
+}
 
 // RateLimitConfig defines rate limit configuration
 type RateLimitConfig struct {
@@ -61,6 +85,15 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      24 * time.Hour,
 		KeyPrefix:   "ratelimit:data-export:",
 	},
+	// ad-tracking: impression/click endpoints are public (no auth) so a
+	// botnet could otherwise flood metric counters and inflate advertiser
+	// charges once monetization couples ad performance to credit balance.
+	// 60/min/IP comfortably covers a normal scrolling user and blocks scripts.
+	"ad-tracking": {
+		MaxRequests: 60,
+		Window:      time.Minute,
+		KeyPrefix:   "ratelimit:ad-tracking:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
@@ -91,7 +124,16 @@ func (rl *RateLimiter) Limit(config RateLimitConfig) gin.HandlerFunc {
 				zap.String("key", key),
 				zap.Error(err),
 			)
-			// On error, allow the request but log it
+			// Fail-closed for security-critical endpoints (login, password
+			// reset, etc.) — otherwise an attacker could DoS Redis to disable
+			// throttling and brute-force unimpeded. Non-critical endpoints
+			// stay fail-open so a Redis blip doesn't make the app unusable.
+			if shouldFailClosed(config.KeyPrefix) {
+				utils.SendError(c, http.StatusServiceUnavailable,
+					"Service temporarily unavailable. Please try again.", nil)
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
@@ -231,6 +273,12 @@ func (rl *RateLimiter) LimitByUser(config RateLimitConfig) gin.HandlerFunc {
 				zap.String("key", key),
 				zap.Error(err),
 			)
+			if shouldFailClosed(config.KeyPrefix) {
+				utils.SendError(c, http.StatusServiceUnavailable,
+					"Service temporarily unavailable. Please try again.", nil)
+				c.Abort()
+				return
+			}
 			c.Next()
 			return
 		}
@@ -258,17 +306,100 @@ func (rl *RateLimiter) LimitByUser(config RateLimitConfig) gin.HandlerFunc {
 	}
 }
 
-// LimitLoginAttempts specifically limits login attempts per IP.
-// Limit: 3 attempts per 15 minutes per IP.
+// LimitLoginAttempts limits login attempts using TWO independent counters:
+//
+//  1. Per-IP, 3 attempts / 15 minutes — protects against single-host brute-
+//     force.
+//  2. Per-email (lowercased), 5 attempts / 15 minutes — defends against a
+//     botnet rotating IPs to iterate one account's password. Combined with
+//     the auth_service's account-lockout-after-5-fails, attackers can't
+//     bypass either the IP throttle or the per-account counter.
+//
+// We peek at the request body to extract `email` without consuming it for the
+// downstream handler.
 func (rl *RateLimiter) LimitLoginAttempts() gin.HandlerFunc {
-	return func(c *gin.Context) {
-		config := RateLimitConfig{
-			MaxRequests: 3,
-			Window:      15 * time.Minute,
-			KeyPrefix:   "ratelimit:login:",
-		}
-		rl.Limit(config)(c)
+	ipCfg := RateLimitConfig{
+		MaxRequests: 3,
+		Window:      15 * time.Minute,
+		KeyPrefix:   "ratelimit:login:",
 	}
+	emailCfg := RateLimitConfig{
+		MaxRequests: 5,
+		Window:      15 * time.Minute,
+		KeyPrefix:   "ratelimit:login-email:",
+	}
+	return func(c *gin.Context) {
+		// IP-based check first (uses request IP). Fail-closed: Redis errors
+		// on login = 503 (don't let attacker DoS Redis to disable throttle).
+		clientIP := c.ClientIP()
+		ipKey := ipCfg.KeyPrefix + clientIP
+		allowed, _, resetTime, err := rl.checkRateLimit(c.Request.Context(), ipKey, ipCfg)
+		if err != nil {
+			rl.logger.Error("Login IP rate-limit check failed", zap.Error(err))
+			utils.SendError(c, http.StatusServiceUnavailable,
+				"Service temporarily unavailable. Please try again.", nil)
+			c.Abort()
+			return
+		}
+		if !allowed {
+			rl.logger.Warn("Login rate limit exceeded (IP)",
+				zap.String("ip", clientIP),
+			)
+			c.Header("Retry-After", fmt.Sprintf("%d", int(time.Until(resetTime).Seconds())))
+			utils.SendError(c, http.StatusTooManyRequests, "Too many login attempts. Please try again later.", nil)
+			c.Abort()
+			return
+		}
+
+		// Email-based check. Peek body without consuming it.
+		email := extractLoginEmail(c)
+		if email != "" {
+			emailKey := emailCfg.KeyPrefix + email
+			allowed2, _, resetTime2, err2 := rl.checkRateLimit(c.Request.Context(), emailKey, emailCfg)
+			if err2 != nil {
+				rl.logger.Error("Login email rate-limit check failed", zap.Error(err2))
+				utils.SendError(c, http.StatusServiceUnavailable,
+					"Service temporarily unavailable. Please try again.", nil)
+				c.Abort()
+				return
+			}
+			if !allowed2 {
+				rl.logger.Warn("Login rate limit exceeded (email)",
+					zap.String("email", email),
+				)
+				c.Header("Retry-After", fmt.Sprintf("%d", int(time.Until(resetTime2).Seconds())))
+				utils.SendError(c, http.StatusTooManyRequests, "Too many login attempts. Please try again later.", nil)
+				c.Abort()
+				return
+			}
+		}
+
+		c.Next()
+	}
+}
+
+// extractLoginEmail reads `email` from the JSON request body without
+// consuming it for the downstream handler. Returns lowercased trimmed value
+// or "" on any error / missing field.
+func extractLoginEmail(c *gin.Context) string {
+	if c.Request.Body == nil {
+		return ""
+	}
+	const maxBody = 64 * 1024 // 64KB cap — login bodies are tiny.
+	body, err := io.ReadAll(io.LimitReader(c.Request.Body, maxBody))
+	if err != nil {
+		return ""
+	}
+	// Restore for downstream handler.
+	c.Request.Body = io.NopCloser(bytes.NewReader(body))
+
+	var payload struct {
+		Email string `json:"email"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimSpace(payload.Email))
 }
 
 // LimitPasswordReset limits password-reset OTP verification attempts per IP.

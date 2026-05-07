@@ -16,7 +16,11 @@ type PasswordService struct {
 // NewPasswordService creates a new password service
 func NewPasswordService() *PasswordService {
 	return &PasswordService{
-		cost: 12, // bcrypt cost factor
+		// 13 ≈ 350-500ms per hash on modern hardware — slow enough that
+		// online brute-force is hopeless yet still acceptable login latency.
+		// Existing cost-12 hashes verify fine; only newly-hashed passwords
+		// pick up cost-13. Bump again in 2-3 years.
+		cost: 13,
 	}
 }
 

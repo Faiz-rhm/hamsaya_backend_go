@@ -2,16 +2,26 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
 )
+
+// adImpressionDedupeTTL caps how often a single (ad, IP) pair can record an
+// impression — protects advertiser metrics from script abuse.
+const adImpressionDedupeTTL = 30 * time.Minute
+
+// adClickDedupeTTL — clicks are rarer per user; longer window.
+const adClickDedupeTTL = 1 * time.Hour
 
 // MonetizationHandler exposes the admin-facing /admin/ads /admin/credits and
 // /admin/boosts endpoints. Routes are registered in cmd/server/main.go.
@@ -20,6 +30,7 @@ type MonetizationHandler struct {
 	storage   *services.StorageService
 	validator *utils.Validator
 	logger    *zap.Logger
+	redis     *redis.Client
 }
 
 func NewMonetizationHandler(
@@ -27,8 +38,15 @@ func NewMonetizationHandler(
 	storage *services.StorageService,
 	validator *utils.Validator,
 	logger *zap.Logger,
+	redisClient *redis.Client,
 ) *MonetizationHandler {
-	return &MonetizationHandler{service: service, storage: storage, validator: validator, logger: logger}
+	return &MonetizationHandler{
+		service:   service,
+		storage:   storage,
+		validator: validator,
+		logger:    logger,
+		redis:     redisClient,
+	}
 }
 
 // ─── Ads ─────────────────────────────────────────────────────────────────────
@@ -54,11 +72,16 @@ func (h *MonetizationHandler) ListActiveAdsPublic(c *gin.Context) {
 }
 
 // RecordAdImpression — public, fire-and-forget impression tracker called by
-// mobile when an ad enters the visible viewport.
+// mobile when an ad enters the visible viewport. Per-(ad,IP) Redis SETEX
+// dedupe so repeated requests within the TTL collapse to one count.
 //
 // @Router /ads/{ad_id}/impression [post]
 func (h *MonetizationHandler) RecordAdImpression(c *gin.Context) {
 	id := c.Param("ad_id")
+	if !h.shouldRecordAdEvent(c, "imp", id, adImpressionDedupeTTL) {
+		utils.SendSuccess(c, http.StatusOK, "ok", nil)
+		return
+	}
 	if err := h.service.RecordImpression(c.Request.Context(), id); err != nil {
 		h.logger.Warn("ad impression", zap.Error(err))
 	}
@@ -66,14 +89,37 @@ func (h *MonetizationHandler) RecordAdImpression(c *gin.Context) {
 }
 
 // RecordAdClick — public, called by mobile before opening the target URL.
+// Same per-(ad,IP) dedupe as impressions, longer TTL.
 //
 // @Router /ads/{ad_id}/click [post]
 func (h *MonetizationHandler) RecordAdClick(c *gin.Context) {
 	id := c.Param("ad_id")
+	if !h.shouldRecordAdEvent(c, "click", id, adClickDedupeTTL) {
+		utils.SendSuccess(c, http.StatusOK, "ok", nil)
+		return
+	}
 	if err := h.service.RecordClick(c.Request.Context(), id); err != nil {
 		h.logger.Warn("ad click", zap.Error(err))
 	}
 	utils.SendSuccess(c, http.StatusOK, "ok", nil)
+}
+
+// shouldRecordAdEvent returns true on the first request from this IP for this
+// ad within `ttl`. Subsequent requests inside the window are silently
+// swallowed without incrementing counters. Fails open (records the event) on
+// Redis errors — the rate-limit middleware already throttles raw request
+// volume, so a Redis outage shouldn't block legitimate ad analytics.
+func (h *MonetizationHandler) shouldRecordAdEvent(c *gin.Context, kind, adID string, ttl time.Duration) bool {
+	if h.redis == nil {
+		return true
+	}
+	key := fmt.Sprintf("ad-dedupe:%s:%s:%s", kind, adID, c.ClientIP())
+	ok, err := h.redis.SetNX(c.Request.Context(), key, "1", ttl).Result()
+	if err != nil {
+		h.logger.Warn("ad dedupe SETNX failed", zap.Error(err))
+		return true
+	}
+	return ok
 }
 
 // CreateAd accepts a multipart form: required `image` file, plus form fields

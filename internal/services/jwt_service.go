@@ -108,19 +108,49 @@ func (s *JWTService) ValidateAccessToken(tokenString string) (*models.JWTClaims,
 		return nil, utils.NewUnauthorizedError("Invalid token claims", nil)
 	}
 
-	// Extract claims. JTI is optional for backwards compatibility with tokens
-	// issued before the denylist feature shipped — the middleware treats an
-	// empty JTI as "cannot be denylisted" and skips the check.
+	// Extract claims with safe `, ok` casts. A crafted token (correctly
+	// signed but with malformed claim types) would otherwise panic on the
+	// raw `.(string)` / `.(float64)` assertion → 500 DoS via gin recovery.
+	// JTI is optional for backwards compatibility — empty JTI = "cannot be
+	// denylisted", middleware skips that check.
+	userID, ok := claims["user_id"].(string)
+	if !ok || userID == "" {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing user_id", nil)
+	}
+	email, ok := claims["email"].(string)
+	if !ok {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing email", nil)
+	}
+	aalFloat, ok := claims["aal"].(float64)
+	if !ok {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing aal", nil)
+	}
+	sessionID, ok := claims["session_id"].(string)
+	if !ok {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing session_id", nil)
+	}
+	iatFloat, ok := claims["iat"].(float64)
+	if !ok {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing iat", nil)
+	}
+	expFloat, ok := claims["exp"].(float64)
+	if !ok {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing exp", nil)
+	}
+	iss, ok := claims["iss"].(string)
+	if !ok {
+		return nil, utils.NewUnauthorizedError("Invalid token: missing iss", nil)
+	}
 	jti, _ := claims["jti"].(string)
 	jwtClaims := &models.JWTClaims{
-		UserID:    claims["user_id"].(string),
-		Email:     claims["email"].(string),
-		AAL:       int(claims["aal"].(float64)),
-		SessionID: claims["session_id"].(string),
+		UserID:    userID,
+		Email:     email,
+		AAL:       int(aalFloat),
+		SessionID: sessionID,
 		JTI:       jti,
-		IssuedAt:  int64(claims["iat"].(float64)),
-		ExpiresAt: int64(claims["exp"].(float64)),
-		Issuer:    claims["iss"].(string),
+		IssuedAt:  int64(iatFloat),
+		ExpiresAt: int64(expFloat),
+		Issuer:    iss,
 	}
 
 	// Verify not expired

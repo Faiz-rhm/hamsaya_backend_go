@@ -44,6 +44,8 @@ func NewOAuthService(
 // email_verified is returned as a string ("true"/"false") by Google's tokeninfo endpoint.
 type GoogleUserInfo struct {
 	ID            string `json:"sub"`
+	Aud           string `json:"aud"` // OAuth2 client ID this token was minted for — must match our config.
+	Iss           string `json:"iss"` // Issuer — must be accounts.google.com or https://accounts.google.com.
 	Email         string `json:"email"`
 	EmailVerified string `json:"email_verified"`
 	Name          string `json:"name"`
@@ -117,14 +119,30 @@ func (s *OAuthService) VerifyGoogleToken(ctx context.Context, idToken string) (*
 		return nil, utils.NewInternalError("Failed to decode user info", err)
 	}
 
-	// Verify the token is for our app
-	// Note: In production, you should verify the 'aud' claim matches your client ID
-	// This requires parsing the JWT token properly
-	// For now, we rely on Google's tokeninfo endpoint validation
+	// Verify the token is for our app. tokeninfo proves Google signed the
+	// token, NOT that it was minted for THIS client. Without checking `aud`,
+	// any third-party Google OAuth client's id_token would authenticate on
+	// our backend. Fail-closed: if APPLE_CLIENT_ID-equivalent (GOOGLE_CLIENT_ID)
+	// is unset we refuse to verify rather than accept everything.
+	expectedAud := s.cfg.OAuth.Google.ClientID
+	if expectedAud == "" {
+		s.logger.Warn("GOOGLE_CLIENT_ID not configured; refusing Google token verification")
+		return nil, utils.NewInternalError("Google OAuth not configured (GOOGLE_CLIENT_ID missing)", nil)
+	}
+	if userInfo.Aud != expectedAud {
+		s.logger.Warn("Google token aud mismatch",
+			zap.String("got_aud", userInfo.Aud),
+			zap.String("expected_aud", expectedAud),
+		)
+		return nil, utils.NewUnauthorizedError("Google token not minted for this client", nil)
+	}
+	if userInfo.Iss != "accounts.google.com" && userInfo.Iss != "https://accounts.google.com" {
+		s.logger.Warn("Google token iss mismatch", zap.String("iss", userInfo.Iss))
+		return nil, utils.NewUnauthorizedError("Invalid Google token issuer", nil)
+	}
 
 	s.logger.Info("Google token verified",
 		zap.String("user_id", userInfo.ID),
-		zap.String("email", userInfo.Email),
 	)
 
 	return &OAuthUserInfo{
@@ -219,17 +237,73 @@ func (s *OAuthService) VerifyAppleToken(ctx context.Context, idToken string) (*O
 	}, nil
 }
 
-// VerifyFacebookToken verifies a Facebook access token and returns user info
+// VerifyFacebookToken verifies a Facebook access token and returns user info.
+// First calls /debug_token (app-token signed) to confirm the token was minted
+// for THIS app — without this check any Facebook OAuth client could mint a
+// token that authenticates on our backend. Then calls /me for user details.
 func (s *OAuthService) VerifyFacebookToken(ctx context.Context, accessToken string) (*OAuthUserInfo, error) {
-	// Get user info from Facebook Graph API
-	url := fmt.Sprintf("https://graph.facebook.com/me?fields=id,email,name,picture&access_token=%s", accessToken)
+	expectedAppID := s.cfg.OAuth.Facebook.AppID
+	expectedAppSecret := s.cfg.OAuth.Facebook.AppSecret
+	if expectedAppID == "" || expectedAppSecret == "" {
+		s.logger.Warn("Facebook OAuth not configured; refusing token verification")
+		return nil, utils.NewInternalError("Facebook OAuth not configured (FACEBOOK_APP_ID/SECRET missing)", nil)
+	}
 
+	// Step 1 — verify token belongs to our app via debug_token.
+	debugURL := fmt.Sprintf(
+		"https://graph.facebook.com/debug_token?input_token=%s&access_token=%s|%s",
+		accessToken, expectedAppID, expectedAppSecret,
+	)
+	client := &http.Client{Timeout: 10 * time.Second}
+	dbgReq, err := http.NewRequestWithContext(ctx, "GET", debugURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create debug_token request: %w", err)
+	}
+	dbgResp, err := client.Do(dbgReq)
+	if err != nil {
+		s.logger.Error("Failed to call Facebook debug_token", zap.Error(err))
+		return nil, utils.NewUnauthorizedError("Failed to verify Facebook token", err)
+	}
+	defer func() { _ = dbgResp.Body.Close() }()
+	if dbgResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(dbgResp.Body)
+		s.logger.Warn("Facebook debug_token failed",
+			zap.Int("status", dbgResp.StatusCode),
+			zap.String("body", string(body)),
+		)
+		return nil, utils.NewUnauthorizedError("Invalid Facebook token", nil)
+	}
+	var dbg struct {
+		Data struct {
+			AppID   string `json:"app_id"`
+			IsValid bool   `json:"is_valid"`
+			UserID  string `json:"user_id"`
+			Error   *struct {
+				Message string `json:"message"`
+			} `json:"error,omitempty"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(dbgResp.Body).Decode(&dbg); err != nil {
+		return nil, utils.NewInternalError("Failed to decode Facebook debug_token", err)
+	}
+	if !dbg.Data.IsValid {
+		s.logger.Warn("Facebook token is not valid")
+		return nil, utils.NewUnauthorizedError("Invalid Facebook token", nil)
+	}
+	if dbg.Data.AppID != expectedAppID {
+		s.logger.Warn("Facebook token app_id mismatch",
+			zap.String("got_app_id", dbg.Data.AppID),
+			zap.String("expected_app_id", expectedAppID),
+		)
+		return nil, utils.NewUnauthorizedError("Facebook token not minted for this app", nil)
+	}
+
+	// Step 2 — fetch user details (now that we trust the token belongs to us).
+	url := fmt.Sprintf("https://graph.facebook.com/me?fields=id,email,name,picture&access_token=%s", accessToken)
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
 	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
 		s.logger.Error("Failed to verify Facebook token", zap.Error(err))
@@ -239,7 +313,7 @@ func (s *OAuthService) VerifyFacebookToken(ctx context.Context, accessToken stri
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		s.logger.Warn("Facebook token verification failed",
+		s.logger.Warn("Facebook /me failed",
 			zap.Int("status", resp.StatusCode),
 			zap.String("body", string(body)),
 		)
@@ -250,6 +324,14 @@ func (s *OAuthService) VerifyFacebookToken(ctx context.Context, accessToken stri
 	if err := json.NewDecoder(resp.Body).Decode(&userInfo); err != nil {
 		s.logger.Error("Failed to decode Facebook user info", zap.Error(err))
 		return nil, utils.NewInternalError("Failed to decode user info", err)
+	}
+	if userInfo.ID != dbg.Data.UserID {
+		// /me must return the same user as debug_token reported.
+		s.logger.Warn("Facebook user_id mismatch between debug_token and /me",
+			zap.String("debug_user", dbg.Data.UserID),
+			zap.String("me_user", userInfo.ID),
+		)
+		return nil, utils.NewUnauthorizedError("Inconsistent Facebook token", nil)
 	}
 
 	// Split name into first and last name
@@ -265,7 +347,6 @@ func (s *OAuthService) VerifyFacebookToken(ctx context.Context, accessToken stri
 
 	s.logger.Info("Facebook token verified",
 		zap.String("user_id", userInfo.ID),
-		zap.String("email", userInfo.Email),
 	)
 
 	return &OAuthUserInfo{

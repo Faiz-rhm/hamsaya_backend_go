@@ -377,7 +377,7 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(adminService, mfaService, validator, logger)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
 	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
-	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, storageService, validator, logger)
+	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, storageService, validator, logger, redisClient)
 	appLogHandler := handlers.NewAppLogHandler(appLogRepo, logger)
 
 	// Health check routes (no versioning)
@@ -812,10 +812,13 @@ func main() {
 
 		// Public-facing ads — mobile feed fetches active placements without
 		// authentication so logged-out browsing still serves ads. Impression
-		// and click counters are best-effort, fire-and-forget.
+		// and click counters are best-effort, fire-and-forget. The handler
+		// performs per-(ad, IP) Redis SETNX dedupe so repeat fires from the
+		// same client collapse to one count; the rate-limit middleware caps
+		// raw request volume so script-driven floods can't pin Redis or DB.
 		v1.GET("/ads/active", monetizationHandler.ListActiveAdsPublic)
-		v1.POST("/ads/:ad_id/impression", monetizationHandler.RecordAdImpression)
-		v1.POST("/ads/:ad_id/click", monetizationHandler.RecordAdClick)
+		v1.POST("/ads/:ad_id/impression", rateLimiter.LimitByType("ad-tracking"), monetizationHandler.RecordAdImpression)
+		v1.POST("/ads/:ad_id/click", rateLimiter.LimitByType("ad-tracking"), monetizationHandler.RecordAdClick)
 
 		// Placeholder for future routes
 		v1.GET("/ping", func(c *gin.Context) {
