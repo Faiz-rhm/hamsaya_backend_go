@@ -354,10 +354,24 @@ func (m *AuthMiddleware) extractAndValidateToken(c *gin.Context) (*models.JWTCla
 			return nil, utils.NewUnauthorizedError("Invalid authorization header format", nil)
 		}
 		token = parts[1]
-	} else if queryToken := c.Query("token"); queryToken != "" {
-		// WebSocket upgrade path: Android dart:io drops custom headers during
-		// the HTTP→WS handshake so the token is passed as a query parameter.
-		token = queryToken
+	} else if proto := c.GetHeader("Sec-WebSocket-Protocol"); proto != "" {
+		// WebSocket upgrade path. Mobile clients pass the access token via
+		// the WS subprotocol header (`bearer.<token>`) so the token never
+		// appears in URL/query — which would otherwise be logged by every
+		// reverse proxy + access log along the path. The legacy `?token=`
+		// query form is no longer accepted; that path leaked tokens to logs.
+		// Multiple subprotocols may be comma-separated; pick the first
+		// `bearer.…` entry.
+		for _, p := range strings.Split(proto, ",") {
+			p = strings.TrimSpace(p)
+			if strings.HasPrefix(p, "bearer.") {
+				token = strings.TrimPrefix(p, "bearer.")
+				break
+			}
+		}
+		if token == "" {
+			return nil, utils.NewUnauthorizedError("Invalid WebSocket subprotocol", nil)
+		}
 	} else if cookie, err := c.Request.Cookie(utils.CookieAdminAccessToken); err == nil {
 		token = cookie.Value
 	} else {

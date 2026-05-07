@@ -112,8 +112,24 @@ func (h *ChatHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
-	// Upgrade connection to WebSocket
-	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, nil)
+	// Upgrade connection to WebSocket. If the client offered a subprotocol
+	// (mobile uses `bearer.<token>` to pass the access token without putting
+	// it in the URL), RFC 6455 requires the server to echo the chosen
+	// subprotocol in the response — otherwise dart:io / browsers drop the
+	// upgrade. We echo back the same `bearer.…` token; the auth middleware
+	// has already validated it before this handler runs.
+	var respHeader http.Header
+	if proto := c.GetHeader("Sec-WebSocket-Protocol"); proto != "" {
+		for _, p := range strings.Split(proto, ",") {
+			p = strings.TrimSpace(p)
+			if strings.HasPrefix(p, "bearer.") {
+				respHeader = http.Header{}
+				respHeader.Set("Sec-WebSocket-Protocol", p)
+				break
+			}
+		}
+	}
+	conn, err := h.upgrader.Upgrade(c.Writer, c.Request, respHeader)
 	if err != nil {
 		h.logger.Error("Failed to upgrade WebSocket connection",
 			zap.Error(err),
