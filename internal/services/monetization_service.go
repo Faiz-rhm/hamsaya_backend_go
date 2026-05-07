@@ -77,8 +77,16 @@ func (s *MonetizationService) CreateAd(
 	if req.Body != nil {
 		body = *req.Body
 	}
+	phone := ""
+	if req.PhoneNumber != nil {
+		phone = *req.PhoneNumber
+	}
+	whatsapp := ""
+	if req.WhatsAppNumber != nil {
+		whatsapp = *req.WhatsAppNumber
+	}
 	return s.repo.CreateAd(ctx, req.AdvertiserID, req.Title, body, imageURL,
-		req.TargetURL, status, req.StartAt, req.EndAt)
+		req.TargetURL, phone, whatsapp, status, req.StartAt, req.EndAt)
 }
 
 func (s *MonetizationService) GetAd(ctx context.Context, id string) (*models.Ad, error) {

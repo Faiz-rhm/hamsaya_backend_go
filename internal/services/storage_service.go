@@ -28,6 +28,10 @@ const (
 	ImageTypeAvatar ImageType = "avatar"
 	ImageTypeCover  ImageType = "cover"
 	ImageTypePost   ImageType = "post"
+	// ImageTypeAd forces WebP encoding regardless of source format. Ads are
+	// served at fixed render slots in feeds where size matters more than
+	// preserving the original codec.
+	ImageTypeAd ImageType = "ad"
 )
 
 // StorageService handles file storage operations
@@ -136,12 +140,26 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 		if err != nil {
 			return nil, utils.NewInternalError("Failed to process post image", err)
 		}
+	case ImageTypeAd:
+		// Process for ad (resize to fit within 2048x2048, same as post). The
+		// encode step below forces WebP regardless of source format.
+		processedImg, err = s.processor.ProcessForPost(img)
+		if err != nil {
+			return nil, utils.NewInternalError("Failed to process ad image", err)
+		}
 	default:
 		processedImg = img
 	}
 
+	// Force WebP for ads so served bytes are small regardless of source codec.
+	encodeFormat := format
+	if imageType == ImageTypeAd {
+		encodeFormat = "webp"
+		contentType = "image/webp"
+	}
+
 	// Encode processed image
-	reader, err := storage.EncodeImage(processedImg, format)
+	reader, err := storage.EncodeImage(processedImg, encodeFormat)
 	if err != nil {
 		return nil, utils.NewInternalError("Failed to encode image", err)
 	}

@@ -22,7 +22,7 @@ type MonetizationRepository interface {
 	ListAds(ctx context.Context, status string, page, limit int) ([]*models.Ad, int, error)
 	ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error)
 	GetAd(ctx context.Context, id string) (*models.Ad, error)
-	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, status string, startAt, endAt *time.Time) (*models.Ad, error)
+	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time) (*models.Ad, error)
 	UpdateAdStatus(ctx context.Context, id, status, reviewedBy string, req *models.AdReviewRequest) (*models.Ad, error)
 	DeleteAd(ctx context.Context, id string) error
 	IncrementAdImpression(ctx context.Context, id string) error
@@ -77,7 +77,8 @@ func (r *monetizationRepository) ListAds(ctx context.Context, status string, pag
 		SELECT a.id, a.advertiser_id,
 		       COALESCE(u.email, ''),
 		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
-		       a.title, a.body, a.image_url, a.target_url, a.status,
+		       a.title, a.body, a.image_url, a.target_url,
+		       a.phone_number, a.whatsapp_number, a.status,
 		       a.start_at, a.end_at, a.impressions, a.clicks,
 		       a.reviewed_by::text, a.reviewed_at, a.review_note,
 		       a.created_at, a.updated_at
@@ -100,7 +101,8 @@ func (r *monetizationRepository) ListAds(ctx context.Context, status string, pag
 		ad := &models.Ad{}
 		if err := rows.Scan(
 			&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
-			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL, &ad.Status,
+			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL,
+			&ad.PhoneNumber, &ad.WhatsAppNumber, &ad.Status,
 			&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
 			&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
 			&ad.CreatedAt, &ad.UpdatedAt,
@@ -123,7 +125,8 @@ func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) (
 		SELECT a.id, a.advertiser_id,
 		       COALESCE(u.email, ''),
 		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
-		       a.title, a.body, a.image_url, a.target_url, a.status,
+		       a.title, a.body, a.image_url, a.target_url,
+		       a.phone_number, a.whatsapp_number, a.status,
 		       a.start_at, a.end_at, a.impressions, a.clicks,
 		       a.reviewed_by::text, a.reviewed_at, a.review_note,
 		       a.created_at, a.updated_at
@@ -147,7 +150,8 @@ func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) (
 		ad := &models.Ad{}
 		if err := rows.Scan(
 			&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
-			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL, &ad.Status,
+			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL,
+			&ad.PhoneNumber, &ad.WhatsAppNumber, &ad.Status,
 			&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
 			&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
 			&ad.CreatedAt, &ad.UpdatedAt,
@@ -177,7 +181,8 @@ func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.
 		SELECT a.id, a.advertiser_id,
 		       COALESCE(u.email, ''),
 		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
-		       a.title, a.body, a.image_url, a.target_url, a.status,
+		       a.title, a.body, a.image_url, a.target_url,
+		       a.phone_number, a.whatsapp_number, a.status,
 		       a.start_at, a.end_at, a.impressions, a.clicks,
 		       a.reviewed_by::text, a.reviewed_at, a.review_note,
 		       a.created_at, a.updated_at
@@ -189,7 +194,8 @@ func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.
 	ad := &models.Ad{}
 	err := r.db.Pool.QueryRow(ctx, q, id).Scan(
 		&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
-		&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL, &ad.Status,
+		&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL,
+		&ad.PhoneNumber, &ad.WhatsAppNumber, &ad.Status,
 		&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
 		&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
 		&ad.CreatedAt, &ad.UpdatedAt,
@@ -205,17 +211,24 @@ func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.
 
 func (r *monetizationRepository) CreateAd(
 	ctx context.Context,
-	advertiserID, title, body, imageURL, targetURL, status string,
+	advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string,
 	startAt, endAt *time.Time,
 ) (*models.Ad, error) {
 	const q = `
-		INSERT INTO ads (advertiser_id, title, body, image_url, target_url, status, start_at, end_at)
-		VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6, $7, $8)
+		INSERT INTO ads (
+			advertiser_id, title, body, image_url, target_url,
+			phone_number, whatsapp_number, status, start_at, end_at
+		)
+		VALUES (
+			$1, $2, NULLIF($3, ''), NULLIF($4, ''), $5,
+			NULLIF($6, ''), NULLIF($7, ''), $8, $9, $10
+		)
 		RETURNING id
 	`
 	var id string
 	if err := r.db.Pool.QueryRow(ctx, q,
-		advertiserID, title, body, imageURL, targetURL, status, startAt, endAt,
+		advertiserID, title, body, imageURL, targetURL,
+		phoneNumber, whatsappNumber, status, startAt, endAt,
 	).Scan(&id); err != nil {
 		return nil, fmt.Errorf("ad create: %w", err)
 	}

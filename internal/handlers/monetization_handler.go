@@ -154,7 +154,7 @@ func (h *MonetizationHandler) CreateAd(c *gin.Context) {
 		if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
 			return
 		}
-		photo, uErr := h.storage.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)
+		photo, uErr := h.storage.UploadImage(c.Request.Context(), file, header, services.ImageTypeAd)
 		if uErr != nil {
 			h.logger.Error("ad image upload", zap.Error(uErr))
 			utils.SendError(c, http.StatusInternalServerError, "Failed to upload image", uErr)

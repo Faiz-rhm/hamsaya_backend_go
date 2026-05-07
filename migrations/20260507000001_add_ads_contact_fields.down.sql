@@ -1,0 +1,2 @@
+ALTER TABLE ads DROP COLUMN IF EXISTS whatsapp_number;
+ALTER TABLE ads DROP COLUMN IF EXISTS phone_number;

@@ -15,6 +15,8 @@ type Ad struct {
 	Body            *string    `json:"body,omitempty"`
 	ImageURL        *string    `json:"image_url,omitempty"`
 	TargetURL       string     `json:"target_url"`
+	PhoneNumber     *string    `json:"phone_number,omitempty"`
+	WhatsAppNumber  *string    `json:"whatsapp_number,omitempty"`
 	Status          string     `json:"status"`
 	StartAt         *time.Time `json:"start_at,omitempty"`
 	EndAt           *time.Time `json:"end_at,omitempty"`
@@ -39,6 +41,10 @@ type AdCreateRequest struct {
 	Title        string     `form:"title"         validate:"required,min=2,max=120"`
 	Body         *string    `form:"body"          validate:"omitempty,max=2000"`
 	TargetURL    string     `form:"target_url"    validate:"required,url"`
+	// Optional direct-contact fields surfaced on the placement. At least one
+	// of these or target_url is expected; validators allow empty.
+	PhoneNumber    *string `form:"phone_number"    validate:"omitempty,min=4,max=40"`
+	WhatsAppNumber *string `form:"whatsapp_number" validate:"omitempty,min=4,max=40"`
 	StartAt      *time.Time `form:"start_at"`
 	EndAt        *time.Time `form:"end_at"`
 	// AutoApprove flips the new row from PENDING to ACTIVE on creation —

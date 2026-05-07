@@ -165,7 +165,7 @@ func TestMonetizationHandler_CreateAd(t *testing.T) {
 	t.Run("success defaults advertiser to admin", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
 		repo.On("CreateAd", mock.Anything, monAdminID, "Hello Ad", "", "",
-			"https://example.com", "PENDING", mock.Anything, mock.Anything).
+			"https://example.com", "", "", "PENDING", mock.Anything, mock.Anything).
 			Return(&models.Ad{ID: "ad-x", Status: "PENDING"}, nil)
 		r := newMonetizationRouter(t, repo)
 

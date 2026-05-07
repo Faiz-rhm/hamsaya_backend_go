@@ -2018,8 +2018,8 @@ func (m *MockMonetizationRepository) GetAd(ctx context.Context, id string) (*mod
 	return args.Get(0).(*models.Ad), args.Error(1)
 }
 
-func (m *MockMonetizationRepository) CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, status string, startAt, endAt *time.Time) (*models.Ad, error) {
-	args := m.Called(ctx, advertiserID, title, body, imageURL, targetURL, status, startAt, endAt)
+func (m *MockMonetizationRepository) CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time) (*models.Ad, error) {
+	args := m.Called(ctx, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status, startAt, endAt)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
