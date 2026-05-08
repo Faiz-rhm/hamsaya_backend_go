@@ -463,6 +463,29 @@ func (s *ChatService) notifyMessageSent(message *models.Message, recipientID str
 	}
 	if convo != nil && convo.BusinessID != nil && *convo.BusinessID != "" {
 		data["business_id"] = *convo.BusinessID
+
+		// When the SENDER is the business owner replying inside the
+		// business-scoped chat, surface the business identity (name + logo)
+		// instead of the owner's personal profile so the buyer sees
+		// "Hamsaya Bakery" rather than "John Doe" in their notification.
+		if s.businessRepo != nil {
+			biz, berr := s.businessRepo.GetByID(ctx, *convo.BusinessID)
+			if berr == nil && biz != nil && biz.UserID == message.SenderID {
+				if biz.Name != "" {
+					senderName = biz.Name
+					data["actor_name"] = biz.Name
+					data["recipient_name"] = biz.Name
+				}
+				if biz.Avatar != nil {
+					data["actor_avatar"] = biz.Avatar.URL
+					data["recipient_avatar"] = biz.Avatar.URL
+				}
+				if biz.AvatarColor != nil {
+					data["actor_avatar_color"] = *biz.AvatarColor
+				}
+				data["business_name"] = biz.Name
+			}
+		}
 	}
 
 	title := senderName
