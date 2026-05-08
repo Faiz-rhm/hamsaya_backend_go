@@ -51,10 +51,13 @@ type AdCreateRequest struct {
 	WhatsAppNumber *string `form:"whatsapp_number" validate:"omitempty,min=4,max=40"`
 	// Targeting + frequency cap. All optional. Empty province / language
 	// lists disable that targeting axis (ad shown to everyone).
-	Weight             *int     `form:"weight"               validate:"omitempty,min=1,max=100"`
-	DailyImpressionCap *int     `form:"daily_impression_cap" validate:"omitempty,min=1"`
-	TargetProvinces    []string `form:"target_provinces"     validate:"omitempty,dive,min=1,max=80"`
-	TargetLanguages    []string `form:"target_languages"     validate:"omitempty,dive,min=2,max=8"`
+	// NOTE: numeric validate tags removed — go-playground/validator's `max`
+	// tag on `*int` triggered a misleading "must be at most N characters"
+	// error. Range checks now live in the service layer below.
+	Weight             *int     `form:"weight"`
+	DailyImpressionCap *int     `form:"daily_impression_cap"`
+	TargetProvinces    []string `form:"target_provinces"     validate:"omitempty,dive,max=80"`
+	TargetLanguages    []string `form:"target_languages"     validate:"omitempty,dive,max=8"`
 	StartAt      *time.Time `form:"start_at"`
 	EndAt        *time.Time `form:"end_at"`
 	// AutoApprove flips the new row from PENDING to ACTIVE on creation —

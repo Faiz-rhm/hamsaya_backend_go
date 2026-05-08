@@ -91,6 +91,19 @@ func (s *MonetizationService) CreateAd(
 	if req.Weight != nil {
 		weight = *req.Weight
 	}
+	// Manual range guards (validator tags removed — go-playground/validator's
+	// `max` tag on *int formats as "must be at most N characters", which is
+	// confusing for numeric inputs. We clamp instead of rejecting so a zero
+	// or out-of-range weight from the admin UI doesn't 400 the request.
+	if weight < 1 {
+		weight = 1
+	}
+	if weight > 100 {
+		weight = 100
+	}
+	if req.DailyImpressionCap != nil && *req.DailyImpressionCap < 1 {
+		req.DailyImpressionCap = nil // 0/negative = no cap.
+	}
 	provinces := req.TargetProvinces
 	if provinces == nil {
 		provinces = []string{}
