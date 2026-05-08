@@ -110,8 +110,10 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 		zap.String("recipient_id", req.RecipientID),
 	)
 
-	// Send real-time notification to recipient via WebSocket
-	go s.notifyMessageSent(message, req.RecipientID)
+	// Send real-time notification to recipient via WebSocket. Pass the
+	// conversation so the persisted notification can be stamped with
+	// business_id when the chat is business-scoped.
+	go s.notifyMessageSent(message, req.RecipientID, conversation)
 
 	// Get enriched message response
 	return s.enrichMessage(ctx, message)
@@ -377,7 +379,10 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 
 // notifyMessageSent sends a WebSocket notification to the recipient and
 // triggers a persisted notification + FCM push so the user sees it when offline.
-func (s *ChatService) notifyMessageSent(message *models.Message, recipientID string) {
+// [conversation] is optional — when supplied and BusinessID is set, the
+// persisted notification gets `data.business_id` so the business-scoped
+// unread-count and notification list pick it up.
+func (s *ChatService) notifyMessageSent(message *models.Message, recipientID string, conversation *models.Conversation) {
 	// Real-time WebSocket frame for foreground app
 	if s.wsHub != nil {
 		wsMessage := models.WSMessage{
@@ -445,6 +450,19 @@ func (s *ChatService) notifyMessageSent(message *models.Message, recipientID str
 	}
 	if senderProfile != nil && senderProfile.AvatarColor != nil {
 		data["actor_avatar_color"] = *senderProfile.AvatarColor
+	}
+	// Tag with business_id when the conversation is business-scoped so the
+	// business notification page + dashboard badge filter sees it. Falls
+	// back to looking the conversation up via the message id when the
+	// caller didn't pass one.
+	convo := conversation
+	if convo == nil && s.conversationRepo != nil {
+		if c, err := s.conversationRepo.GetByID(ctx, message.ConversationID); err == nil {
+			convo = c
+		}
+	}
+	if convo != nil && convo.BusinessID != nil && *convo.BusinessID != "" {
+		data["business_id"] = *convo.BusinessID
 	}
 
 	title := senderName
