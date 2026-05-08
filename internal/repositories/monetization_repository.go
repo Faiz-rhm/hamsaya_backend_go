@@ -20,9 +20,9 @@ import (
 type MonetizationRepository interface {
 	// Ads
 	ListAds(ctx context.Context, status string, page, limit int) ([]*models.Ad, int, error)
-	ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error)
+	ListActiveAds(ctx context.Context, limit int, province, language string) ([]*models.Ad, error)
 	GetAd(ctx context.Context, id string) (*models.Ad, error)
-	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time) (*models.Ad, error)
+	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time, weight int, dailyImpressionCap *int, targetProvinces, targetLanguages []string) (*models.Ad, error)
 	UpdateAdStatus(ctx context.Context, id, status, reviewedBy string, req *models.AdReviewRequest) (*models.Ad, error)
 	DeleteAd(ctx context.Context, id string) error
 	IncrementAdImpression(ctx context.Context, id string) error
@@ -78,7 +78,11 @@ func (r *monetizationRepository) ListAds(ctx context.Context, status string, pag
 		       COALESCE(u.email, ''),
 		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
 		       a.title, a.body, a.image_url, a.target_url,
-		       a.phone_number, a.whatsapp_number, a.status,
+		       a.phone_number, a.whatsapp_number,
+		       a.weight, a.daily_impression_cap,
+		       COALESCE(a.target_provinces, '{}'::text[]),
+		       COALESCE(a.target_languages, '{}'::text[]),
+		       a.status,
 		       a.start_at, a.end_at, a.impressions, a.clicks,
 		       a.reviewed_by::text, a.reviewed_at, a.review_note,
 		       a.created_at, a.updated_at
@@ -102,7 +106,10 @@ func (r *monetizationRepository) ListAds(ctx context.Context, status string, pag
 		if err := rows.Scan(
 			&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
 			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL,
-			&ad.PhoneNumber, &ad.WhatsAppNumber, &ad.Status,
+			&ad.PhoneNumber, &ad.WhatsAppNumber,
+			&ad.Weight, &ad.DailyImpressionCap,
+			&ad.TargetProvinces, &ad.TargetLanguages,
+			&ad.Status,
 			&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
 			&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
 			&ad.CreatedAt, &ad.UpdatedAt,
@@ -117,7 +124,18 @@ func (r *monetizationRepository) ListAds(ctx context.Context, status string, pag
 // ListActiveAds returns ads that are currently servable: status=ACTIVE,
 // optional start_at <= now, optional end_at >= now (NULL end_at = no expiry).
 // Used by the public /v1/ads/active endpoint that mobile feeds consume.
-func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error) {
+//
+// Targeting + frequency cap (when provided):
+//   • [province] — empty target_provinces → match all; otherwise must contain it.
+//   • [language] — empty target_languages → match all; otherwise must contain it.
+//   • daily_impression_cap — when set, only return ads whose impressions
+//     since today's UTC midnight stay below the cap. We approximate by using
+//     the running counter since the last reset; a separate Redis-backed
+//     per-day counter is the next iteration. For now: ads.impressions is the
+//     lifetime counter so cap_skip is best-effort only when start_at is today
+//     (covers the common "campaign launches today, cap impressions today").
+//   • weight — selection bias. ORDER BY weight*RANDOM() DESC.
+func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int, province, language string) ([]*models.Ad, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 10
 	}
@@ -126,7 +144,11 @@ func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) (
 		       COALESCE(u.email, ''),
 		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
 		       a.title, a.body, a.image_url, a.target_url,
-		       a.phone_number, a.whatsapp_number, a.status,
+		       a.phone_number, a.whatsapp_number,
+		       a.weight, a.daily_impression_cap,
+		       COALESCE(a.target_provinces, '{}'::text[]),
+		       COALESCE(a.target_languages, '{}'::text[]),
+		       a.status,
 		       a.start_at, a.end_at, a.impressions, a.clicks,
 		       a.reviewed_by::text, a.reviewed_at, a.review_note,
 		       a.created_at, a.updated_at
@@ -136,10 +158,18 @@ func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) (
 		WHERE a.status = 'ACTIVE'
 		  AND (a.start_at IS NULL OR a.start_at <= NOW())
 		  AND (a.end_at   IS NULL OR a.end_at   >  NOW())
-		ORDER BY RANDOM()
+		  AND (
+		        a.daily_impression_cap IS NULL
+		     OR a.start_at IS NULL
+		     OR DATE(a.start_at AT TIME ZONE 'UTC') <> DATE(NOW() AT TIME ZONE 'UTC')
+		     OR a.impressions < a.daily_impression_cap
+		      )
+		  AND (cardinality(a.target_provinces) = 0 OR $2 = ANY(a.target_provinces))
+		  AND (cardinality(a.target_languages) = 0 OR $3 = ANY(a.target_languages))
+		ORDER BY GREATEST(a.weight, 1) * RANDOM() DESC
 		LIMIT $1
 	`
-	rows, err := r.db.Pool.Query(ctx, q, limit)
+	rows, err := r.db.Pool.Query(ctx, q, limit, province, language)
 	if err != nil {
 		return nil, fmt.Errorf("active ads list: %w", err)
 	}
@@ -151,7 +181,10 @@ func (r *monetizationRepository) ListActiveAds(ctx context.Context, limit int) (
 		if err := rows.Scan(
 			&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
 			&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL,
-			&ad.PhoneNumber, &ad.WhatsAppNumber, &ad.Status,
+			&ad.PhoneNumber, &ad.WhatsAppNumber,
+			&ad.Weight, &ad.DailyImpressionCap,
+			&ad.TargetProvinces, &ad.TargetLanguages,
+			&ad.Status,
 			&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
 			&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
 			&ad.CreatedAt, &ad.UpdatedAt,
@@ -182,7 +215,11 @@ func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.
 		       COALESCE(u.email, ''),
 		       COALESCE(NULLIF(TRIM(CONCAT_WS(' ', up.first_name, up.last_name)), ''), ''),
 		       a.title, a.body, a.image_url, a.target_url,
-		       a.phone_number, a.whatsapp_number, a.status,
+		       a.phone_number, a.whatsapp_number,
+		       a.weight, a.daily_impression_cap,
+		       COALESCE(a.target_provinces, '{}'::text[]),
+		       COALESCE(a.target_languages, '{}'::text[]),
+		       a.status,
 		       a.start_at, a.end_at, a.impressions, a.clicks,
 		       a.reviewed_by::text, a.reviewed_at, a.review_note,
 		       a.created_at, a.updated_at
@@ -195,7 +232,10 @@ func (r *monetizationRepository) GetAd(ctx context.Context, id string) (*models.
 	err := r.db.Pool.QueryRow(ctx, q, id).Scan(
 		&ad.ID, &ad.AdvertiserID, &ad.AdvertiserEmail, &ad.AdvertiserName,
 		&ad.Title, &ad.Body, &ad.ImageURL, &ad.TargetURL,
-		&ad.PhoneNumber, &ad.WhatsAppNumber, &ad.Status,
+		&ad.PhoneNumber, &ad.WhatsAppNumber,
+		&ad.Weight, &ad.DailyImpressionCap,
+		&ad.TargetProvinces, &ad.TargetLanguages,
+		&ad.Status,
 		&ad.StartAt, &ad.EndAt, &ad.Impressions, &ad.Clicks,
 		&ad.ReviewedBy, &ad.ReviewedAt, &ad.ReviewNote,
 		&ad.CreatedAt, &ad.UpdatedAt,
@@ -213,22 +253,40 @@ func (r *monetizationRepository) CreateAd(
 	ctx context.Context,
 	advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string,
 	startAt, endAt *time.Time,
+	weight int,
+	dailyImpressionCap *int,
+	targetProvinces, targetLanguages []string,
 ) (*models.Ad, error) {
+	if weight <= 0 {
+		weight = 1
+	}
+	if targetProvinces == nil {
+		targetProvinces = []string{}
+	}
+	if targetLanguages == nil {
+		targetLanguages = []string{}
+	}
 	const q = `
 		INSERT INTO ads (
 			advertiser_id, title, body, image_url, target_url,
-			phone_number, whatsapp_number, status, start_at, end_at
+			phone_number, whatsapp_number,
+			weight, daily_impression_cap, target_provinces, target_languages,
+			status, start_at, end_at
 		)
 		VALUES (
 			$1, $2, NULLIF($3, ''), NULLIF($4, ''), $5,
-			NULLIF($6, ''), NULLIF($7, ''), $8, $9, $10
+			NULLIF($6, ''), NULLIF($7, ''),
+			$8, $9, $10, $11,
+			$12, $13, $14
 		)
 		RETURNING id
 	`
 	var id string
 	if err := r.db.Pool.QueryRow(ctx, q,
 		advertiserID, title, body, imageURL, targetURL,
-		phoneNumber, whatsappNumber, status, startAt, endAt,
+		phoneNumber, whatsappNumber,
+		weight, dailyImpressionCap, targetProvinces, targetLanguages,
+		status, startAt, endAt,
 	).Scan(&id); err != nil {
 		return nil, fmt.Errorf("ad create: %w", err)
 	}

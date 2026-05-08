@@ -364,6 +364,20 @@ func (c *Client) getPublicURL(key string) string {
 	return fmt.Sprintf("%s/%s/%s", base, c.bucketName, key)
 }
 
+// KeyFromURL is the exported wrapper around extractKeyFromURL so external
+// commands (backfill scripts, transcoders) can map a stored URL back to its
+// MinIO object key.
+func (c *Client) KeyFromURL(url string) string {
+	return c.extractKeyFromURL(url)
+}
+
+// PublicURL is the exported wrapper around getPublicURL so commands that mint
+// new keys (re-encode, transcode) can construct the canonical URL we store
+// in the DB.
+func (c *Client) PublicURL(key string) string {
+	return c.getPublicURL(key)
+}
+
 // extractKeyFromURL extracts the object key from a full URL.
 // URL format is base/bucketName/key (e.g. http://localhost:9000/hamsaya-uploads/post/xxx.webp).
 func (c *Client) extractKeyFromURL(url string) string {

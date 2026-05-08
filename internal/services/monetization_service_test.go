@@ -73,14 +73,15 @@ func TestMonetizationService_CreateAd(t *testing.T) {
 		}, "")
 		require.Error(t, err)
 		assert.Nil(t, ad)
-		repo.AssertNotCalled(t, "CreateAd", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		repo.AssertNotCalled(t, "CreateAd", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("default status PENDING", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
 		want := &models.Ad{ID: "ad-1", Status: "PENDING"}
 		repo.On("CreateAd", mock.Anything, "u-1", "Title", "", "https://cdn/x.png",
-			"https://example.com", "", "", "PENDING", mock.Anything, mock.Anything).
+			"https://example.com", "", "", "PENDING", mock.Anything, mock.Anything,
+			1, (*int)(nil), []string{}, []string{}).
 			Return(want, nil)
 
 		svc := newMonetizationSvc(repo)
@@ -97,7 +98,8 @@ func TestMonetizationService_CreateAd(t *testing.T) {
 	t.Run("auto_approve sets ACTIVE", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
 		repo.On("CreateAd", mock.Anything, "u-1", "Title", "body-text", "",
-			"https://example.com", "", "", "ACTIVE", mock.Anything, mock.Anything).
+			"https://example.com", "", "", "ACTIVE", mock.Anything, mock.Anything,
+			1, (*int)(nil), []string{}, []string{}).
 			Return(&models.Ad{ID: "ad-2", Status: "ACTIVE"}, nil)
 
 		svc := newMonetizationSvc(repo)
@@ -116,7 +118,7 @@ func TestMonetizationService_CreateAd(t *testing.T) {
 
 	t.Run("repo error propagates", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
-		repo.On("CreateAd", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		repo.On("CreateAd", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 			Return(nil, errors.New("db"))
 
 		svc := newMonetizationSvc(repo)

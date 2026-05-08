@@ -79,6 +79,10 @@ func TestReportHandler_ReportPost(t *testing.T) {
 		post := testutil.CreateTestPost(reportTestPostID, "other-user", models.PostTypeFeed)
 		postRepo.On("GetByID", mock.Anything, reportTestPostID).Return(post, nil)
 		reportRepo.On("CreatePostReport", mock.Anything, mock.AnythingOfType("*models.PostReport")).Return(nil)
+		// Auto-action probe runs after CreatePostReport — under threshold so
+		// HidePost should not be called. Use Maybe() so absent calls are fine.
+		reportRepo.On("CountPendingPostReports", mock.Anything, reportTestPostID).Return(1, nil).Maybe()
+		reportRepo.On("HidePost", mock.Anything, reportTestPostID).Return(nil).Maybe()
 		r := newReportRouter(t, reportRepo, postRepo, &mocks.MockUserRepository{})
 
 		w := httptest.NewRecorder()
@@ -126,6 +130,8 @@ func TestReportHandler_ReportComment(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		reportRepo := &mocks.MockReportRepository{}
 		reportRepo.On("CreateCommentReport", mock.Anything, mock.AnythingOfType("*models.CommentReport")).Return(nil)
+		reportRepo.On("CountPendingCommentReports", mock.Anything, reportTestCommentID).Return(1, nil).Maybe()
+		reportRepo.On("HideComment", mock.Anything, reportTestCommentID).Return(nil).Maybe()
 		r := newReportRouter(t, reportRepo, &mocks.MockPostRepository{}, &mocks.MockUserRepository{})
 
 		w := httptest.NewRecorder()

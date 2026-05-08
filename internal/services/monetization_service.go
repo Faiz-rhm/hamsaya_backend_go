@@ -45,9 +45,11 @@ func (s *MonetizationService) ListAds(ctx context.Context, status string, page, 
 }
 
 // ListActiveAds returns the public-facing slice of ads ready to be served
-// inline in the mobile feed.
-func (s *MonetizationService) ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error) {
-	return s.repo.ListActiveAds(ctx, limit)
+// inline in the mobile feed. Province + language are user-context hints
+// that the repository uses for targeting (empty strings disable targeting
+// per dimension).
+func (s *MonetizationService) ListActiveAds(ctx context.Context, limit int, province, language string) ([]*models.Ad, error) {
+	return s.repo.ListActiveAds(ctx, limit, province, language)
 }
 
 func (s *MonetizationService) RecordImpression(ctx context.Context, id string) error {
@@ -85,8 +87,21 @@ func (s *MonetizationService) CreateAd(
 	if req.WhatsAppNumber != nil {
 		whatsapp = *req.WhatsAppNumber
 	}
+	weight := 1
+	if req.Weight != nil {
+		weight = *req.Weight
+	}
+	provinces := req.TargetProvinces
+	if provinces == nil {
+		provinces = []string{}
+	}
+	languages := req.TargetLanguages
+	if languages == nil {
+		languages = []string{}
+	}
 	return s.repo.CreateAd(ctx, req.AdvertiserID, req.Title, body, imageURL,
-		req.TargetURL, phone, whatsapp, status, req.StartAt, req.EndAt)
+		req.TargetURL, phone, whatsapp, status, req.StartAt, req.EndAt,
+		weight, req.DailyImpressionCap, provinces, languages)
 }
 
 func (s *MonetizationService) GetAd(ctx context.Context, id string) (*models.Ad, error) {

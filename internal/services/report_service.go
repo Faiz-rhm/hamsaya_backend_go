@@ -9,6 +9,18 @@ import (
 	"go.uber.org/zap"
 )
 
+// Auto-action thresholds. Tunable; deliberately conservative to avoid
+// brigading false-positives.
+const (
+	// autoHidePostThreshold: pending reports needed to soft-hide a post.
+	autoHidePostThreshold = 3
+	// autoHideCommentThreshold: same for comments.
+	autoHideCommentThreshold = 3
+	// autoFlagUserThreshold: unresolved user reports needed to flag a user
+	// for admin review (not auto-suspend — that requires a human).
+	autoFlagUserThreshold = 5
+)
+
 // ReportService handles report-related business logic
 type ReportService struct {
 	reportRepo repositories.ReportRepository
@@ -80,6 +92,18 @@ func (s *ReportService) ReportPost(ctx context.Context, userID, postID string, r
 	}
 
 	s.logger.Infow("Post report created successfully", "user_id", userID, "post_id", postID)
+
+	// Auto-action: when this post crosses [autoHidePostThreshold] pending
+	// reports, soft-hide it (status=false). Admin can review + reinstate
+	// from the moderation queue. Best-effort — if the count or hide fails
+	// we don't bubble that to the reporting user.
+	if count, cerr := s.reportRepo.CountPendingPostReports(ctx, postID); cerr == nil &&
+		count >= autoHidePostThreshold {
+		if herr := s.reportRepo.HidePost(ctx, postID); herr == nil {
+			s.logger.Infow("Auto-hid post on report threshold",
+				"post_id", postID, "report_count", count, "threshold", autoHidePostThreshold)
+		}
+	}
 	return nil
 }
 
@@ -103,6 +127,13 @@ func (s *ReportService) ReportComment(ctx context.Context, userID, commentID str
 		return utils.NewInternalServerError("Failed to create report", err)
 	}
 
+	if count, cerr := s.reportRepo.CountPendingCommentReports(ctx, commentID); cerr == nil &&
+		count >= autoHideCommentThreshold {
+		if herr := s.reportRepo.HideComment(ctx, commentID); herr == nil {
+			s.logger.Infow("Auto-hid comment on report threshold",
+				"comment_id", commentID, "report_count", count, "threshold", autoHideCommentThreshold)
+		}
+	}
 	return nil
 }
 

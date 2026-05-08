@@ -600,6 +600,18 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		argCount++
 	}
 
+	// Bidirectional block filter — hide authors the viewer blocked AND any
+	// author who blocked the viewer. Apple UGC compliance.
+	if filter.ViewerID != "" {
+		fmt.Fprintf(&queryBuilder, ` AND user_id NOT IN (
+			SELECT blocked_id FROM user_blocks WHERE blocker_id = $%d
+			UNION
+			SELECT blocker_id FROM user_blocks WHERE blocked_id = $%d
+		)`, argCount, argCount)
+		args = append(args, filter.ViewerID)
+		argCount++
+	}
+
 	if filter.BusinessID != nil {
 		fmt.Fprintf(&queryBuilder, " AND business_id = $%d", argCount)
 		args = append(args, *filter.BusinessID)
@@ -740,6 +752,18 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 	if filter.UserID != nil {
 		fmt.Fprintf(&queryBuilder, " AND user_id = $%d", argCount)
 		args = append(args, *filter.UserID)
+		argCount++
+	}
+
+	// Bidirectional block filter — hide authors the viewer blocked AND any
+	// author who blocked the viewer. Apple UGC compliance.
+	if filter.ViewerID != "" {
+		fmt.Fprintf(&queryBuilder, ` AND user_id NOT IN (
+			SELECT blocked_id FROM user_blocks WHERE blocker_id = $%d
+			UNION
+			SELECT blocker_id FROM user_blocks WHERE blocked_id = $%d
+		)`, argCount, argCount)
+		args = append(args, filter.ViewerID)
 		argCount++
 	}
 

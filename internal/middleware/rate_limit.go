@@ -94,6 +94,14 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:ad-tracking:",
 	},
+	// chat-send: per-user message-send cap. 30/min/user blocks rapid spam
+	// while leaving plenty of room for normal chatting (a fast typist
+	// emits ~6-10 messages/min). Use with LimitByUser.
+	"chat-send": {
+		MaxRequests: 30,
+		Window:      time.Minute,
+		KeyPrefix:   "ratelimit:chat-send:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
@@ -198,6 +206,13 @@ func (rl *RateLimiter) LimitPostsCreate() gin.HandlerFunc {
 // LimitDataExport gates GET /users/me/export at 1 request / 24h per user.
 func (rl *RateLimiter) LimitDataExport() gin.HandlerFunc {
 	config := DefaultRateLimits["data-export"]
+	return rl.LimitByUser(config)
+}
+
+// LimitChatSend caps chat messages at 30/min/user. Spam guard — leaves
+// plenty of headroom for normal conversation while blocking floods.
+func (rl *RateLimiter) LimitChatSend() gin.HandlerFunc {
+	config := DefaultRateLimits["chat-send"]
 	return rl.LimitByUser(config)
 }
 

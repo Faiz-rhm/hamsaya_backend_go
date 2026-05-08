@@ -86,20 +86,22 @@ func NewFCMClient(cfg FCMConfig, logger *zap.Logger) (*FCMClient, error) {
 func (f *FCMClient) SendNotification(ctx context.Context, token string, payload *PushPayload) error {
 	message := &messaging.Message{
 		Token: token,
-		Notification: &messaging.Notification{
+		Data:  payload.Data,
+	}
+	if !payload.Silent {
+		message.Notification = &messaging.Notification{
 			Title: payload.Title,
 			Body:  payload.Body,
-		},
-		Data: payload.Data,
-	}
-
-	// Set optional fields
-	if payload.ImageURL != "" {
-		message.Notification.ImageURL = payload.ImageURL
+		}
+		if payload.ImageURL != "" {
+			message.Notification.ImageURL = payload.ImageURL
+		}
 	}
 
 	// Android: always set high priority and channel ID so notifications wake the
-	// device immediately and land in the correct channel (API 26+).
+	// device immediately and land in the correct channel (API 26+). Silent
+	// pushes drop the AndroidNotification block — data-only payload still
+	// fires onMessageReceived in the background isolate.
 	channelID := payload.ChannelID
 	if channelID == "" {
 		channelID = "general"
@@ -108,33 +110,52 @@ func (f *FCMClient) SendNotification(ctx context.Context, token string, payload 
 	if apnsSound == "" {
 		apnsSound = "default"
 	}
-	message.Android = &messaging.AndroidConfig{
-		Priority: "high",
-		Notification: &messaging.AndroidNotification{
-			ChannelID:   channelID,
-			Sound:       payload.Sound,
-			ClickAction: payload.ClickAction,
-		},
+	if payload.Silent {
+		message.Android = &messaging.AndroidConfig{Priority: "high"}
+	} else {
+		message.Android = &messaging.AndroidConfig{
+			Priority: "high",
+			Notification: &messaging.AndroidNotification{
+				ChannelID:   channelID,
+				Sound:       payload.Sound,
+				ClickAction: payload.ClickAction,
+			},
+		}
 	}
 
-	// iOS: always include APNS headers for reliable immediate delivery.
-	// `apns-expiration` is a Unix timestamp; without it APNs may silently
-	// drop messages when the device is briefly offline.
-	message.APNS = &messaging.APNSConfig{
-		Headers: map[string]string{
-			"apns-push-type":   "alert",
-			"apns-priority":    "10",
-			"apns-expiration":  strconv.FormatInt(time.Now().Add(apnsExpirationSeconds*time.Second).Unix(), 10),
-		},
-		Payload: &messaging.APNSPayload{
-			Aps: &messaging.Aps{
-				Sound:          apnsSound,
-				MutableContent: true,
+	// iOS: alert vs background push types are encoded in apns-push-type +
+	// content-available. Background pushes get priority 5 (Apple requires
+	// non-immediate priority for content-available pushes).
+	if payload.Silent {
+		message.APNS = &messaging.APNSConfig{
+			Headers: map[string]string{
+				"apns-push-type":  "background",
+				"apns-priority":   "5",
+				"apns-expiration": strconv.FormatInt(time.Now().Add(apnsExpirationSeconds*time.Second).Unix(), 10),
 			},
-		},
-	}
-	if payload.Badge != nil {
-		message.APNS.Payload.Aps.Badge = payload.Badge
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					ContentAvailable: true,
+				},
+			},
+		}
+	} else {
+		message.APNS = &messaging.APNSConfig{
+			Headers: map[string]string{
+				"apns-push-type":  "alert",
+				"apns-priority":   "10",
+				"apns-expiration": strconv.FormatInt(time.Now().Add(apnsExpirationSeconds*time.Second).Unix(), 10),
+			},
+			Payload: &messaging.APNSPayload{
+				Aps: &messaging.Aps{
+					Sound:          apnsSound,
+					MutableContent: true,
+				},
+			},
+		}
+		if payload.Badge != nil {
+			message.APNS.Payload.Aps.Badge = payload.Badge
+		}
 	}
 
 	// Send message
@@ -288,4 +309,10 @@ type PushPayload struct {
 	Badge       *int              `json:"badge,omitempty"`
 	ClickAction string            `json:"click_action,omitempty"`
 	ChannelID   string            `json:"channel_id,omitempty"` // Android notification channel
+	// Silent: when true, send as data-only push (no Notification payload, no
+	// banner). iOS adds `content-available: 1` so the OS wakes the app for a
+	// background sync; Android relies on the data-only behaviour to fire
+	// FirebaseMessagingService.onMessageReceived. Use for "refresh feed" or
+	// "sync unread count" wakeups that shouldn't show a user-visible alert.
+	Silent bool `json:"silent,omitempty"`
 }

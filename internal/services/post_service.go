@@ -672,6 +672,12 @@ func (s *PostService) SharePost(ctx context.Context, userID, originalPostID stri
 
 // GetFeed gets posts for the feed
 func (s *PostService) GetFeed(ctx context.Context, filter *models.FeedFilter, viewerID *string) ([]*models.PostResponse, int64, error) {
+	// Propagate viewer to repo so the SQL excludes posts by users this viewer
+	// has blocked (and posts by users who blocked this viewer).
+	if viewerID != nil && *viewerID != "" && filter.ViewerID == "" {
+		filter.ViewerID = *viewerID
+	}
+
 	// Get total count for pagination
 	totalCount, err := s.postRepo.CountFeed(ctx, filter)
 	if err != nil {

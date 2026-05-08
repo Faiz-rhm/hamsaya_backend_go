@@ -34,6 +34,9 @@ func TestReportService_ReportPost(t *testing.T) {
 				post := testutil.CreateTestPost("post-456", "other-user", models.PostTypeFeed)
 				postRepo.On("GetByID", mock.Anything, "post-456").Return(post, nil)
 				reportRepo.On("CreatePostReport", mock.Anything, mock.AnythingOfType("*models.PostReport")).Return(nil)
+				// Auto-action probe — under threshold, no hide.
+				reportRepo.On("CountPendingPostReports", mock.Anything, "post-456").Return(1, nil).Maybe()
+				reportRepo.On("HidePost", mock.Anything, "post-456").Return(nil).Maybe()
 			},
 			expectedError: "",
 		},
@@ -466,6 +469,8 @@ func TestReportService_ReportComment(t *testing.T) {
 			},
 			setupMocks: func(reportRepo *mocks.MockReportRepository) {
 				reportRepo.On("CreateCommentReport", mock.Anything, mock.AnythingOfType("*models.CommentReport")).Return(nil)
+				reportRepo.On("CountPendingCommentReports", mock.Anything, mock.Anything).Return(1, nil).Maybe()
+				reportRepo.On("HideComment", mock.Anything, mock.Anything).Return(nil).Maybe()
 			},
 			expectedError: "",
 		},

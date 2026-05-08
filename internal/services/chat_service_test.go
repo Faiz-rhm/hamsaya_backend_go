@@ -16,7 +16,7 @@ import (
 )
 
 func newTestChatService(convRepo *mocks.MockConversationRepository, msgRepo *mocks.MockMessageRepository, userRepo *mocks.MockUserRepository) *ChatService {
-	return NewChatService(convRepo, msgRepo, userRepo, nil, nil, nil, zap.NewNop())
+	return NewChatService(convRepo, msgRepo, userRepo, nil, nil, nil, nil, zap.NewNop())
 }
 
 func newTestConversation(id string) *models.Conversation {

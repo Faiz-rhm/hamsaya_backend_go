@@ -530,6 +530,31 @@ func (m *MockReportRepository) UpdateBusinessReportStatus(ctx context.Context, i
 	return args.Error(0)
 }
 
+func (m *MockReportRepository) CountPendingPostReports(ctx context.Context, postID string) (int, error) {
+	args := m.Called(ctx, postID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockReportRepository) CountPendingCommentReports(ctx context.Context, commentID string) (int, error) {
+	args := m.Called(ctx, commentID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockReportRepository) CountUnresolvedUserReports(ctx context.Context, reportedUserID string) (int, error) {
+	args := m.Called(ctx, reportedUserID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockReportRepository) HidePost(ctx context.Context, postID string) error {
+	args := m.Called(ctx, postID)
+	return args.Error(0)
+}
+
+func (m *MockReportRepository) HideComment(ctx context.Context, commentID string) error {
+	args := m.Called(ctx, commentID)
+	return args.Error(0)
+}
+
 // MockRelationshipsRepository is a mock implementation of RelationshipsRepository
 type MockRelationshipsRepository struct {
 	mock.Mock
@@ -2002,8 +2027,8 @@ func (m *MockMonetizationRepository) ListAds(ctx context.Context, status string,
 	return args.Get(0).([]*models.Ad), args.Int(1), args.Error(2)
 }
 
-func (m *MockMonetizationRepository) ListActiveAds(ctx context.Context, limit int) ([]*models.Ad, error) {
-	args := m.Called(ctx, limit)
+func (m *MockMonetizationRepository) ListActiveAds(ctx context.Context, limit int, province, language string) ([]*models.Ad, error) {
+	args := m.Called(ctx, limit, province, language)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}
@@ -2018,8 +2043,8 @@ func (m *MockMonetizationRepository) GetAd(ctx context.Context, id string) (*mod
 	return args.Get(0).(*models.Ad), args.Error(1)
 }
 
-func (m *MockMonetizationRepository) CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time) (*models.Ad, error) {
-	args := m.Called(ctx, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status, startAt, endAt)
+func (m *MockMonetizationRepository) CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time, weight int, dailyImpressionCap *int, targetProvinces, targetLanguages []string) (*models.Ad, error) {
+	args := m.Called(ctx, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status, startAt, endAt, weight, dailyImpressionCap, targetProvinces, targetLanguages)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

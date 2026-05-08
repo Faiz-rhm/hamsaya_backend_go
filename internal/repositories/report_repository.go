@@ -37,6 +37,15 @@ type ReportRepository interface {
 	GetBusinessReport(ctx context.Context, id string) (*models.BusinessReport, error)
 	ListBusinessReports(ctx context.Context, limit, offset int) ([]*models.BusinessReport, int, error)
 	UpdateBusinessReportStatus(ctx context.Context, id string, status models.ReportStatus) error
+
+	// Auto-action helpers — run after each new report so the platform reacts
+	// without admin intervention when a content item has crossed the
+	// community-flag threshold.
+	CountPendingPostReports(ctx context.Context, postID string) (int, error)
+	CountPendingCommentReports(ctx context.Context, commentID string) (int, error)
+	CountUnresolvedUserReports(ctx context.Context, reportedUserID string) (int, error)
+	HidePost(ctx context.Context, postID string) error
+	HideComment(ctx context.Context, commentID string) error
 }
 
 type reportRepository struct {
@@ -592,4 +601,49 @@ func (r *reportRepository) UpdateBusinessReportStatus(ctx context.Context, id st
 	}
 
 	return nil
+}
+
+// ─── Auto-action helpers ──────────────────────────────────────────────────
+
+func (r *reportRepository) CountPendingPostReports(ctx context.Context, postID string) (int, error) {
+	var n int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM post_reports WHERE post_id = $1 AND report_status = 'PENDING'`,
+		postID,
+	).Scan(&n)
+	return n, err
+}
+
+func (r *reportRepository) CountPendingCommentReports(ctx context.Context, commentID string) (int, error) {
+	var n int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM comment_reports WHERE comment_id = $1 AND report_status = 'PENDING'`,
+		commentID,
+	).Scan(&n)
+	return n, err
+}
+
+func (r *reportRepository) CountUnresolvedUserReports(ctx context.Context, reportedUserID string) (int, error) {
+	var n int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM user_reports WHERE reported_user_id = $1 AND resolved = false`,
+		reportedUserID,
+	).Scan(&n)
+	return n, err
+}
+
+func (r *reportRepository) HidePost(ctx context.Context, postID string) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`UPDATE posts SET status = false, updated_at = NOW() WHERE id = $1 AND status = true`,
+		postID,
+	)
+	return err
+}
+
+func (r *reportRepository) HideComment(ctx context.Context, commentID string) error {
+	_, err := r.db.Pool.Exec(ctx,
+		`UPDATE comments SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL`,
+		commentID,
+	)
+	return err
 }

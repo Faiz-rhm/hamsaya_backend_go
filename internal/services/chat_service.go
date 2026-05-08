@@ -18,6 +18,7 @@ type ChatService struct {
 	messageRepo         repositories.MessageRepository
 	userRepo            repositories.UserRepository
 	businessRepo        repositories.BusinessRepository
+	relationshipsRepo   repositories.RelationshipsRepository
 	notificationService *NotificationService
 	wsHub               *ws.Hub
 	logger              *zap.Logger
@@ -29,6 +30,7 @@ func NewChatService(
 	messageRepo repositories.MessageRepository,
 	userRepo repositories.UserRepository,
 	businessRepo repositories.BusinessRepository,
+	relationshipsRepo repositories.RelationshipsRepository,
 	notificationService *NotificationService,
 	wsHub *ws.Hub,
 	logger *zap.Logger,
@@ -38,6 +40,7 @@ func NewChatService(
 		messageRepo:         messageRepo,
 		userRepo:            userRepo,
 		businessRepo:        businessRepo,
+		relationshipsRepo:   relationshipsRepo,
 		notificationService: notificationService,
 		wsHub:               wsHub,
 		logger:              logger,
@@ -63,6 +66,19 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 	// (participant1_id < participant2_id) and is meaningless UX-wise.
 	if senderID == req.RecipientID {
 		return nil, utils.NewBadRequestError("Cannot send a message to yourself", nil)
+	}
+
+	// Block check: if either side blocked the other, refuse send. Apple UGC
+	// compliance + general user safety. Two IsBlocked calls cover both
+	// directions (sender→recipient and recipient→sender) using the existing
+	// relationships repo — no schema or new method needed.
+	if s.relationshipsRepo != nil {
+		if blocked, _ := s.relationshipsRepo.IsBlocked(ctx, senderID, req.RecipientID); blocked {
+			return nil, utils.NewBadRequestError("Unable to send message", nil)
+		}
+		if blocked, _ := s.relationshipsRepo.IsBlocked(ctx, req.RecipientID, senderID); blocked {
+			return nil, utils.NewBadRequestError("Unable to send message", nil)
+		}
 	}
 
 	// Get or create conversation (optionally scoped to a business)

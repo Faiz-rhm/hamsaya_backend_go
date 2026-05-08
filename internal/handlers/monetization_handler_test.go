@@ -75,7 +75,7 @@ func multipartForm(t *testing.T, fields map[string]string) (*bytes.Buffer, strin
 func TestMonetizationHandler_ListActiveAdsPublic(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
-		repo.On("ListActiveAds", mock.Anything, 10).
+		repo.On("ListActiveAds", mock.Anything, 10, "", "").
 			Return([]*models.Ad{{ID: "a1"}, {ID: "a2"}}, nil)
 		r := newMonetizationRouter(t, repo)
 
@@ -89,7 +89,7 @@ func TestMonetizationHandler_ListActiveAdsPublic(t *testing.T) {
 
 	t.Run("repo error returns 500", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
-		repo.On("ListActiveAds", mock.Anything, 10).Return(nil, errors.New("db"))
+		repo.On("ListActiveAds", mock.Anything, 10, "", "").Return(nil, errors.New("db"))
 		r := newMonetizationRouter(t, repo)
 
 		w := httptest.NewRecorder()
@@ -100,7 +100,7 @@ func TestMonetizationHandler_ListActiveAdsPublic(t *testing.T) {
 
 	t.Run("empty list serializes as items: []", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
-		repo.On("ListActiveAds", mock.Anything, 10).Return(nil, nil)
+		repo.On("ListActiveAds", mock.Anything, 10, "", "").Return(nil, nil)
 		r := newMonetizationRouter(t, repo)
 
 		w := httptest.NewRecorder()
@@ -165,7 +165,8 @@ func TestMonetizationHandler_CreateAd(t *testing.T) {
 	t.Run("success defaults advertiser to admin", func(t *testing.T) {
 		repo := &mocks.MockMonetizationRepository{}
 		repo.On("CreateAd", mock.Anything, monAdminID, "Hello Ad", "", "",
-			"https://example.com", "", "", "PENDING", mock.Anything, mock.Anything).
+			"https://example.com", "", "", "PENDING", mock.Anything, mock.Anything,
+			1, (*int)(nil), []string{}, []string{}).
 			Return(&models.Ad{ID: "ad-x", Status: "PENDING"}, nil)
 		r := newMonetizationRouter(t, repo)
 

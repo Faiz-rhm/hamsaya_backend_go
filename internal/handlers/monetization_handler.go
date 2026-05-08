@@ -59,7 +59,12 @@ func NewMonetizationHandler(
 // @Router /ads/active [get]
 func (h *MonetizationHandler) ListActiveAdsPublic(c *gin.Context) {
 	limit := atoiOr(c.Query("limit"), 10)
-	ads, err := h.service.ListActiveAds(c.Request.Context(), limit)
+	// User context for targeting. Mobile passes its own province + locale so
+	// the server can match against ads.target_provinces / target_languages.
+	// Empty values disable targeting on that dimension.
+	province := c.Query("province")
+	language := c.Query("language")
+	ads, err := h.service.ListActiveAds(c.Request.Context(), limit, province, language)
 	if err != nil {
 		h.logger.Error("public active ads", zap.Error(err))
 		utils.SendError(c, http.StatusInternalServerError, "Failed to load ads", err)

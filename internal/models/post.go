@@ -402,4 +402,10 @@ type FeedFilter struct {
 	// Type=SELL — when callers explicitly request SELL posts this flag
 	// is ignored.
 	HideUnpromotedSell bool `json:"-"`
+
+	// ViewerID is the authenticated user requesting the feed. When set, the
+	// query excludes posts authored by users the viewer has blocked OR who
+	// have blocked the viewer (bidirectional hide). Empty = no filter (used
+	// by public/anon endpoints).
+	ViewerID string `json:"-"`
 }

@@ -289,7 +289,7 @@ func main() {
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
 	authService := services.NewAuthService(userRepo, adminRepo, passwordService, jwtService, emailService, tokenStorage, mfaService, cfg, logger)
 	authService.SetNotificationService(notificationService)
-	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, notificationService, wsHub, logger)
+	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, relationshipsRepo, notificationService, wsHub, logger)
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
@@ -607,7 +607,7 @@ func main() {
 			chat.GET("/ws", authMiddleware.RequireAuth(), chatHandler.HandleWebSocket)
 
 			// HTTP endpoints — write operations still require verified email
-			chat.POST("/messages", verifiedAuth, chatHandler.SendMessage)
+			chat.POST("/messages", verifiedAuth, rateLimiter.LimitChatSend(), chatHandler.SendMessage)
 			chat.GET("/conversations", authMiddleware.RequireAuth(), chatHandler.GetConversations)
 			chat.GET("/conversations/:conversation_id/messages", authMiddleware.RequireAuth(), chatHandler.GetMessages)
 			chat.POST("/conversations/:conversation_id/read", authMiddleware.RequireAuth(), chatHandler.MarkConversationAsRead)
