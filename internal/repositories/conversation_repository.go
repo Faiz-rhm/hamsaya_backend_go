@@ -147,18 +147,24 @@ func (r *conversationRepository) GetByParticipants(ctx context.Context, userID1,
 	return conversation, nil
 }
 
-// List retrieves all conversations for a user. When BusinessID is nil, returns
-// only personal chats (business_id IS NULL). When non-nil, returns chats scoped
-// to that business.
+// List retrieves all conversations for a user.
+//   - BusinessID == nil → personal inbox: every chat the user is in EXCEPT
+//     business-scoped chats addressed to a business they own. So a buyer who
+//     DMs a business sees that thread here, while the owner sees it only in
+//     their business inbox (avoids the same row appearing in both places for
+//     the owner).
+//   - BusinessID != nil → business inbox: chats scoped to that business.
 func (r *conversationRepository) List(ctx context.Context, filter *models.GetConversationsFilter) ([]*models.Conversation, error) {
 	var query string
 	var args []interface{}
 	if filter.BusinessID == nil {
 		query = `
-			SELECT id, participant1_id, participant2_id, business_id, last_message_at, created_at
-			FROM conversations
-			WHERE (participant1_id = $1 OR participant2_id = $1) AND business_id IS NULL
-			ORDER BY COALESCE(last_message_at, created_at) DESC
+			SELECT c.id, c.participant1_id, c.participant2_id, c.business_id, c.last_message_at, c.created_at
+			FROM conversations c
+			LEFT JOIN business_profiles bp ON bp.id = c.business_id
+			WHERE (c.participant1_id = $1 OR c.participant2_id = $1)
+			  AND (c.business_id IS NULL OR bp.user_id <> $1)
+			ORDER BY COALESCE(c.last_message_at, c.created_at) DESC
 			LIMIT $2 OFFSET $3
 		`
 		args = []interface{}{filter.UserID, filter.Limit, filter.Offset}
