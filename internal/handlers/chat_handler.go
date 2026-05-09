@@ -47,10 +47,12 @@ func NewChatHandler(
 			CheckOrigin: func(r *http.Request) bool {
 				origin := r.Header.Get("Origin")
 
-				// If no origin header, reject (common for non-browser clients)
+				// Native mobile clients (iOS/Android) commonly omit the Origin
+				// header. The auth middleware already validated the bearer
+				// token before this handler runs, so missing-Origin requests
+				// are still authenticated — let them through.
 				if origin == "" {
-					logger.Warn("WebSocket connection rejected: no origin header")
-					return false
+					return true
 				}
 
 				// Parse the origin URL for safe comparison

@@ -640,8 +640,8 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 	}
 
 	if filter.Search != nil && *filter.Search != "" {
-		searchPattern := "%" + *filter.Search + "%"
-		fmt.Fprintf(&queryBuilder, ` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d))`,
+		searchPattern := "%" + EscapeLike(*filter.Search) + "%"
+		fmt.Fprintf(&queryBuilder, ` AND (title ILIKE $%d ESCAPE '\' OR description ILIKE $%d ESCAPE '\' OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d ESCAPE '\'))`,
 			argCount, argCount+1, argCount+2)
 		args = append(args, searchPattern, searchPattern, searchPattern)
 		argCount += 3
@@ -795,8 +795,8 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 	}
 
 	if filter.Search != nil && *filter.Search != "" {
-		searchPattern := "%" + *filter.Search + "%"
-		fmt.Fprintf(&queryBuilder, ` AND (title ILIKE $%d OR description ILIKE $%d OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d))`,
+		searchPattern := "%" + EscapeLike(*filter.Search) + "%"
+		fmt.Fprintf(&queryBuilder, ` AND (title ILIKE $%d ESCAPE '\' OR description ILIKE $%d ESCAPE '\' OR EXISTS (SELECT 1 FROM sell_categories sc WHERE sc.id = posts.category_id AND sc.name ILIKE $%d ESCAPE '\'))`,
 			argCount, argCount+1, argCount+2)
 		args = append(args, searchPattern, searchPattern, searchPattern)
 		argCount += 3

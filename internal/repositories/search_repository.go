@@ -80,9 +80,9 @@ func (r *searchRepository) SearchPosts(ctx context.Context, filter *models.Searc
 			args = append(args, filter.Query)
 		} else {
 			// Short queries: use prefix match with ILIKE
-			searchTerm := "%" + strings.ToLower(filter.Query) + "%"
+			searchTerm := "%" + EscapeLike(strings.ToLower(filter.Query)) + "%"
 			query += fmt.Sprintf(`
-				AND (LOWER(p.title) LIKE $%d OR LOWER(p.description) LIKE $%d)
+				AND (LOWER(p.title) LIKE $%d ESCAPE '\' OR LOWER(p.description) LIKE $%d ESCAPE '\')
 			`, argCount, argCount)
 			args = append(args, searchTerm)
 		}
@@ -210,12 +210,12 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 
 	// Search on name using ILIKE with prefix match for user names
 	if filter.Query != "" {
-		searchTerm := "%" + strings.ToLower(filter.Query) + "%"
+		searchTerm := "%" + EscapeLike(strings.ToLower(filter.Query)) + "%"
 		query += fmt.Sprintf(`
 			AND (
-				LOWER(p.first_name) LIKE $%d
-				OR LOWER(p.last_name) LIKE $%d
-				OR LOWER(CONCAT(p.first_name, ' ', p.last_name)) LIKE $%d
+				LOWER(p.first_name) LIKE $%d ESCAPE '\'
+				OR LOWER(p.last_name) LIKE $%d ESCAPE '\'
+				OR LOWER(CONCAT(p.first_name, ' ', p.last_name)) LIKE $%d ESCAPE '\'
 			)
 		`, argCount, argCount, argCount)
 		args = append(args, searchTerm)
@@ -340,9 +340,9 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 			`, argCount)
 			args = append(args, filter.Query)
 		} else {
-			searchTerm := "%" + strings.ToLower(filter.Query) + "%"
+			searchTerm := "%" + EscapeLike(strings.ToLower(filter.Query)) + "%"
 			query += fmt.Sprintf(`
-				AND (LOWER(bp.name) LIKE $%d OR LOWER(bp.description) LIKE $%d OR LOWER(bp.address) LIKE $%d)
+				AND (LOWER(bp.name) LIKE $%d ESCAPE '\' OR LOWER(bp.description) LIKE $%d ESCAPE '\' OR LOWER(bp.address) LIKE $%d ESCAPE '\')
 			`, argCount, argCount, argCount)
 			args = append(args, searchTerm)
 		}

@@ -223,6 +223,8 @@ func main() {
 		}
 		mfaCipher = c
 		sugaredLogger.Info("MFA secret at-rest encryption: enabled")
+	} else if cfg.Server.Env == "production" {
+		sugaredLogger.Fatal("MFA_SECRET_ENCRYPTION_KEY is required in production — refusing to start with plaintext MFA secrets")
 	} else {
 		sugaredLogger.Warn("MFA_SECRET_ENCRYPTION_KEY not set — MFA secrets stored plaintext (NOT compliant for prod)")
 	}
@@ -856,14 +858,27 @@ func main() {
 	go func() {
 		ticker := time.NewTicker(15 * time.Minute)
 		defer ticker.Stop()
+		consecutiveFailures := 0
 		for range ticker.C {
-			res, err := db.Pool.Exec(context.Background(), `
+			// Per-tick timeout so a hung query never blocks subsequent runs.
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			res, err := db.Pool.Exec(ctx, `
 				UPDATE boosts SET status = 'EXPIRED'
 				WHERE status = 'ACTIVE' AND expires_at < NOW()
 			`)
+			cancel()
 			if err != nil {
-				sugaredLogger.Warnw("boost expiry sweep failed", "error", err)
-			} else if res.RowsAffected() > 0 {
+				consecutiveFailures++
+				if consecutiveFailures >= 3 {
+					sugaredLogger.Errorw("boost expiry sweep failing repeatedly",
+						"failures", consecutiveFailures, "error", err)
+				} else {
+					sugaredLogger.Warnw("boost expiry sweep failed", "error", err)
+				}
+				continue
+			}
+			consecutiveFailures = 0
+			if res.RowsAffected() > 0 {
 				sugaredLogger.Infow("boost expiry sweep", "expired", res.RowsAffected())
 			}
 		}
