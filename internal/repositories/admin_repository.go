@@ -348,8 +348,8 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 	conditions = append(conditions, "u.deleted_at IS NULL")
 	
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(u.email ILIKE $%d OR p.first_name ILIKE $%d OR p.last_name ILIKE $%d)", argIndex, argIndex, argIndex))
-		args = append(args, "%"+filter.Search+"%")
+		conditions = append(conditions, fmt.Sprintf(`(u.email ILIKE $%d ESCAPE '\' OR p.first_name ILIKE $%d ESCAPE '\' OR p.last_name ILIKE $%d ESCAPE '\')`, argIndex, argIndex, argIndex))
+		args = append(args, "%"+EscapeLike(filter.Search)+"%")
 		argIndex++
 	}
 	
@@ -638,8 +638,8 @@ func (r *adminRepository) ListPosts(ctx context.Context, filter *models.AdminPos
 	conditions = append(conditions, "p.deleted_at IS NULL")
 	
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(p.title ILIKE $%d OR p.description ILIKE $%d)", argIndex, argIndex))
-		args = append(args, "%"+filter.Search+"%")
+		conditions = append(conditions, fmt.Sprintf(`(p.title ILIKE $%d ESCAPE '\' OR p.description ILIKE $%d ESCAPE '\')`, argIndex, argIndex))
+		args = append(args, "%"+EscapeLike(filter.Search)+"%")
 		argIndex++
 	}
 	
@@ -1013,8 +1013,8 @@ func (r *adminRepository) ListComments(ctx context.Context, filter *models.Admin
 	}
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("c.text ILIKE $%d", argIndex))
-		args = append(args, "%"+filter.Search+"%")
+		conditions = append(conditions, fmt.Sprintf(`c.text ILIKE $%d ESCAPE '\'`, argIndex))
+		args = append(args, "%"+EscapeLike(filter.Search)+"%")
 		argIndex++
 	}
 
@@ -1153,8 +1153,8 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 	}
 
 	if filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(b.name ILIKE $%d OR b.description ILIKE $%d)", argIndex, argIndex))
-		args = append(args, "%"+filter.Search+"%")
+		conditions = append(conditions, fmt.Sprintf(`(b.name ILIKE $%d ESCAPE '\' OR b.description ILIKE $%d ESCAPE '\')`, argIndex, argIndex))
+		args = append(args, "%"+EscapeLike(filter.Search)+"%")
 		argIndex++
 	}
 
@@ -1168,8 +1168,8 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 	}
 
 	if filter.Province != "" {
-		conditions = append(conditions, fmt.Sprintf("b.province ILIKE $%d", argIndex))
-		args = append(args, "%"+filter.Province+"%")
+		conditions = append(conditions, fmt.Sprintf(`b.province ILIKE $%d ESCAPE '\'`, argIndex))
+		args = append(args, "%"+EscapeLike(filter.Province)+"%")
 		argIndex++
 	}
 
@@ -1178,10 +1178,10 @@ func (r *adminRepository) ListBusinesses(ctx context.Context, filter *models.Adm
 			EXISTS (
 				SELECT 1 FROM business_categories bc
 				JOIN categories c ON bc.category_id = c.id
-				WHERE bc.business_id = b.id AND c.name ILIKE $%d
+				WHERE bc.business_id = b.id AND c.name ILIKE $%d ESCAPE '\'
 			)
 		`, argIndex))
-		args = append(args, "%"+filter.Category+"%")
+		args = append(args, "%"+EscapeLike(filter.Category)+"%")
 		argIndex++
 	}
 
@@ -1497,8 +1497,8 @@ func applyReportTriageFilters(
 		argIndex++
 	}
 	if filter.Reason != "" {
-		conditions = append(conditions, fmt.Sprintf("r.reason ILIKE $%d", argIndex))
-		args = append(args, "%"+filter.Reason+"%")
+		conditions = append(conditions, fmt.Sprintf(`r.reason ILIKE $%d ESCAPE '\'`, argIndex))
+		args = append(args, "%"+EscapeLike(filter.Reason)+"%")
 		argIndex++
 	}
 	return conditions, args, argIndex

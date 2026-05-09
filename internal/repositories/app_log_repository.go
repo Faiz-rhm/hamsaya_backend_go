@@ -64,8 +64,8 @@ func (r *appLogRepository) List(ctx context.Context, f AppLogFilter) ([]*AppLogE
 		clauses = append(clauses, fmt.Sprintf("request_id = $%d", len(args)))
 	}
 	if f.Search != "" {
-		args = append(args, "%"+f.Search+"%")
-		clauses = append(clauses, fmt.Sprintf("(message ILIKE $%d OR error ILIKE $%[1]d)", len(args)))
+		args = append(args, "%"+EscapeLike(f.Search)+"%")
+		clauses = append(clauses, fmt.Sprintf(`(message ILIKE $%d ESCAPE '\' OR error ILIKE $%[1]d ESCAPE '\')`, len(args)))
 	}
 	where := ""
 	if len(clauses) > 0 {

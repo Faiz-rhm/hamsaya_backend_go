@@ -344,8 +344,8 @@ func (r *monetizationRepository) ListBalances(ctx context.Context, search string
 	args := []any{}
 	where := ""
 	if search != "" {
-		where = "WHERE u.email ILIKE $1 OR up.first_name ILIKE $1 OR up.last_name ILIKE $1"
-		args = append(args, "%"+search+"%")
+		where = `WHERE u.email ILIKE $1 ESCAPE '\' OR up.first_name ILIKE $1 ESCAPE '\' OR up.last_name ILIKE $1 ESCAPE '\'`
+		args = append(args, "%"+EscapeLike(search)+"%")
 	}
 
 	var total int

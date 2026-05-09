@@ -513,8 +513,8 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 	}
 
 	if filter.Search != nil && *filter.Search != "" {
-		conditions = append(conditions, fmt.Sprintf("(bp.name ILIKE $%d OR bp.description ILIKE $%d)", argCount, argCount))
-		args = append(args, "%"+*filter.Search+"%")
+		conditions = append(conditions, fmt.Sprintf(`(bp.name ILIKE $%d ESCAPE '\' OR bp.description ILIKE $%d ESCAPE '\')`, argCount, argCount))
+		args = append(args, "%"+EscapeLike(*filter.Search)+"%")
 		argCount++
 	}
 
@@ -915,8 +915,8 @@ func (r *businessRepository) GetAllCategories(ctx context.Context, search *strin
 	`
 	args := []interface{}{}
 	if search != nil && *search != "" {
-		query += ` AND name ILIKE $1`
-		args = append(args, "%"+*search+"%")
+		query += ` AND name ILIKE $1 ESCAPE '\'`
+		args = append(args, "%"+EscapeLike(*search)+"%")
 	}
 	query += ` ORDER BY name ASC`
 
