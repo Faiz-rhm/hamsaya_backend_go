@@ -258,7 +258,7 @@ func buildRouter(
 	commentSvc := services.NewCommentService(
 		commentRepo, postRepo, userRepo, businessRepo, notifSvc, logger,
 	)
-	chatSvc := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, notifSvc, wsHub, logger)
+	chatSvc := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, relationshipsRepo, notifSvc, wsHub, logger)
 	searchSvc := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	profileSvc := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, emailSvc, tokenStorage, jwtSvc, logger)
 	relationshipsSvc := services.NewRelationshipsService(relationshipsRepo, userRepo, notifSvc, logger)
