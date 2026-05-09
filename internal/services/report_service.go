@@ -16,9 +16,6 @@ const (
 	autoHidePostThreshold = 3
 	// autoHideCommentThreshold: same for comments.
 	autoHideCommentThreshold = 3
-	// autoFlagUserThreshold: unresolved user reports needed to flag a user
-	// for admin review (not auto-suspend — that requires a human).
-	autoFlagUserThreshold = 5
 )
 
 // ReportService handles report-related business logic
