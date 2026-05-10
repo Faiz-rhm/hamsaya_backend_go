@@ -38,7 +38,7 @@ func newDailyLimitTest(t *testing.T, limits map[string]*models.DailyPostLimit) (
 	mr := miniredis.RunT(t)
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	repo := &stubLimitRepo{limits: limits}
-	svc := NewDailyLimitService(repo, rdb, zap.NewNop())
+	svc := NewDailyLimitService(repo, nil, rdb, zap.NewNop())
 	return svc, func() { _ = rdb.Close() }
 }
 
@@ -174,4 +174,20 @@ func TestDailyLimit_RefundDecrementsCounter(t *testing.T) {
 	// Refund one — slot should re-open.
 	svc.Refund(ctx, "u-1", "FEED")
 	require.NoError(t, svc.CheckAndIncrement(ctx, "u-1", models.RoleUser, "FEED", false))
+}
+
+// SetUserOverride validates inputs BEFORE touching the DB. We pass a
+// nil-DB service so any path that reaches db.Pool.Exec would nil-deref;
+// successful early returns confirm the validation guard fires up front.
+func TestDailyLimit_SetUserOverride_ValidationFailsFast(t *testing.T) {
+	svc := &DailyLimitService{db: nil}
+
+	err := svc.SetUserOverride(context.Background(), "u-1", "FEED", nil, false, "", "admin-1")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "must set unlimited=true or override_limit")
+
+	negative := -3
+	err = svc.SetUserOverride(context.Background(), "u-1", "FEED", &negative, false, "", "admin-1")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "override_limit must be >= 0")
 }

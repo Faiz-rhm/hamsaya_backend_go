@@ -42,6 +42,7 @@ func buildPostService(
 		fanoutSvc,
 		fanoutRepo,
 		nil, // dailyLimitService — tests bypass the gate (nil-checked inside CreatePost)
+		nil, // automodService — tests bypass the scan (nil-checked inside CreatePost)
 		"hamsaya-uploads",
 		zap.NewNop(),
 	)

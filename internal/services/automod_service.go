@@ -83,13 +83,23 @@ func (s *AutomodService) Scan(ctx context.Context, text string) (AutomodMatch, e
 	if err != nil {
 		return AutomodMatch{}, err
 	}
+	match := scanCompiledRules(rules, text)
+	if match.RuleID != uuid.Nil {
+		// Increment hit_count async; failure is non-fatal.
+		go s.recordHit(match.RuleID)
+	}
+	return match, nil
+}
+
+// scanCompiledRules is the pure-logic scanner extracted for unit
+// testing. Walks the rule set, picks the strictest match. block beats
+// flag/shadow; within same action, higher severity wins.
+func scanCompiledRules(rules []compiledRule, text string) AutomodMatch {
 	if len(rules) == 0 {
-		return AutomodMatch{}, nil
+		return AutomodMatch{}
 	}
 
 	lower := strings.ToLower(text)
-
-	// Severity ranking — higher = picks first.
 	rank := map[string]int{"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 	var best AutomodMatch
@@ -105,11 +115,6 @@ func (s *AutomodService) Scan(ctx context.Context, text string) (AutomodMatch, e
 		if !match {
 			continue
 		}
-		// Increment hit_count async; failure is non-fatal.
-		go s.recordHit(r.row.ID)
-
-		// Strictest action wins. block > flag/shadow > nothing.
-		// Within same action, higher severity wins.
 		score := rank[r.row.Severity]
 		if r.row.Action == "block" {
 			score += 100
@@ -129,7 +134,21 @@ func (s *AutomodService) Scan(ctx context.Context, text string) (AutomodMatch, e
 			}
 		}
 	}
-	return best, nil
+	return best
+}
+
+// compileRule converts an AutomodRule (DB row) into a compiledRule
+// (with prepared regex / lowercase literal). Extracted for tests.
+func compileRule(r AutomodRule) (compiledRule, error) {
+	c := compiledRule{row: r, literal: strings.ToLower(r.Pattern)}
+	if r.IsRegex {
+		rx, err := regexp.Compile("(?i)" + r.Pattern)
+		if err != nil {
+			return compiledRule{}, err
+		}
+		c.regex = rx
+	}
+	return c, nil
 }
 
 // recordHit bumps hit_count + last_hit_at. Best-effort; we don't want a

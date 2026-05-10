@@ -430,6 +430,13 @@ func (s *DailyLimitService) DeleteUserOverride(ctx context.Context, userID, post
 }
 
 func (s *DailyLimitService) cachedOverride(ctx context.Context, userID, postType string) (*UserDailyLimitOverride, error) {
+	// Override consultation is purely opt-in. Tests and any future
+	// callers that wire DailyLimitService without a DB get a clean
+	// "no override" answer rather than a nil-pointer panic on
+	// db.Pool.QueryRow.
+	if s.db == nil {
+		return nil, nil
+	}
 	cacheKey := userID + ":" + postType
 	s.overrideMu.RLock()
 	if entry, ok := s.overrideCache[cacheKey]; ok && time.Since(entry.at) < s.overrideCacheTTL {

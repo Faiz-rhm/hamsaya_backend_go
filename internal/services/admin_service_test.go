@@ -30,7 +30,7 @@ func appErrMessage(err error) string {
 // fcmClient and notificationService are intentionally nil for unit tests that
 // do not exercise the broadcast path.
 func newTestAdminService(adminRepo *mocks.MockAdminRepository) *AdminService {
-	return NewAdminService(adminRepo, (*notification.FCMClient)(nil), nil, zap.NewNop())
+	return NewAdminService(adminRepo, nil, (*notification.FCMClient)(nil), nil, zap.NewNop())
 }
 
 // ---------------------------------------------------------------------------

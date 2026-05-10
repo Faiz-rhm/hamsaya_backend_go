@@ -25,8 +25,8 @@ const (
 func newAdminRouter(t *testing.T, adminRepo *mocks.MockAdminRepository) *gin.Engine {
 	t.Helper()
 	// AdminService takes nil fcmClient and nil notificationService (nil-guarded)
-	svc := services.NewAdminService(adminRepo, nil, nil, zap.NewNop())
-	h := NewAdminHandler(svc, nil, testutil.CreateTestValidator(), zap.NewNop())
+	svc := services.NewAdminService(adminRepo, nil, nil, nil, zap.NewNop())
+	h := NewAdminHandler(svc, nil, nil, testutil.CreateTestValidator(), zap.NewNop())
 
 	authed := authContextMiddleware(adminTestUserID, "admin-sess-001")
 	r := gin.New()

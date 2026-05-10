@@ -33,6 +33,7 @@ func newTestPostService(
 		nil, // fanoutService
 		new(mocks.MockFanoutRepository),
 		nil, // dailyLimitService — tests bypass the gate (see CreatePost: nil-check)
+		nil, // automodService — tests bypass the scan (see CreatePost: nil-check)
 		"hamsaya-uploads",
 		zap.NewNop(),
 	)

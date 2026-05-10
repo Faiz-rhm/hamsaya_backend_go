@@ -296,7 +296,7 @@ func buildRouter(
 	reportHandler := handlers.NewReportHandler(reportSvc)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackSvc)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatSvc, validator, logger)
-	adminHandler := handlers.NewAdminHandler(adminSvc, mfaSvc, validator, logger)
+	adminHandler := handlers.NewAdminHandler(adminSvc, mfaSvc, authSvc, validator, logger)
 	oauthHandler := handlers.NewOAuthHandler(authSvc, oauthSvc, validator, logger)
 	mfaHandler := handlers.NewMFAHandler(mfaSvc, validator, logger)
 
