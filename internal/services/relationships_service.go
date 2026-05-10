@@ -6,6 +6,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"go.uber.org/zap"
 )
 
@@ -74,8 +75,7 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 	)
 
 	if s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			actor, err := s.userRepo.GetProfileByUserID(ctxDetach, followerID)
 			if err != nil {
 				s.logger.Warn("Failed to get actor for follow notification", zap.Error(err))
@@ -104,7 +104,7 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 				Message: &msg,
 				Data:    data,
 			})
-		}()
+		})
 	}
 
 	return nil

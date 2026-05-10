@@ -19,6 +19,7 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/secrets"
@@ -87,6 +88,11 @@ func main() {
 
 	logger := utils.GetBaseLogger()
 	sugaredLogger := utils.GetLogger()
+
+	// Wire the background-task pool early so any service (incl. notification
+	// fanout, comment notifications, post fanout) can dispatch fire-and-forget
+	// work that is awaited on graceful shutdown.
+	bgtasks.Init(logger)
 	sugaredLogger.Info("Starting Hamsaya Backend API...")
 	sugaredLogger.Infow("Secrets backend", "source", secretsLabel)
 	sugaredLogger.Infow("Configuration loaded",
@@ -145,7 +151,10 @@ func main() {
 
 	// Connect to database
 	sugaredLogger.Info("Connecting to database...")
-	db, err := database.New(&cfg.Database)
+	db, err := database.NewWithTracer(&cfg.Database, &database.SlowQueryTracer{
+		Logger:    logger.Named("pgx"),
+		Threshold: 200 * time.Millisecond,
+	})
 	if err != nil {
 		sugaredLogger.Fatalw("Failed to connect to database", "error", err)
 	}
@@ -989,6 +998,13 @@ func main() {
 	// Shut down WebSocket hub (close all client connections)
 	sugaredLogger.Info("Shutting down WebSocket hub...")
 	wsHub.Shutdown()
+
+	// Drain background tasks (notification fanout, post fanout, etc.) up to
+	// 10 s so in-flight work either completes or is cleanly cancelled.
+	sugaredLogger.Info("Draining background tasks...")
+	if !bgtasks.Shutdown(10 * time.Second) {
+		sugaredLogger.Warn("bgtasks drain timed out — some tasks may not have completed")
+	}
 
 	// Graceful shutdown with timeout
 	ctx, cancel = context.WithTimeout(context.Background(), 10*time.Second)

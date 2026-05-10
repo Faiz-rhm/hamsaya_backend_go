@@ -8,6 +8,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"go.uber.org/zap"
 )
 
@@ -90,8 +91,7 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 	)
 
 	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID)
 			if err != nil {
 				s.logger.Warn("Failed to get actor for event notification", zap.Error(err))
@@ -133,7 +133,7 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 				Message: &msg,
 				Data:    data,
 			})
-		}()
+		})
 	}
 
 	// Return updated status

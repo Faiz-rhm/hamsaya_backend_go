@@ -11,6 +11,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"github.com/hamsaya/backend/pkg/geocoding"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
@@ -161,9 +162,9 @@ func (s *BusinessService) GetBusiness(ctx context.Context, businessID string, vi
 	// context would cancel mid-write whenever the client disconnects.
 	isOwner := viewerID != nil && *viewerID == business.UserID
 	if !isOwner {
-		go func() { // #nosec G118 -- detached on purpose; see comment above
-			_ = s.businessRepo.IncrementViews(context.Background(), businessID)
-		}()
+		bgtasks.Submit(func(taskCtx context.Context) {
+			_ = s.businessRepo.IncrementViews(taskCtx, businessID)
+		})
 	}
 
 	// Enrich business
@@ -549,8 +550,7 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 
 	// Notify business owner (skip if follower is the owner)
 	if business.UserID != userID {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			actor, _ := s.userRepo.GetProfileByUserID(ctxDetach, userID)
 			actorName := "Someone"
 			actorAvatar := ""
@@ -582,7 +582,7 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 				Message: &msg,
 				Data:    data,
 			})
-		}()
+		})
 	}
 
 	s.logger.Info("Business followed", zap.String("business_id", businessID), zap.String("user_id", userID))

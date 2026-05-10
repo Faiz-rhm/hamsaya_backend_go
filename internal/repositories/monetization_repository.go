@@ -467,39 +467,37 @@ func (r *monetizationRepository) AdjustCredits(
 	req *models.AdjustCreditsRequest,
 	adminID string,
 ) (*models.CreditBalance, error) {
-	tx, err := r.db.Pool.Begin(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("credits begin: %w", err)
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-
 	txType := "ADJUST_ADD"
 	if req.Amount < 0 {
 		txType = "ADJUST_REMOVE"
 	}
 
-	// Upsert balance row first so the FK on the ledger is always satisfied.
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO credit_balances (user_id, balance)
-		VALUES ($1, GREATEST(0, $2))
-		ON CONFLICT (user_id) DO UPDATE
-		SET balance    = credit_balances.balance + EXCLUDED.balance,
-		    updated_at = NOW()
-	`, userID, req.Amount); err != nil {
-		// Likely a CHECK violation when balance would go negative.
-		return nil, fmt.Errorf("credits balance update: %w", err)
+	// Use the shared WithTransaction wrapper for panic-safe rollback and
+	// consistent commit semantics with the rest of the repo layer.
+	if err := r.db.WithTransaction(ctx, func(tx pgx.Tx) error {
+		// Upsert balance row first so the FK on the ledger is always satisfied.
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO credit_balances (user_id, balance)
+			VALUES ($1, GREATEST(0, $2))
+			ON CONFLICT (user_id) DO UPDATE
+			SET balance    = credit_balances.balance + EXCLUDED.balance,
+			    updated_at = NOW()
+		`, userID, req.Amount); err != nil {
+			// Likely a CHECK violation when balance would go negative.
+			return fmt.Errorf("credits balance update: %w", err)
+		}
+
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO credit_transactions (user_id, amount, type, reason, note, admin_id)
+			VALUES ($1, $2, $3, $4, $5, $6)
+		`, userID, req.Amount, txType, req.Reason, req.Note, adminID); err != nil {
+			return fmt.Errorf("credits ledger insert: %w", err)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO credit_transactions (user_id, amount, type, reason, note, admin_id)
-		VALUES ($1, $2, $3, $4, $5, $6)
-	`, userID, req.Amount, txType, req.Reason, req.Note, adminID); err != nil {
-		return nil, fmt.Errorf("credits ledger insert: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, fmt.Errorf("credits commit: %w", err)
-	}
 	return r.GetBalance(ctx, userID)
 }
 

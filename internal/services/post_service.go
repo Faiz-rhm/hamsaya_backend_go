@@ -13,6 +13,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"github.com/hamsaya/backend/pkg/storage"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
@@ -303,15 +304,22 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		zap.String("type", string(req.Type)),
 	)
 
-	// Notify followers of the new post (user followers or business followers)
-	go s.notifyFollowersOfNewPost(context.WithoutCancel(ctx), postID, userID, req.BusinessID)
+	// Notify followers of the new post (user followers or business followers).
+	// Dispatched through bgtasks so the work is awaited on graceful shutdown
+	// instead of leaking when the request context is cancelled.
+	businessID := req.BusinessID
+	bgtasks.Submit(func(taskCtx context.Context) {
+		s.notifyFollowersOfNewPost(taskCtx, postID, userID, businessID)
+	})
 
 	// Fan out post to followers' feeds (skipped for celebrity authors with >10K followers).
 	// SELL posts are explicitly excluded from fan-out: they are commerce, not
 	// social content, and live in the dedicated /sales screen + paid promoted
 	// slots, not in followers' home feeds.
 	if req.Type != models.PostTypeSell {
-		go s.fanoutService.FanoutPost(context.WithoutCancel(ctx), postID, userID)
+		bgtasks.Submit(func(taskCtx context.Context) {
+			s.fanoutService.FanoutPost(taskCtx, postID, userID)
+		})
 	}
 
 	// Return enriched post
@@ -563,7 +571,10 @@ func (s *PostService) LikePost(ctx context.Context, userID, postID string) error
 	s.logger.Info("Post liked", zap.String("post_id", postID), zap.String("user_id", userID))
 
 	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
-		go s.sendPostNotification(context.WithoutCancel(ctx), userID, *post.UserID, postID, models.NotificationTypeLike, "liked your post")
+		recipient := *post.UserID
+		bgtasks.Submit(func(taskCtx context.Context) {
+			s.sendPostNotification(taskCtx, userID, recipient, postID, models.NotificationTypeLike, "liked your post")
+		})
 	}
 
 	return nil
@@ -659,7 +670,10 @@ func (s *PostService) SharePost(ctx context.Context, userID, originalPostID stri
 	)
 
 	if originalPost.UserID != nil && *originalPost.UserID != userID && s.notificationService != nil {
-		go s.sendPostNotification(context.WithoutCancel(ctx), userID, *originalPost.UserID, originalPostID, models.NotificationTypePostShare, "shared your post")
+		recipient := *originalPost.UserID
+		bgtasks.Submit(func(taskCtx context.Context) {
+			s.sendPostNotification(taskCtx, userID, recipient, originalPostID, models.NotificationTypePostShare, "shared your post")
+		})
 	}
 
 	// Return the original post or the new shared post

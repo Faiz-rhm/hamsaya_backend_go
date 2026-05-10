@@ -12,6 +12,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
@@ -1383,8 +1384,7 @@ func (s *AuthService) sendWelcomeNotification(ctx context.Context, userID, first
 	if s.notificationService == nil {
 		return
 	}
-	go func() {
-		ctxDetach := context.WithoutCancel(ctx)
+	bgtasks.Submit(func(ctxDetach context.Context) {
 		title := "Welcome to Hamsaya!"
 		msg := "Discover neighbors, businesses, and listings in your area."
 		if firstName != "" {
@@ -1397,7 +1397,7 @@ func (s *AuthService) sendWelcomeNotification(ctx context.Context, userID, first
 			Message: &msg,
 			Data:    map[string]interface{}{},
 		})
-	}()
+	})
 }
 
 // sendPasswordChangedNotification confirms a successful password change.
@@ -1405,8 +1405,7 @@ func (s *AuthService) sendPasswordChangedNotification(ctx context.Context, userI
 	if s.notificationService == nil {
 		return
 	}
-	go func() {
-		ctxDetach := context.WithoutCancel(ctx)
+	bgtasks.Submit(func(ctxDetach context.Context) {
 		title := "Password updated"
 		msg := "Your password was changed successfully. If this wasn't you, contact support immediately."
 		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
@@ -1416,7 +1415,7 @@ func (s *AuthService) sendPasswordChangedNotification(ctx context.Context, userI
 			Message: &msg,
 			Data:    map[string]interface{}{},
 		})
-	}()
+	})
 }
 
 // sendEmailVerifiedNotification confirms successful email verification.
@@ -1424,8 +1423,7 @@ func (s *AuthService) sendEmailVerifiedNotification(ctx context.Context, userID 
 	if s.notificationService == nil {
 		return
 	}
-	go func() {
-		ctxDetach := context.WithoutCancel(ctx)
+	bgtasks.Submit(func(ctxDetach context.Context) {
 		title := "Email verified"
 		msg := "Your email address is now verified. Full access unlocked."
 		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
@@ -1435,7 +1433,7 @@ func (s *AuthService) sendEmailVerifiedNotification(ctx context.Context, userID 
 			Message: &msg,
 			Data:    map[string]interface{}{},
 		})
-	}()
+	})
 }
 
 // generateDeviceCredentialSecret returns 32 random bytes encoded as URL-safe

@@ -96,3 +96,37 @@ func (p *Pool) Shutdown(timeout time.Duration) bool {
 		return false
 	}
 }
+
+// ─── package-level default pool ─────────────────────────────────────────────
+
+// defaultPool is the process-wide pool used by the package-level [Submit] and
+// [Shutdown] helpers. Services can dispatch fire-and-forget tasks via
+// `bgtasks.Submit(...)` without threading a [*Pool] through every constructor.
+//
+// Init must be called from main before the first Submit. Tasks submitted
+// before Init silently no-op (logged once). Shutdown is the symmetric drain
+// hook, intended to be called from the graceful-shutdown path.
+var defaultPool *Pool
+
+// Init wires the process-wide pool. Safe to call once at startup.
+func Init(logger *zap.Logger) {
+	defaultPool = New(logger)
+}
+
+// Submit dispatches `task` against the package-level default pool.
+// No-op when [Init] has not been called; this lets services call Submit
+// freely without panicking in tests that don't bother wiring main.
+func Submit(task func(ctx context.Context)) {
+	if defaultPool == nil {
+		return
+	}
+	defaultPool.Submit(task)
+}
+
+// Shutdown drains the package-level default pool. No-op when uninitialized.
+func Shutdown(timeout time.Duration) bool {
+	if defaultPool == nil {
+		return true
+	}
+	return defaultPool.Shutdown(timeout)
+}

@@ -47,7 +47,17 @@ func (db *DB) Reader() Pool {
 // New creates a new database connection. When cfg.ReplicaHost is non-empty,
 // also opens a separate replica pool. Replica failures are non-fatal —
 // the system degrades to writer-only and logs a warning via the caller.
+//
+// To enable slow-query logging, call [NewWithTracer] instead — passing a
+// configured [SlowQueryTracer] is the supported escape hatch.
 func New(cfg *config.DatabaseConfig) (*DB, error) {
+	return NewWithTracer(cfg, nil)
+}
+
+// NewWithTracer is [New] with an optional pgx [QueryTracer] attached to every
+// connection. Pass a [*SlowQueryTracer] to log queries that exceed a
+// threshold. Pass nil to disable tracing.
+func NewWithTracer(cfg *config.DatabaseConfig, tracer pgx.QueryTracer) (*DB, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -65,6 +75,9 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 	poolConfig.MinConns = cfg.MinConns
 	poolConfig.MaxConnLifetime = cfg.MaxConnLifetime
 	poolConfig.MaxConnIdleTime = cfg.MaxConnIdleTime
+	if tracer != nil {
+		poolConfig.ConnConfig.Tracer = tracer
+	}
 
 	// Create connection pool
 	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
@@ -88,6 +101,9 @@ func New(cfg *config.DatabaseConfig) (*DB, error) {
 			replicaConfig.MinConns = cfg.MinConns
 			replicaConfig.MaxConnLifetime = cfg.MaxConnLifetime
 			replicaConfig.MaxConnIdleTime = cfg.MaxConnIdleTime
+			if tracer != nil {
+				replicaConfig.ConnConfig.Tracer = tracer
+			}
 			replicaPool, rErr := pgxpool.NewWithConfig(ctx, replicaConfig)
 			if rErr == nil {
 				if pingErr := replicaPool.Ping(ctx); pingErr == nil {

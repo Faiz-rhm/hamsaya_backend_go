@@ -10,6 +10,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
@@ -161,8 +162,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 	)
 
 	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			actorName := "Someone"
 			var actorAvatar interface{}
 			var actorAvatarColor string
@@ -197,13 +197,12 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				Message: &msg,
 				Data:    data,
 			})
-		}()
+		})
 	}
 
 	// Notify parent comment author when replying (skip if same as post owner or self)
 	if req.ParentCommentID != nil && s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			parentComment, err := s.commentRepo.GetByID(ctxDetach, *req.ParentCommentID)
 			if err != nil {
 				s.logger.Warn("Failed to get parent comment for reply notification", zap.Error(err))
@@ -248,13 +247,12 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				Message: &msg,
 				Data:    data,
 			})
-		}()
+		})
 	}
 
 	// Notify each tagged/mentioned user (skip self and post owner to avoid duplicate)
 	if len(req.TaggedUserIDs) > 0 && s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			actorName := "Someone"
 			var actorAvatar interface{}
 			var actorAvatarColor string
@@ -304,7 +302,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 					Data:    data,
 				})
 			}
-		}()
+		})
 	}
 
 	// Return enriched comment
@@ -472,8 +470,7 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 	s.logger.Info("Comment liked", zap.String("comment_id", commentID), zap.String("user_id", userID))
 
 	if comment.UserID != userID && s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			actorName := "Someone"
 			var actorAvatar interface{}
 			var actorAvatarColor string
@@ -503,7 +500,7 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 				Message: &msg,
 				Data:    data,
 			})
-		}()
+		})
 	}
 
 	return nil

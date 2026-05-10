@@ -6,6 +6,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/bgtasks"
 	"go.uber.org/zap"
 )
 
@@ -72,8 +73,7 @@ func (s *HelpChatService) AdminReply(ctx context.Context, adminID, targetUserID 
 
 	// Notify the user via push notification. Best-effort.
 	if s.notificationService != nil {
-		go func() {
-			ctxDetach := context.WithoutCancel(ctx)
+		bgtasks.Submit(func(ctxDetach context.Context) {
 			title := "Support reply"
 			preview := req.Content
 			if len(preview) > 100 {
@@ -93,7 +93,7 @@ func (s *HelpChatService) AdminReply(ctx context.Context, adminID, targetUserID 
 				s.logger.Warn("HelpChatService: failed to notify user of admin reply",
 					zap.String("target_user", targetUserID), zap.Error(nerr))
 			}
-		}()
+		})
 	}
 	return msg, nil
 }
