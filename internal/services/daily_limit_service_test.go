@@ -57,7 +57,10 @@ func TestDailyLimit_AllowsUpToCap(t *testing.T) {
 	require.True(t, errors.Is(err, ErrDailyLimitExceeded), "expected ErrDailyLimitExceeded, got %v", err)
 }
 
-func TestDailyLimit_AdminBypass(t *testing.T) {
+func TestDailyLimit_SuperAdminBypass(t *testing.T) {
+	// Only super_admin bypasses caps. Admin and moderator are intentionally
+	// subject to the same daily limit as regular users so dev accounts with
+	// admin role can't accidentally bypass production caps during testing.
 	svc, cleanup := newDailyLimitTest(t, map[string]*models.DailyPostLimit{
 		"FEED": {PostType: "FEED", UserLimit: 1, BusinessMultiplier: 2.0},
 	})
@@ -65,8 +68,13 @@ func TestDailyLimit_AdminBypass(t *testing.T) {
 
 	ctx := context.Background()
 	for i := 0; i < 50; i++ {
-		require.NoError(t, svc.CheckAndIncrement(ctx, "admin-1", models.RoleAdmin, "FEED", false))
+		require.NoError(t, svc.CheckAndIncrement(ctx, "su-1", models.RoleSuperAdmin, "FEED", false))
 	}
+
+	// Plain admin must NOT bypass.
+	require.NoError(t, svc.CheckAndIncrement(ctx, "admin-1", models.RoleAdmin, "FEED", false))
+	err := svc.CheckAndIncrement(ctx, "admin-1", models.RoleAdmin, "FEED", false)
+	require.True(t, errors.Is(err, ErrDailyLimitExceeded))
 }
 
 func TestDailyLimit_BusinessMultiplier(t *testing.T) {

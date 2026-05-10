@@ -100,7 +100,10 @@ func NewDailyLimitService(
 // atomically (Redis INCR) and the call is treated as committing one slot.
 //
 // onBusiness=true applies the configured BusinessMultiplier to the base
-// limit. role==RoleAdmin bypasses the check entirely.
+// limit. role==RoleSuperAdmin bypasses the check entirely; admins and
+// moderators are intentionally NOT exempt — they post under the same caps as
+// regular users so admin/moderator dev accounts can't accidentally bypass
+// production limits during testing.
 func (s *DailyLimitService) CheckAndIncrement(
 	ctx context.Context,
 	userID string,
@@ -108,8 +111,8 @@ func (s *DailyLimitService) CheckAndIncrement(
 	postType string,
 	onBusiness bool,
 ) error {
-	if role == models.RoleAdmin {
-		return nil // admins are unlimited
+	if role == models.RoleSuperAdmin {
+		return nil // super admins are explicitly unlimited
 	}
 
 	limit, err := s.cachedLimit(ctx, postType)
@@ -150,26 +153,39 @@ func (s *DailyLimitService) CheckAndIncrement(
 
 	key, ttl := counterKeyAndTTL(userID, postType, time.Now())
 
-	// INCR returns the value AFTER increment. We pre-check by reading
-	// current value so we don't even bump the counter when over the limit
-	// (avoids skewed analytics).
-	current, err := s.redis.Get(ctx, key).Int()
-	if err != nil && !errors.Is(err, redis.Nil) {
-		return fmt.Errorf("daily limit get: %w", err)
-	}
-	if current >= effective {
-		return ErrDailyLimitExceeded
+	// Single atomic INCR. Returns the post-increment value, so we can
+	// reject + DECR in one round-trip when the user has gone over. This
+	// closes the prior TOCTOU race where two concurrent posts could both
+	// read `current=limit-1`, both pass the check, and both INCR — pushing
+	// the counter one over the limit on every parallel-burst attack.
+	newValue, err := s.redis.Incr(ctx, key).Result()
+	if err != nil {
+		return fmt.Errorf("daily limit incr: %w", err)
 	}
 
-	// Atomic increment. EXPIRE is set on first increment only — Redis 7+
-	// supports EXPIRE NX which is the safe pattern.
-	if _, err := s.redis.Pipelined(ctx, func(p redis.Pipeliner) error {
-		p.Incr(ctx, key)
-		// ExpireNX is a no-op if the key already has a TTL.
-		p.ExpireNX(ctx, key, ttl)
-		return nil
-	}); err != nil {
-		return fmt.Errorf("daily limit incr: %w", err)
+	// Fresh key has no TTL until we set one. Use EXPIRE on first increment
+	// (newValue == 1). We avoid ExpireNX so we stay compatible with Redis
+	// versions older than 7.0 — pipeline silently dropped that command and
+	// left the key without TTL, so it never reset at midnight.
+	if newValue == 1 {
+		if expErr := s.redis.Expire(ctx, key, ttl).Err(); expErr != nil {
+			s.logger.Warn("daily limit expire set failed",
+				zap.String("user_id", userID), zap.String("post_type", postType),
+				zap.Error(expErr))
+		}
+	}
+
+	if newValue > int64(effective) {
+		// Roll back the increment so concurrent over-limit attempts don't
+		// inflate the counter for the rest of the day. Best-effort: a
+		// failed DECR just means analytics over-counts by one — never
+		// blocks legitimate retries.
+		if _, decErr := s.redis.Decr(ctx, key).Result(); decErr != nil {
+			s.logger.Warn("daily limit decr after over-limit failed",
+				zap.String("user_id", userID), zap.String("post_type", postType),
+				zap.Error(decErr))
+		}
+		return ErrDailyLimitExceeded
 	}
 
 	return nil

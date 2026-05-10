@@ -153,9 +153,13 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 					err,
 				)
 			}
-			s.logger.Warn("daily limit check error", zap.Error(err))
-			// Failure of the limit subsystem must not block legitimate posts —
-			// fall through and let the post create succeed.
+			// Limit subsystem (Redis/DB) is unavailable. Fail closed: a
+			// silent fall-through lets users bypass the cap during outages,
+			// which is exactly what the user reported (10 posts / day on a
+			// 5-cap account). Better to return 503 and let the client
+			// retry than to silently lift the cap.
+			s.logger.Error("daily limit check error; failing closed", zap.Error(err))
+			return nil, utils.NewInternalError("Daily limit service unavailable", err)
 		}
 	}
 

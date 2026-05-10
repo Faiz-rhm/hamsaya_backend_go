@@ -2120,7 +2120,10 @@ func (r *adminRepository) ListBroadcastHistory(ctx context.Context, limit int) (
 }
 
 // GetInboxCounts returns pending counts that drive the admin notification
-// bell. All sub-queries run in a single round-trip via a UNION ALL.
+// bell. All sub-queries run in a single round-trip. The trailing
+// `newest_at` is GREATEST across MAX(created_at) of every bucket — the
+// frontend uses it to decide whether the badge has anything new vs.
+// what the admin already acknowledged via the inbox dropdown click.
 func (r *adminRepository) GetInboxCounts(ctx context.Context) (*models.AdminInboxCounts, error) {
 	c := &models.AdminInboxCounts{}
 	query := `
@@ -2134,7 +2137,15 @@ func (r *adminRepository) GetInboxCounts(ctx context.Context) (*models.AdminInbo
 				SELECT DISTINCT ON (user_id) user_id, is_from_user
 				FROM help_chat_messages
 				ORDER BY user_id, created_at DESC
-			) t WHERE is_from_user = true)
+			) t WHERE is_from_user = true),
+			GREATEST(
+				(SELECT MAX(created_at) FROM post_reports     WHERE report_status = 'PENDING'),
+				(SELECT MAX(created_at) FROM comment_reports  WHERE report_status = 'PENDING'),
+				(SELECT MAX(created_at) FROM user_reports     WHERE resolved = false),
+				(SELECT MAX(created_at) FROM business_reports WHERE report_status = 'PENDING'),
+				(SELECT MAX(created_at) FROM user_feedback    WHERE status = 'OPEN'),
+				(SELECT MAX(created_at) FROM help_chat_messages WHERE is_from_user = true)
+			)
 	`
 	row := r.db.Pool.QueryRow(ctx, query)
 	if err := row.Scan(
@@ -2144,6 +2155,7 @@ func (r *adminRepository) GetInboxCounts(ctx context.Context) (*models.AdminInbo
 		&c.BusinessReports,
 		&c.OpenFeedback,
 		&c.UnansweredHelp,
+		&c.NewestAt,
 	); err != nil {
 		return nil, err
 	}

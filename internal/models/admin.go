@@ -473,14 +473,21 @@ type BroadcastNotificationRequest struct {
 
 // AdminInboxCounts powers the admin header notification bell. Each field is
 // the count of items needing attention so the UI can render category badges.
+//
+// `NewestAt` is the most recent created_at across all pending buckets.
+// The frontend pairs it with a per-admin localStorage `inbox_acked_at`
+// so the bell badge can be dismissed via a click without forcing an
+// admin to resolve every queued report. Resolving still clears Total
+// to 0 the proper way; acknowledgement just hushes the visual.
 type AdminInboxCounts struct {
-	PostReports     int64 `json:"post_reports"`
-	CommentReports  int64 `json:"comment_reports"`
-	UserReports     int64 `json:"user_reports"`
-	BusinessReports int64 `json:"business_reports"`
-	OpenFeedback    int64 `json:"open_feedback"`
-	UnansweredHelp  int64 `json:"unanswered_help"`
-	Total           int64 `json:"total"`
+	PostReports     int64      `json:"post_reports"`
+	CommentReports  int64      `json:"comment_reports"`
+	UserReports     int64      `json:"user_reports"`
+	BusinessReports int64      `json:"business_reports"`
+	OpenFeedback    int64      `json:"open_feedback"`
+	UnansweredHelp  int64      `json:"unanswered_help"`
+	Total           int64      `json:"total"`
+	NewestAt        *time.Time `json:"newest_at,omitempty"`
 }
 
 // BroadcastHistoryItem groups admin broadcast notifications by send batch.
