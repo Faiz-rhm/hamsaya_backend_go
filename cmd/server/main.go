@@ -305,7 +305,7 @@ func main() {
 	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
-	adminService := services.NewAdminService(adminRepo, fcmClient, notificationService, logger)
+	adminService := services.NewAdminService(adminRepo, db, fcmClient, notificationService, logger)
 	helpChatService := services.NewHelpChatService(helpChatRepo, logger)
 	helpChatService.SetNotificationService(notificationService)
 
@@ -372,6 +372,9 @@ func main() {
 		logger.Fatal("Failed to create backup service", zap.Error(err))
 	}
 	backupHandler := handlers.NewBackupHandler(backupService, logger)
+
+	deletionRequestService := services.NewDeletionRequestService(db, adminService, logger)
+	deletionRequestHandler := handlers.NewDeletionRequestHandler(deletionRequestService, adminService, logger)
 	customRoleRepo := repositories.NewCustomRoleRepository(db)
 	adminAuthHandler := handlers.NewAdminAuthHandler(authService, customRoleRepo, validator, logger, adminCookieCfg, cfg.JWT)
 	customRoleHandler := handlers.NewCustomRoleHandler(customRoleRepo, logger)
@@ -391,7 +394,7 @@ func main() {
 	searchHandler := handlers.NewSearchHandler(searchService, validator, logger)
 	reportHandler := handlers.NewReportHandler(reportService)
 	feedbackHandler := handlers.NewFeedbackHandler(feedbackService)
-	adminHandler := handlers.NewAdminHandler(adminService, mfaService, validator, logger)
+	adminHandler := handlers.NewAdminHandler(adminService, mfaService, authService, validator, logger)
 	helpChatHandler := handlers.NewHelpChatHandler(helpChatService, validator, logger)
 	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
 	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, storageService, validator, logger, redisClient)
@@ -701,6 +704,12 @@ func main() {
 			admin.DELETE("/users/:user_id", adminOnly, adminHandler.DeleteUser)
 			admin.PUT("/users/:user_id/role", superOnly, adminHandler.UpdateUserRole)
 			admin.POST("/users/:user_id/force-disable-mfa", adminOnly, adminHandler.ForceDisableUserMFA)
+			admin.POST("/users/:user_id/logout-all", adminOnly, adminHandler.ForceLogoutUser)
+			admin.GET("/users/:user_id/sessions", adminOnly, adminHandler.UserSessionsList)
+			admin.PATCH("/users/:user_id/verification", adminOnly, adminHandler.SetUserVerification)
+			admin.GET("/rate-limit-overrides", adminOnly, adminHandler.RateLimitOverridesList)
+			admin.PUT("/users/:user_id/rate-limit", adminOnly, adminHandler.SetRateLimitOverride)
+			admin.DELETE("/users/:user_id/rate-limit", adminOnly, adminHandler.DeleteRateLimitOverride)
 
 			// Content Moderation — moderator-and-above.
 			admin.GET("/posts", adminHandler.ListAllPosts)
@@ -820,6 +829,12 @@ func main() {
 			// ad-hoc, presigned download). Restore is intentionally NOT a
 			// route; that operation must run from a trusted operator
 			// shell, never via the dashboard.
+			// GDPR / DSAR account deletion request queue.
+			admin.GET("/deletion-requests", adminOnly, deletionRequestHandler.List)
+			admin.POST("/deletion-requests", adminOnly, deletionRequestHandler.Create)
+			admin.POST("/deletion-requests/:id/approve", adminOnly, deletionRequestHandler.Approve)
+			admin.POST("/deletion-requests/:id/reject", adminOnly, deletionRequestHandler.Reject)
+
 			admin.GET("/system/backups", superOnly, backupHandler.List)
 			admin.POST("/system/backups/run", superOnly, backupHandler.Run)
 			admin.GET("/system/backups/:id/download", superOnly, backupHandler.Download)

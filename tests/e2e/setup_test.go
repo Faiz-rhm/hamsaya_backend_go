@@ -268,7 +268,7 @@ func buildRouter(
 	pollSvc := services.NewPollService(pollRepo, postRepo, userRepo, notifSvc, logger)
 	reportSvc := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackSvc := services.NewFeedbackService(feedbackRepo, validator)
-	adminSvc := services.NewAdminService(adminRepo, nil, notifSvc, logger)
+	adminSvc := services.NewAdminService(adminRepo, db, nil, notifSvc, logger)
 	helpChatSvc := services.NewHelpChatService(helpChatRepo, logger)
 
 	// Middleware

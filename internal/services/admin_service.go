@@ -10,6 +10,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/notification"
 	"go.uber.org/zap"
 )
@@ -17,6 +18,7 @@ import (
 // AdminService handles admin business logic
 type AdminService struct {
 	adminRepo           repositories.AdminRepository
+	db                  *database.DB
 	fcmClient           *notification.FCMClient
 	notificationService *NotificationService
 	logger              *zap.Logger
@@ -25,12 +27,14 @@ type AdminService struct {
 // NewAdminService creates a new admin service
 func NewAdminService(
 	adminRepo repositories.AdminRepository,
+	db *database.DB,
 	fcmClient *notification.FCMClient,
 	notificationService *NotificationService,
 	logger *zap.Logger,
 ) *AdminService {
 	return &AdminService{
 		adminRepo:           adminRepo,
+		db:                  db,
 		fcmClient:           fcmClient,
 		notificationService: notificationService,
 		logger:              logger,
@@ -993,6 +997,153 @@ func (s *AdminService) ResolveFeedback(ctx context.Context, feedbackID, adminID,
 // WriteAuditLog records an admin action — called internally from service methods
 func (s *AdminService) writeAuditLog(ctx context.Context, adminID, action, entityType, entityID string, details map[string]interface{}, ipAddress string) {
 	_ = s.adminRepo.CreateAuditLog(ctx, &models.CreateAuditLogRequest{
+		AdminID:    adminID,
+		Action:     action,
+		EntityType: entityType,
+		EntityID:   entityID,
+		Details:    details,
+		IPAddress:  ipAddress,
+	})
+}
+
+// UserSession is one row of user_sessions for the admin user-detail
+// timeline. Mirrors the system sessions row shape.
+type UserSession struct {
+	ID         string    `json:"id"`
+	IPAddress  *string   `json:"ip_address,omitempty"`
+	UserAgent  *string   `json:"user_agent,omitempty"`
+	DeviceInfo *string   `json:"device_info,omitempty"`
+	CreatedAt  time.Time `json:"created_at"`
+	ExpiresAt  time.Time `json:"expires_at"`
+	Revoked    bool      `json:"revoked"`
+	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
+}
+
+// ListUserSessions returns recent sessions (revoked + active) for a
+// single user. Used by the admin UI to render a per-user login
+// timeline.
+func (s *AdminService) ListUserSessions(ctx context.Context, userID string, limit int) ([]UserSession, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT id::text, ip_address::text, user_agent, device_info::text,
+		       created_at, expires_at, revoked, revoked_at
+		FROM user_sessions
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2
+	`, userID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	out := make([]UserSession, 0, limit)
+	for rows.Next() {
+		var us UserSession
+		if err := rows.Scan(&us.ID, &us.IPAddress, &us.UserAgent, &us.DeviceInfo,
+			&us.CreatedAt, &us.ExpiresAt, &us.Revoked, &us.RevokedAt,
+		); err != nil {
+			return nil, err
+		}
+		out = append(out, us)
+	}
+	return out, nil
+}
+
+// RateLimitOverride is one row of user_rate_limit_overrides for the
+// admin UI — surfaces who set the override, when, and why.
+type RateLimitOverride struct {
+	UserID          string    `json:"user_id"`
+	UserEmail       string    `json:"user_email"`
+	RequestsPerHour int       `json:"requests_per_hour"`
+	Reason          *string   `json:"reason,omitempty"`
+	CreatedBy       *string   `json:"created_by,omitempty"`
+	CreatedByEmail  *string   `json:"created_by_email,omitempty"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// ListRateLimitOverrides returns every active override, joined with the
+// user email so the admin table is human-readable.
+func (s *AdminService) ListRateLimitOverrides(ctx context.Context) ([]RateLimitOverride, error) {
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT o.user_id::text, COALESCE(u.email,''), o.requests_per_hour,
+		       o.reason, o.created_by::text, COALESCE(c.email,''),
+		       o.created_at, o.updated_at
+		FROM user_rate_limit_overrides o
+		JOIN users u ON u.id = o.user_id
+		LEFT JOIN users c ON c.id = o.created_by
+		ORDER BY o.created_at DESC
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]RateLimitOverride, 0)
+	for rows.Next() {
+		var r RateLimitOverride
+		var creatorEmail string
+		if err := rows.Scan(&r.UserID, &r.UserEmail, &r.RequestsPerHour, &r.Reason,
+			&r.CreatedBy, &creatorEmail, &r.CreatedAt, &r.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		if creatorEmail != "" {
+			r.CreatedByEmail = &creatorEmail
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
+// SetRateLimitOverride upserts one override row.
+func (s *AdminService) SetRateLimitOverride(ctx context.Context, userID string, requestsPerHour int, reason, adminID string) error {
+	if requestsPerHour < 0 {
+		return fmt.Errorf("requests_per_hour must be >= 0")
+	}
+	_, err := s.db.Pool.Exec(ctx, `
+		INSERT INTO user_rate_limit_overrides (user_id, requests_per_hour, reason, created_by, updated_at)
+		VALUES ($1, $2, NULLIF($3,''), $4, NOW())
+		ON CONFLICT (user_id) DO UPDATE SET
+		  requests_per_hour = EXCLUDED.requests_per_hour,
+		  reason            = EXCLUDED.reason,
+		  created_by        = EXCLUDED.created_by,
+		  updated_at        = NOW()
+	`, userID, requestsPerHour, reason, adminID)
+	return err
+}
+
+// DeleteRateLimitOverride removes the override and the user goes back
+// to the global default.
+func (s *AdminService) DeleteRateLimitOverride(ctx context.Context, userID string) error {
+	_, err := s.db.Pool.Exec(ctx, `DELETE FROM user_rate_limit_overrides WHERE user_id=$1`, userID)
+	return err
+}
+
+// SetUserVerification flips email_verified / phone_verified flags. Skips
+// columns where the corresponding pointer is nil so admins can update
+// only the column they care about.
+func (s *AdminService) SetUserVerification(ctx context.Context, userID string, email, phone *bool) error {
+	if email != nil {
+		if _, err := s.db.Pool.Exec(ctx, `UPDATE users SET email_verified = $1 WHERE id = $2`, *email, userID); err != nil {
+			return err
+		}
+	}
+	if phone != nil {
+		if _, err := s.db.Pool.Exec(ctx, `UPDATE users SET phone_verified = $1 WHERE id = $2`, *phone, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// LogAuditAction is the exported wrapper for handlers in other files
+// that need to record an admin action (e.g. force-logout, verification
+// override) without going through a dedicated service method.
+func (s *AdminService) LogAuditAction(ctx context.Context, adminID, action, entityType, entityID string, details map[string]interface{}, ipAddress string) error {
+	return s.adminRepo.CreateAuditLog(ctx, &models.CreateAuditLogRequest{
 		AdminID:    adminID,
 		Action:     action,
 		EntityType: entityType,

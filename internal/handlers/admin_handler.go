@@ -17,6 +17,7 @@ import (
 type AdminHandler struct {
 	adminService *services.AdminService
 	mfaService   *services.MFAService
+	authService  *services.AuthService
 	validator    *utils.Validator
 	logger       *zap.Logger
 }
@@ -25,12 +26,14 @@ type AdminHandler struct {
 func NewAdminHandler(
 	adminService *services.AdminService,
 	mfaService *services.MFAService,
+	authService *services.AuthService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *AdminHandler {
 	return &AdminHandler{
 		adminService: adminService,
 		mfaService:   mfaService,
+		authService:  authService,
 		validator:    validator,
 		logger:       logger,
 	}
@@ -312,6 +315,127 @@ func (h *AdminHandler) UpdateUserRole(c *gin.Context) {
 // @Failure 401 {object} utils.Response
 // @Failure 403 {object} utils.Response
 // @Failure 500 {object} utils.Response
+// RateLimitOverridesList returns every active per-user rate-limit
+// override.
+// @Router /admin/rate-limit-overrides [get]
+func (h *AdminHandler) RateLimitOverridesList(c *gin.Context) {
+	rows, err := h.adminService.ListRateLimitOverrides(c.Request.Context())
+	if err != nil {
+		utils.SendError(c, http.StatusInternalServerError, "Query failed", err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "ok", gin.H{"overrides": rows})
+}
+
+// SetRateLimitOverride upserts a per-user rate-limit override.
+// @Router /admin/users/{user_id}/rate-limit [put]
+func (h *AdminHandler) SetRateLimitOverride(c *gin.Context) {
+	userID := c.Param("user_id")
+	adminID, _ := middleware.GetUserID(c)
+	var body struct {
+		RequestsPerHour int    `json:"requests_per_hour" binding:"min=0"`
+		Reason          string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid body", err)
+		return
+	}
+	if err := h.adminService.SetRateLimitOverride(c.Request.Context(), userID, body.RequestsPerHour, body.Reason, adminID); err != nil {
+		utils.SendError(c, http.StatusInternalServerError, "Failed", err)
+		return
+	}
+	_ = h.adminService.LogAuditAction(c.Request.Context(), adminID, "set_rate_limit_override",
+		"user", userID, map[string]interface{}{"requests_per_hour": body.RequestsPerHour, "reason": body.Reason}, c.ClientIP())
+	utils.SendSuccess(c, http.StatusOK, "Override set", nil)
+}
+
+// DeleteRateLimitOverride drops the override; the user returns to the
+// global default cap.
+// @Router /admin/users/{user_id}/rate-limit [delete]
+func (h *AdminHandler) DeleteRateLimitOverride(c *gin.Context) {
+	userID := c.Param("user_id")
+	adminID, _ := middleware.GetUserID(c)
+	if err := h.adminService.DeleteRateLimitOverride(c.Request.Context(), userID); err != nil {
+		utils.SendError(c, http.StatusInternalServerError, "Failed", err)
+		return
+	}
+	_ = h.adminService.LogAuditAction(c.Request.Context(), adminID, "delete_rate_limit_override", "user", userID, nil, c.ClientIP())
+	utils.SendSuccess(c, http.StatusOK, "Override removed", nil)
+}
+
+// UserSessionsList returns every non-revoked session for the given user
+// for the per-user activity timeline on the admin user-detail page.
+// @Router /admin/users/{user_id}/sessions [get]
+func (h *AdminHandler) UserSessionsList(c *gin.Context) {
+	userID := c.Param("user_id")
+	rows, err := h.adminService.ListUserSessions(c.Request.Context(), userID, 100)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "ok", gin.H{"sessions": rows})
+}
+
+// SetUserVerification overrides email_verified / phone_verified flags for
+// a user. Admin can use this to unblock onboarding when a user lost
+// access to their email or phone. Audit-logged.
+// @Router /admin/users/{user_id}/verification [patch]
+func (h *AdminHandler) SetUserVerification(c *gin.Context) {
+	userID := c.Param("user_id")
+	adminID, _ := middleware.GetUserID(c)
+
+	var body struct {
+		EmailVerified *bool `json:"email_verified"`
+		PhoneVerified *bool `json:"phone_verified"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid body", err)
+		return
+	}
+	if body.EmailVerified == nil && body.PhoneVerified == nil {
+		utils.SendError(c, http.StatusBadRequest, "Provide email_verified and/or phone_verified", utils.ErrValidation)
+		return
+	}
+	if err := h.adminService.SetUserVerification(c.Request.Context(), userID, body.EmailVerified, body.PhoneVerified); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	details := map[string]interface{}{}
+	if body.EmailVerified != nil {
+		details["email_verified"] = *body.EmailVerified
+	}
+	if body.PhoneVerified != nil {
+		details["phone_verified"] = *body.PhoneVerified
+	}
+	_ = h.adminService.LogAuditAction(c.Request.Context(), adminID, "override_verification", "user", userID, details, c.ClientIP())
+	utils.SendSuccess(c, http.StatusOK, "Verification updated", nil)
+}
+
+// ForceLogoutUser revokes every active session for the target user. Used
+// when an admin needs to kill a compromised account or boot a session
+// from a stolen device. Audit-logged.
+// @Router /admin/users/{user_id}/logout-all [post]
+func (h *AdminHandler) ForceLogoutUser(c *gin.Context) {
+	userID := c.Param("user_id")
+	adminID, _ := middleware.GetUserID(c)
+	if h.authService == nil {
+		utils.SendError(c, http.StatusInternalServerError, "Auth service unavailable", nil)
+		return
+	}
+	if err := h.authService.LogoutAll(c.Request.Context(), userID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	h.logger.Info("Admin force-logout",
+		zap.String("user_id", userID),
+		zap.String("admin_id", adminID),
+	)
+	if err := h.adminService.LogAuditAction(c.Request.Context(), adminID, "force_logout_user", "user", userID, nil, c.ClientIP()); err != nil {
+		h.logger.Warn("audit log failed", zap.Error(err))
+	}
+	utils.SendSuccess(c, http.StatusOK, "All sessions revoked", nil)
+}
+
 // @Router /admin/users/{user_id} [delete]
 // ForceDisableUserMFA admin-resets a user's MFA. Used to unlock users who
 // lost their authenticator. No password required (admin authority is enough).
