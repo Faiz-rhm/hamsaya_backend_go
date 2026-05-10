@@ -105,7 +105,7 @@ func (s *DeletionRequestService) Approve(ctx context.Context, id, adminID, notes
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	var userID uuid.UUID
 	var status string

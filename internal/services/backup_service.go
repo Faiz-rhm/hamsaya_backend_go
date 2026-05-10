@@ -151,13 +151,13 @@ func (s *BackupService) execute(ctx context.Context, id uuid.UUID, tier string, 
 	if err != nil {
 		return "", "", 0, err
 	}
-	defer os.Remove(passFile)
+	defer func() { _ = os.Remove(passFile) }()
 
 	out, err := os.OpenFile(localPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		return "", "", 0, fmt.Errorf("open local file: %w", err)
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	port := s.cfg.Database.Port
 	if port == "" {
@@ -326,7 +326,7 @@ func (s *BackupService) OpenDownload(ctx context.Context, id string) (*DownloadS
 	}
 	stat, err := obj.Stat()
 	if err != nil {
-		obj.Close()
+		_ = obj.Close()
 		return nil, err
 	}
 	filename := filepath.Base(*key)
@@ -425,17 +425,17 @@ func writePassphraseFile(passphrase string) (string, error) {
 		return "", err
 	}
 	if _, err := f.WriteString(passphrase); err != nil {
-		f.Close()
-		os.Remove(f.Name())
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	if err := f.Chmod(0o600); err != nil {
-		f.Close()
-		os.Remove(f.Name())
+		_ = f.Close()
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	if err := f.Close(); err != nil {
-		os.Remove(f.Name())
+		_ = os.Remove(f.Name())
 		return "", err
 	}
 	return f.Name(), nil

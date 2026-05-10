@@ -77,7 +77,7 @@ func (h *BackupHandler) Download(c *gin.Context) {
 		utils.SendError(c, http.StatusNotFound, err.Error(), utils.ErrNotFound)
 		return
 	}
-	defer stream.Reader.Close()
+	defer func() { _ = stream.Reader.Close() }()
 
 	c.Header("Content-Type", "application/octet-stream")
 	c.Header("Content-Disposition", `attachment; filename="`+stream.Filename+`"`)

@@ -150,7 +150,7 @@ func (s *MediaModerationService) Reject(ctx context.Context, attachmentID, admin
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Lock the queue row to avoid double-rejects from racing admins.
 	var status string
