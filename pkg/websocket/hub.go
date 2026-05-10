@@ -24,6 +24,11 @@ type Client struct {
 	Send   chan []byte // Buffered channel for outbound messages
 	mu     sync.Mutex
 	closed bool
+	// activeConversationID is the conversation the client currently has
+	// open in the foreground. Set via the `presence` WS frame from the
+	// mobile client. Used by the chat service to suppress push
+	// notifications for messages the user is already actively viewing.
+	activeConversationID string
 }
 
 // hubShard is one slice of the connection map. Each shard runs an
@@ -216,6 +221,40 @@ func (h *Hub) SendToUser(userID string, message interface{}) error {
 	}
 
 	return nil
+}
+
+// SetActiveConversation marks the conversation the user currently has open.
+// Pass empty string when the user leaves the screen. No-op when the user
+// has no live socket connection.
+func (h *Hub) SetActiveConversation(userID, conversationID string) {
+	s := h.shardFor(userID)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if c, ok := s.clients[userID]; ok {
+		c.mu.Lock()
+		c.activeConversationID = conversationID
+		c.mu.Unlock()
+	}
+}
+
+// IsUserActiveInConversation reports whether [userID] currently has
+// [conversationID] open. Returns false when the user has no socket or is
+// looking at a different conversation.
+func (h *Hub) IsUserActiveInConversation(userID, conversationID string) bool {
+	if userID == "" || conversationID == "" {
+		return false
+	}
+	s := h.shardFor(userID)
+	s.mu.RLock()
+	c, ok := s.clients[userID]
+	s.mu.RUnlock()
+	if !ok {
+		return false
+	}
+	c.mu.Lock()
+	active := c.activeConversationID
+	c.mu.Unlock()
+	return active == conversationID
 }
 
 // IsUserConnected checks if a user is currently connected

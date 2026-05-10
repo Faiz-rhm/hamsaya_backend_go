@@ -60,16 +60,32 @@ func (c *Client) ReadPump() {
 			continue
 		}
 
-		// Handle incoming message (typing indicators, read receipts, etc.)
-		// For now, we'll just log it since main messages go through HTTP
-		c.Hub.logger.Debug("Received WebSocket message",
-			zap.String("user_id", c.ID),
-			zap.ByteString("message", message),
-		)
-
-		// You can add custom message handling here
-		// For example, handle typing indicators or read receipts
-		// that clients send via WebSocket
+		// Handle incoming WS frames from the client. Currently handled:
+		//   * `presence` — `{type:"presence", conversation_id:"<id>"}` —
+		//     sets/clears the conversation the user is actively viewing so
+		//     the chat service can suppress redundant push notifications
+		//     while the recipient is on the screen. Empty conversation_id
+		//     clears the active marker.
+		var frame struct {
+			Type           string `json:"type"`
+			ConversationID string `json:"conversation_id"`
+		}
+		if err := json.Unmarshal(message, &frame); err != nil {
+			c.Hub.logger.Debug("Unparseable WS frame, ignoring",
+				zap.String("user_id", c.ID),
+				zap.Error(err),
+			)
+			continue
+		}
+		switch frame.Type {
+		case "presence":
+			c.Hub.SetActiveConversation(c.ID, frame.ConversationID)
+		default:
+			c.Hub.logger.Debug("Received WebSocket message",
+				zap.String("user_id", c.ID),
+				zap.String("type", frame.Type),
+			)
+		}
 	}
 }
 

@@ -420,8 +420,18 @@ func (s *ChatService) notifyMessageSent(message *models.Message, recipientID str
 		}
 	}
 
-	// Persisted notification + FCM push (for background/closed-app delivery)
+	// Persisted notification + FCM push (for background/closed-app delivery).
+	// Skip when the recipient currently has the conversation open in the
+	// foreground — the WS frame above already updated their UI, a push
+	// notification would be redundant and noisy.
 	if s.notificationService == nil {
+		return
+	}
+	if s.wsHub != nil && s.wsHub.IsUserActiveInConversation(recipientID, message.ConversationID) {
+		s.logger.Debug("Skipping push: recipient actively viewing conversation",
+			zap.String("recipient_id", recipientID),
+			zap.String("conversation_id", message.ConversationID),
+		)
 		return
 	}
 
