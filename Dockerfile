@@ -16,8 +16,12 @@ RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o main ./cmd/server
 # Final stage
 FROM alpine:latest
 
-# Install ca-certificates and libwebp (runtime for go-webp)
-RUN apk --no-cache add ca-certificates tzdata libwebp
+# Install runtime deps:
+#   ca-certificates, tzdata — TLS + timezone
+#   libwebp                 — runtime for go-webp
+#   postgresql-client       — pg_dump used by the backup job
+#   gnupg                   — symmetric encryption of dumps before upload
+RUN apk --no-cache add ca-certificates tzdata libwebp postgresql-client gnupg
 
 # Set timezone
 ENV TZ=UTC
@@ -31,6 +35,21 @@ WORKDIR /home/app
 # Copy binary from builder
 COPY --from=builder --chown=app:app /app/main .
 COPY --from=builder --chown=app:app /app/migrations ./migrations
+
+# Backup target directory. Created+chowned BEFORE the named docker volume
+# mounts so the volume inherits app:app ownership on first mount (Docker
+# named-volume init copies the source path's permissions). Without this
+# step the dir would be root-owned and the non-root app user could not
+# write encrypted dumps to it.
+RUN mkdir -p /var/lib/hamsaya/backups && \
+    chown -R app:app /var/lib/hamsaya && \
+    chmod 750 /var/lib/hamsaya/backups
+
+# gpg writes random pool state to $HOME/.gnupg; create it under the app
+# user's HOME so symmetric encryption doesn't fail at runtime.
+RUN mkdir -p /home/app/.gnupg && \
+    chown -R app:app /home/app/.gnupg && \
+    chmod 700 /home/app/.gnupg
 
 # Switch to non-root user
 USER app

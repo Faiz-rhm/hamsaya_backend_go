@@ -54,6 +54,19 @@ type Config struct {
 	CORS      CORSConfig
 	Monitoring MonitoringConfig
 	Crypto    CryptoConfig
+	Backup    BackupConfig
+}
+
+// BackupConfig holds database backup automation settings. The passphrase is
+// used to symmetrically encrypt every pg_dump via gpg before the file
+// touches disk, so a leak of the local volume or the MinIO bucket alone is
+// not sufficient to recover plaintext data. Without a passphrase the
+// backup job logs an error and refuses to run.
+type BackupConfig struct {
+	Enabled    bool
+	LocalDir   string
+	Bucket     string
+	Passphrase string
 }
 
 // CryptoConfig holds at-rest encryption configuration. MFASecretKey is a
@@ -320,6 +333,12 @@ func Load() (*Config, error) {
 		},
 		Crypto: CryptoConfig{
 			MFASecretKey: viper.GetString("MFA_SECRET_ENCRYPTION_KEY"),
+		},
+		Backup: BackupConfig{
+			Enabled:    viper.GetBool("BACKUP_ENABLED"),
+			LocalDir:   viper.GetString("BACKUP_LOCAL_DIR"),
+			Bucket:     viper.GetString("BACKUP_BUCKET"),
+			Passphrase: viper.GetString("BACKUP_PASSPHRASE"),
 		},
 	}
 

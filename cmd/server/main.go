@@ -33,6 +33,7 @@ import (
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
+	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
@@ -366,6 +367,11 @@ func main() {
 	adminCookieCfg := utils.NewCookieConfig(cfg.Server.Env, cfg.Server.AdminCookieDomain)
 	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
 	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, wsHub, storageService.Client(), logger)
+	backupService, err := services.NewBackupService(db, cfg, logger)
+	if err != nil {
+		logger.Fatal("Failed to create backup service", zap.Error(err))
+	}
+	backupHandler := handlers.NewBackupHandler(backupService, logger)
 	customRoleRepo := repositories.NewCustomRoleRepository(db)
 	adminAuthHandler := handlers.NewAdminAuthHandler(authService, customRoleRepo, validator, logger, adminCookieCfg, cfg.JWT)
 	customRoleHandler := handlers.NewCustomRoleHandler(customRoleRepo, logger)
@@ -810,6 +816,14 @@ func main() {
 			admin.PUT("/system/flags/:key", superOnly, systemHandler.FlagsToggle)
 			admin.GET("/system/denylist-stats", superOnly, systemHandler.DenylistStats)
 
+			// Database backups (super_admin only — read history, trigger
+			// ad-hoc, presigned download). Restore is intentionally NOT a
+			// route; that operation must run from a trusted operator
+			// shell, never via the dashboard.
+			admin.GET("/system/backups", superOnly, backupHandler.List)
+			admin.POST("/system/backups/run", superOnly, backupHandler.Run)
+			admin.GET("/system/backups/:id/download", superOnly, backupHandler.Download)
+
 			// Application logs — super_admin only. Backed by the DBLogSink
 			// (pkg/observability) which mirrors warn+ entries to app_logs.
 			admin.GET("/logs", superOnly, appLogHandler.List)
@@ -985,6 +999,94 @@ func main() {
 			select {
 			case <-ticker.C:
 				runIfLeader("session-cleanup", "lock:job:session-cleanup", 12*time.Hour, purgeSessions)
+			case <-quit:
+				return
+			}
+		}
+	}()
+
+	// Background job: encrypted database backup + GFS retention prune
+	// (runs every 24 hours, leader-elected). Uses pg_dump piped through
+	// gpg before anything lands on disk; artifacts go to a local volume
+	// AND a separate MinIO bucket. Restore is operator-only.
+	go func() {
+		if !cfg.Backup.Enabled || cfg.Backup.Passphrase == "" {
+			sugaredLogger.Warn("Backup job not started — set BACKUP_ENABLED=true and BACKUP_PASSPHRASE")
+			return
+		}
+
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		runBackup := func(ctx context.Context) error {
+			if _, err := backupService.Run(ctx, "cron", nil); err != nil {
+				return err
+			}
+			if _, err := backupService.Prune(ctx); err != nil {
+				return fmt.Errorf("prune: %w", err)
+			}
+			return nil
+		}
+
+		runIfLeader("db-backup", "lock:job:db-backup", 1*time.Hour, runBackup)
+
+		for {
+			select {
+			case <-ticker.C:
+				runIfLeader("db-backup", "lock:job:db-backup", 1*time.Hour, runBackup)
+			case <-quit:
+				return
+			}
+		}
+	}()
+
+	// Background job: app_logs retention by severity (runs every 24 hours).
+	// Industry-standard tiered retention — fatal class kept longer for
+	// post-mortems, info/debug churned aggressively. Audit logs are NOT
+	// touched; they live in audit_logs and are retained indefinitely for
+	// compliance.
+	go func() {
+		ticker := time.NewTicker(24 * time.Hour)
+		defer ticker.Stop()
+
+		// Each row: SQL level filter + max age in days. Keep rules
+		// data-driven so future policy tweaks are a single-line edit.
+		type retentionRule struct {
+			levels  []string
+			maxDays int
+		}
+		rules := []retentionRule{
+			{[]string{"fatal", "panic", "dpanic"}, 90},
+			{[]string{"error"}, 30},
+			{[]string{"warn"}, 14},
+			{[]string{"info", "debug"}, 3},
+		}
+
+		purgeAppLogs := func(ctx context.Context) error {
+			var totalDeleted int64
+			for _, r := range rules {
+				tag, err := db.Pool.Exec(ctx,
+					`DELETE FROM app_logs WHERE level = ANY($1) AND created_at < NOW() - make_interval(days => $2)`,
+					r.levels,
+					r.maxDays,
+				)
+				if err != nil {
+					return fmt.Errorf("purge %v: %w", r.levels, err)
+				}
+				totalDeleted += tag.RowsAffected()
+			}
+			if totalDeleted > 0 {
+				sugaredLogger.Infow("app_logs retention completed", "deleted_count", totalDeleted)
+			}
+			return nil
+		}
+
+		runIfLeader("app-logs-retention", "lock:job:app-logs-retention", 1*time.Hour, purgeAppLogs)
+
+		for {
+			select {
+			case <-ticker.C:
+				runIfLeader("app-logs-retention", "lock:job:app-logs-retention", 1*time.Hour, purgeAppLogs)
 			case <-quit:
 				return
 			}
