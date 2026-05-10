@@ -293,7 +293,7 @@ func main() {
 	businessReviewService := services.NewBusinessReviewService(businessReviewRepo, businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger)
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
-	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, redisClient, logger)
+	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, db, redisClient, logger)
 	monetizationService := services.NewMonetizationService(monetizationRepo, storageService, logger)
 	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, dailyLimitService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
@@ -793,6 +793,10 @@ func main() {
 			// Daily-post-limit management — admin-only.
 			admin.GET("/daily-limits", adminOnly, dailyLimitHandler.AdminListLimits)
 			admin.PUT("/daily-limits/:post_type", adminOnly, dailyLimitHandler.AdminUpdateLimit)
+			admin.GET("/daily-limits/overrides", adminOnly, dailyLimitHandler.AdminListAllOverrides)
+			admin.GET("/users/:user_id/daily-limits", adminOnly, dailyLimitHandler.AdminListOverridesForUser)
+			admin.PUT("/users/:user_id/daily-limits/:post_type", adminOnly, dailyLimitHandler.AdminSetOverrideForUser)
+			admin.DELETE("/users/:user_id/daily-limits/:post_type", adminOnly, dailyLimitHandler.AdminDeleteOverrideForUser)
 
 			// Monetization — admin-only. The user-facing surface (advertiser
 			// submission, boost purchase, credit topup) lives elsewhere; these

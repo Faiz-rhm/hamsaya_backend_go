@@ -250,7 +250,7 @@ func buildRouter(
 		userRepo, adminRepo, passwordSvc, jwtSvc, emailSvc, tokenStorage, mfaSvc, cfg, logger,
 	)
 	dailyLimitRepo := repositories.NewDailyLimitRepository(db)
-	dailyLimitSvc := services.NewDailyLimitService(dailyLimitRepo, redisClient, logger)
+	dailyLimitSvc := services.NewDailyLimitService(dailyLimitRepo, db, redisClient, logger)
 	postSvc := services.NewPostService(
 		postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo,
 		categoryRepo, eventRepo, notifSvc, fanoutSvc, fanoutRepo, dailyLimitSvc, "", logger,

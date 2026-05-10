@@ -146,3 +146,80 @@ func (h *DailyLimitHandler) AdminUpdateLimit(c *gin.Context) {
 
 	utils.SendSuccess(c, http.StatusOK, "Daily post limit updated", limit)
 }
+
+// ─── Per-user overrides ──────────────────────────────────────────────────────
+
+// AdminListAllOverrides godoc
+// @Router /admin/daily-limits/overrides [get]
+func (h *DailyLimitHandler) AdminListAllOverrides(c *gin.Context) {
+	rows, err := h.service.ListUserOverrides(c.Request.Context())
+	if err != nil {
+		h.logger.Error("list daily limit overrides", zap.Error(err))
+		utils.SendError(c, http.StatusInternalServerError, "Query failed", err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "ok", gin.H{"overrides": rows})
+}
+
+// AdminListOverridesForUser godoc
+// @Router /admin/users/{user_id}/daily-limits [get]
+func (h *DailyLimitHandler) AdminListOverridesForUser(c *gin.Context) {
+	userID := c.Param("user_id")
+	rows, err := h.service.ListUserOverridesFor(c.Request.Context(), userID)
+	if err != nil {
+		h.logger.Error("list user daily limit overrides", zap.Error(err))
+		utils.SendError(c, http.StatusInternalServerError, "Query failed", err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "ok", gin.H{"overrides": rows})
+}
+
+type setDailyLimitOverrideBody struct {
+	OverrideLimit *int   `json:"override_limit"`
+	Unlimited     bool   `json:"unlimited"`
+	Reason        string `json:"reason"`
+}
+
+// AdminSetOverrideForUser godoc
+// @Router /admin/users/{user_id}/daily-limits/{post_type} [put]
+func (h *DailyLimitHandler) AdminSetOverrideForUser(c *gin.Context) {
+	userID := c.Param("user_id")
+	postType := c.Param("post_type")
+	if userID == "" || postType == "" {
+		utils.SendError(c, http.StatusBadRequest, "user_id and post_type required", utils.ErrValidation)
+		return
+	}
+
+	var body setDailyLimitOverrideBody
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid body", err)
+		return
+	}
+
+	adminID := ""
+	if v, ok := c.Get("user_id"); ok {
+		if s, ok := v.(string); ok {
+			adminID = s
+		}
+	}
+
+	if err := h.service.SetUserOverride(c.Request.Context(), userID, postType,
+		body.OverrideLimit, body.Unlimited, body.Reason, adminID,
+	); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Override set", nil)
+}
+
+// AdminDeleteOverrideForUser godoc
+// @Router /admin/users/{user_id}/daily-limits/{post_type} [delete]
+func (h *DailyLimitHandler) AdminDeleteOverrideForUser(c *gin.Context) {
+	userID := c.Param("user_id")
+	postType := c.Param("post_type")
+	if err := h.service.DeleteUserOverride(c.Request.Context(), userID, postType); err != nil {
+		utils.SendError(c, http.StatusInternalServerError, "Failed", err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Override removed", nil)
+}
