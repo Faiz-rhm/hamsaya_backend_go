@@ -411,6 +411,32 @@ func (h *AdminHandler) SetUserVerification(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Verification updated", nil)
 }
 
+// SetUserShadowban toggles shadowban on a user. Audit-logged.
+// @Router /admin/users/{user_id}/shadowban [post]
+func (h *AdminHandler) SetUserShadowban(c *gin.Context) {
+	userID := c.Param("user_id")
+	adminID, _ := middleware.GetUserID(c)
+	var body struct {
+		Enabled bool   `json:"enabled"`
+		Reason  string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid body", err)
+		return
+	}
+	if err := h.adminService.SetShadowban(c.Request.Context(), userID, body.Enabled, adminID, body.Reason); err != nil {
+		utils.SendError(c, http.StatusInternalServerError, "Failed", err)
+		return
+	}
+	action := "shadowban_user"
+	if !body.Enabled {
+		action = "unshadowban_user"
+	}
+	_ = h.adminService.LogAuditAction(c.Request.Context(), adminID, action, "user", userID,
+		map[string]interface{}{"reason": body.Reason}, c.ClientIP())
+	utils.SendSuccess(c, http.StatusOK, "Shadowban updated", nil)
+}
+
 // ForceLogoutUser revokes every active session for the target user. Used
 // when an admin needs to kill a compromised account or boot a session
 // from a stolen device. Audit-logged.

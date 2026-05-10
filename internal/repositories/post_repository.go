@@ -247,22 +247,39 @@ func (r *postRepository) Delete(ctx context.Context, postID string) error {
 	return err
 }
 
-// CreateAttachment creates a new attachment
+// CreateAttachment creates a new attachment AND auto-enqueues it for
+// media moderation. The enqueue is best-effort — a queue insert failure
+// must not block the attachment write (loss of moderation coverage on a
+// single row is acceptable; loss of the post is not).
 func (r *postRepository) CreateAttachment(ctx context.Context, attachment *models.Attachment) error {
 	query := `
 		INSERT INTO attachments (id, post_id, photo, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5)
 	`
 
-	_, err := r.db.Pool.Exec(ctx, query,
+	if _, err := r.db.Pool.Exec(ctx, query,
 		attachment.ID,
 		attachment.PostID,
 		attachment.Photo,
 		attachment.CreatedAt,
 		attachment.UpdatedAt,
-	)
+	); err != nil {
+		return err
+	}
 
-	return err
+	if _, qerr := r.db.Pool.Exec(ctx,
+		`INSERT INTO media_moderation_queue (attachment_id, post_id) VALUES ($1, $2)
+		 ON CONFLICT (attachment_id) DO NOTHING`,
+		attachment.ID, attachment.PostID,
+	); qerr != nil {
+		// Best-effort. Log via a side-channel? The repository doesn't
+		// have a logger; the post-create service path has one. Swallow
+		// here and rely on a periodic reconciliation job (TODO) to
+		// catch stragglers if the table ever drifts from attachments.
+		_ = qerr
+	}
+
+	return nil
 }
 
 // GetAttachmentsByPostID gets all attachments for a post
@@ -610,6 +627,25 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		)`, argCount, argCount)
 		args = append(args, filter.ViewerID)
 		argCount++
+
+		// Shadowban filter — exclude shadowbanned authors UNLESS the
+		// viewer is the author themselves. Author keeps seeing their
+		// own posts so they don't suspect the action and just rotate
+		// to a fresh account.
+		fmt.Fprintf(&queryBuilder, ` AND NOT EXISTS (
+			SELECT 1 FROM users u
+			WHERE u.id = posts.user_id
+			  AND u.shadowbanned_at IS NOT NULL
+			  AND u.id <> $%d
+		)`, argCount)
+		args = append(args, filter.ViewerID)
+		argCount++
+	} else {
+		// Anonymous / public feed: hide all shadowbanned authors.
+		queryBuilder.WriteString(` AND NOT EXISTS (
+			SELECT 1 FROM users u
+			WHERE u.id = posts.user_id AND u.shadowbanned_at IS NOT NULL
+		)`)
 	}
 
 	if filter.BusinessID != nil {
@@ -765,6 +801,25 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 		)`, argCount, argCount)
 		args = append(args, filter.ViewerID)
 		argCount++
+
+		// Shadowban filter — exclude shadowbanned authors UNLESS the
+		// viewer is the author themselves. Author keeps seeing their
+		// own posts so they don't suspect the action and just rotate
+		// to a fresh account.
+		fmt.Fprintf(&queryBuilder, ` AND NOT EXISTS (
+			SELECT 1 FROM users u
+			WHERE u.id = posts.user_id
+			  AND u.shadowbanned_at IS NOT NULL
+			  AND u.id <> $%d
+		)`, argCount)
+		args = append(args, filter.ViewerID)
+		argCount++
+	} else {
+		// Anonymous / public feed: hide all shadowbanned authors.
+		queryBuilder.WriteString(` AND NOT EXISTS (
+			SELECT 1 FROM users u
+			WHERE u.id = posts.user_id AND u.shadowbanned_at IS NOT NULL
+		)`)
 	}
 
 	if filter.BusinessID != nil {

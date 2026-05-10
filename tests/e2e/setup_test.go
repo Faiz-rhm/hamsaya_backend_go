@@ -253,7 +253,7 @@ func buildRouter(
 	dailyLimitSvc := services.NewDailyLimitService(dailyLimitRepo, db, redisClient, logger)
 	postSvc := services.NewPostService(
 		postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo,
-		categoryRepo, eventRepo, notifSvc, fanoutSvc, fanoutRepo, dailyLimitSvc, "", logger,
+		categoryRepo, eventRepo, notifSvc, fanoutSvc, fanoutRepo, dailyLimitSvc, nil, "", logger,
 	)
 	commentSvc := services.NewCommentService(
 		commentRepo, postRepo, userRepo, businessRepo, notifSvc, logger,

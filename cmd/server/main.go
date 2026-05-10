@@ -295,7 +295,8 @@ func main() {
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
 	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, db, redisClient, logger)
 	monetizationService := services.NewMonetizationService(monetizationRepo, storageService, logger)
-	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, dailyLimitService, cfg.Storage.BucketName, logger)
+	automodService := services.NewAutomodService(db, logger)
+	postService := services.NewPostService(postRepo, pollRepo, userRepo, businessRepo, relationshipsRepo, categoryRepo, eventRepo, notificationService, fanoutService, fanoutRepo, dailyLimitService, automodService, cfg.Storage.BucketName, logger)
 	commentService := services.NewCommentService(commentRepo, postRepo, userRepo, businessRepo, notificationService, logger)
 	pollService := services.NewPollService(pollRepo, postRepo, userRepo, notificationService, logger)
 	eventService := services.NewEventService(eventRepo, postRepo, userRepo, notificationService, logger)
@@ -375,6 +376,11 @@ func main() {
 
 	deletionRequestService := services.NewDeletionRequestService(db, adminService, logger)
 	deletionRequestHandler := handlers.NewDeletionRequestHandler(deletionRequestService, adminService, logger)
+
+	automodHandler := handlers.NewAutomodHandler(automodService, adminService, logger)
+
+	mediaModerationService := services.NewMediaModerationService(db, logger)
+	mediaModerationHandler := handlers.NewMediaModerationHandler(mediaModerationService, adminService, logger)
 	customRoleRepo := repositories.NewCustomRoleRepository(db)
 	adminAuthHandler := handlers.NewAdminAuthHandler(authService, customRoleRepo, validator, logger, adminCookieCfg, cfg.JWT)
 	customRoleHandler := handlers.NewCustomRoleHandler(customRoleRepo, logger)
@@ -706,6 +712,7 @@ func main() {
 			admin.POST("/users/:user_id/force-disable-mfa", adminOnly, adminHandler.ForceDisableUserMFA)
 			admin.POST("/users/:user_id/logout-all", adminOnly, adminHandler.ForceLogoutUser)
 			admin.GET("/users/:user_id/sessions", adminOnly, adminHandler.UserSessionsList)
+			admin.POST("/users/:user_id/shadowban", adminOnly, adminHandler.SetUserShadowban)
 			admin.PATCH("/users/:user_id/verification", adminOnly, adminHandler.SetUserVerification)
 			admin.GET("/rate-limit-overrides", adminOnly, adminHandler.RateLimitOverridesList)
 			admin.PUT("/users/:user_id/rate-limit", adminOnly, adminHandler.SetRateLimitOverride)
@@ -833,6 +840,17 @@ func main() {
 			// ad-hoc, presigned download). Restore is intentionally NOT a
 			// route; that operation must run from a trusted operator
 			// shell, never via the dashboard.
+			// Automod rules — admin CRUD.
+			admin.GET("/automod/rules", adminOnly, automodHandler.List)
+			admin.POST("/automod/rules", adminOnly, automodHandler.Create)
+			admin.PUT("/automod/rules/:id", adminOnly, automodHandler.Update)
+			admin.DELETE("/automod/rules/:id", adminOnly, automodHandler.Delete)
+
+			// Media moderation queue — review uploaded attachments after publish.
+			admin.GET("/media-moderation", adminOnly, mediaModerationHandler.List)
+			admin.POST("/media-moderation/:attachment_id/approve", adminOnly, mediaModerationHandler.Approve)
+			admin.POST("/media-moderation/:attachment_id/reject", adminOnly, mediaModerationHandler.Reject)
+
 			// GDPR / DSAR account deletion request queue.
 			admin.GET("/deletion-requests", adminOnly, deletionRequestHandler.List)
 			admin.POST("/deletion-requests", adminOnly, deletionRequestHandler.Create)

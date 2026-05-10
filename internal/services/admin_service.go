@@ -1122,6 +1122,30 @@ func (s *AdminService) DeleteRateLimitOverride(ctx context.Context, userID strin
 	return err
 }
 
+// SetShadowban flips shadowban state on a user. enabled=true sets
+// shadowbanned_at=NOW() + reason; enabled=false clears all three columns.
+// Audit logging is the caller's responsibility.
+func (s *AdminService) SetShadowban(ctx context.Context, userID string, enabled bool, adminID, reason string) error {
+	if enabled {
+		_, err := s.db.Pool.Exec(ctx, `
+			UPDATE users
+			SET shadowbanned_at  = NOW(),
+			    shadowbanned_by  = $1,
+			    shadowban_reason = NULLIF($2,'')
+			WHERE id = $3
+		`, adminID, reason, userID)
+		return err
+	}
+	_, err := s.db.Pool.Exec(ctx, `
+		UPDATE users
+		SET shadowbanned_at  = NULL,
+		    shadowbanned_by  = NULL,
+		    shadowban_reason = NULL
+		WHERE id = $1
+	`, userID)
+	return err
+}
+
 // SetUserVerification flips email_verified / phone_verified flags. Skips
 // columns where the corresponding pointer is nil so admins can update
 // only the column they care about.

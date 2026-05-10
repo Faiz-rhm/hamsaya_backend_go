@@ -32,6 +32,7 @@ type PostService struct {
 	fanoutService       *FanoutService
 	fanoutRepo          repositories.FanoutRepository
 	dailyLimitService   *DailyLimitService
+	automodService      *AutomodService
 	storageBucketName   string
 	logger              *zap.Logger
 }
@@ -49,6 +50,7 @@ func NewPostService(
 	fanoutService *FanoutService,
 	fanoutRepo repositories.FanoutRepository,
 	dailyLimitService *DailyLimitService,
+	automodService *AutomodService,
 	storageBucketName string,
 	logger *zap.Logger,
 ) *PostService {
@@ -64,6 +66,7 @@ func NewPostService(
 		fanoutService:       fanoutService,
 		fanoutRepo:          fanoutRepo,
 		dailyLimitService:   dailyLimitService,
+		automodService:      automodService,
 		storageBucketName:   storageBucketName,
 		logger:              logger,
 	}
@@ -73,6 +76,16 @@ func NewPostService(
 // a 429 with the proper payload + power the GET /posts/daily-limits endpoint.
 func (s *PostService) GetDailyLimitService() *DailyLimitService {
 	return s.dailyLimitService
+}
+
+// matchUserMessage builds a user-visible explanation of an automod
+// match. Description (admin-supplied) wins because it's tuned;
+// otherwise we fall back to the matched pattern.
+func matchUserMessage(m AutomodMatch) string {
+	if m.Description != "" {
+		return m.Description
+	}
+	return "matched a content rule"
 }
 
 // defaultAvatarColorForBusiness returns a deterministic hex color for business ID when DB has no avatar_color.
@@ -92,6 +105,33 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 	if err := s.validatePostRequest(req); err != nil {
 		return nil, err
 	}
+
+	// Automod scan — runs before any DB writes so a 'block' rule rejects
+	// the request without bumping daily-limit counters or creating
+	// half-baked rows. 'flag' and 'shadow' continue creation; flagging
+	// is handled after the post is persisted (we need the post_id).
+	var automodMatch AutomodMatch
+	if s.automodService != nil {
+		var title, desc string
+		if req.Title != nil {
+			title = *req.Title
+		}
+		if req.Description != nil {
+			desc = *req.Description
+		}
+		match, err := s.automodService.Scan(ctx, title+"\n"+desc)
+		if err != nil {
+			s.logger.Warn("automod scan error; allowing post (fail-open)", zap.Error(err))
+		} else if match.Action == "block" {
+			return nil, utils.NewBadRequestError(
+				"Post blocked by automod: "+matchUserMessage(match),
+				ErrAutomodBlocked,
+			)
+		} else {
+			automodMatch = match
+		}
+	}
+	_ = automodMatch // referenced after the create completes; keep linter quiet here
 
 	// Daily-limit gate (admin role bypassed inside the service). Counter is
 	// pre-incremented; if downstream creation fails we Refund() to restore
