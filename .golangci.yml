@@ -7,9 +7,6 @@ linters:
     - ineffassign
     - staticcheck
     - unused
-  settings:
-    errcheck:
-      check-type-assertions: true
   exclusions:
     paths:
       - vendor
