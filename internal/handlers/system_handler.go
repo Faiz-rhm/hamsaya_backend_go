@@ -3,12 +3,16 @@ package handlers
 import (
 	"net/http"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/database"
+	"github.com/hamsaya/backend/pkg/storage"
+	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
@@ -18,23 +22,29 @@ import (
 // management. All endpoints assume the caller has already passed
 // AuthMiddleware.RequireSuperAdmin().
 type SystemHandler struct {
-	db          *database.DB
-	redis       *redis.Client
-	flagRepo    repositories.FeatureFlagRepository
-	logger      *zap.Logger
-	startedAt   time.Time
+	db        *database.DB
+	redis     *redis.Client
+	flagRepo  repositories.FeatureFlagRepository
+	hub       *websocket.Hub
+	storage   *storage.Client
+	logger    *zap.Logger
+	startedAt time.Time
 }
 
 func NewSystemHandler(
 	db *database.DB,
 	redis *redis.Client,
 	flagRepo repositories.FeatureFlagRepository,
+	hub *websocket.Hub,
+	storageClient *storage.Client,
 	logger *zap.Logger,
 ) *SystemHandler {
 	return &SystemHandler{
 		db:        db,
 		redis:     redis,
 		flagRepo:  flagRepo,
+		hub:       hub,
+		storage:   storageClient,
 		logger:    logger,
 		startedAt: time.Now(),
 	}
@@ -56,45 +66,178 @@ func (h *SystemHandler) BuildInfo(c *gin.Context) {
 	})
 }
 
-// ServiceHealth aggregates DB pool stats, Redis ping latency, and goroutine
-// count. Distinct from /health/* endpoints which target probes — this is the
-// human-readable system overview.
+// ServiceHealth aggregates DB pool stats, Redis ping latency + parsed INFO,
+// goroutine + memory stats, WebSocket connection count, MinIO reachability,
+// and a 1h app_logs error rate. Distinct from /health/* endpoints which
+// target probes — this is the human-readable super_admin overview.
 // @Router /admin/system/health [get]
 func (h *SystemHandler) ServiceHealth(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	dbStat := h.db.Pool.Stat()
 	dbInfo := gin.H{
-		"acquired_conns":      dbStat.AcquiredConns(),
-		"idle_conns":          dbStat.IdleConns(),
-		"max_conns":           dbStat.MaxConns(),
-		"total_conns":         dbStat.TotalConns(),
-		"acquire_count":       dbStat.AcquireCount(),
-		"acquire_duration_ms": dbStat.AcquireDuration().Milliseconds(),
+		"acquired_conns":              dbStat.AcquiredConns(),
+		"idle_conns":                  dbStat.IdleConns(),
+		"max_conns":                   dbStat.MaxConns(),
+		"total_conns":                 dbStat.TotalConns(),
+		"acquire_count":               dbStat.AcquireCount(),
+		"acquire_duration_ms":         dbStat.AcquireDuration().Milliseconds(),
+		"new_conns_count":             dbStat.NewConnsCount(),
+		"empty_acquire_count":         dbStat.EmptyAcquireCount(),
+		"canceled_acquire_count":      dbStat.CanceledAcquireCount(),
+		"max_lifetime_destroy_count":  dbStat.MaxLifetimeDestroyCount(),
+		"max_idle_destroy_count":      dbStat.MaxIdleDestroyCount(),
+		"constructing_conns":          dbStat.ConstructingConns(),
 	}
 
 	redisInfo := gin.H{"available": false}
 	if h.redis != nil {
 		start := time.Now()
 		if err := h.redis.Ping(ctx).Err(); err == nil {
-			redisInfo = gin.H{
+			info := gin.H{
 				"available":  true,
 				"latency_ms": time.Since(start).Milliseconds(),
 			}
+			// Best-effort INFO parse — never fail health on a Redis quirk.
+			if raw, err := h.redis.Info(ctx).Result(); err == nil {
+				parsed := parseRedisInfo(raw)
+				if v, ok := parsed["redis_version"]; ok {
+					info["version"] = v
+				}
+				if v, ok := parsed["redis_mode"]; ok {
+					info["mode"] = v
+				}
+				if v, ok := parsed["uptime_in_seconds"]; ok {
+					if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+						info["uptime_secs"] = n
+					}
+				}
+				if v, ok := parsed["connected_clients"]; ok {
+					if n, err := strconv.Atoi(v); err == nil {
+						info["connected_clients"] = n
+					}
+				}
+				if v, ok := parsed["maxclients"]; ok {
+					if n, err := strconv.Atoi(v); err == nil {
+						info["max_clients"] = n
+					}
+				}
+				if v, ok := parsed["used_memory"]; ok {
+					if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+						info["used_memory_bytes"] = n
+					}
+				}
+				if v, ok := parsed["used_memory_peak"]; ok {
+					if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+						info["used_memory_peak_bytes"] = n
+					}
+				}
+				if v, ok := parsed["total_commands_processed"]; ok {
+					if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+						info["total_commands_processed"] = n
+					}
+				}
+				if v, ok := parsed["instantaneous_ops_per_sec"]; ok {
+					if n, err := strconv.Atoi(v); err == nil {
+						info["ops_per_sec"] = n
+					}
+				}
+			}
+			if size, err := h.redis.DBSize(ctx).Result(); err == nil {
+				info["db_size"] = size
+			}
+			redisInfo = info
 		}
 	}
 
 	var mem runtime.MemStats
 	runtime.ReadMemStats(&mem)
+	process := gin.H{
+		"num_cpu":            runtime.NumCPU(),
+		"num_gc":             mem.NumGC,
+		"heap_objects":       mem.HeapObjects,
+		"heap_idle_bytes":    mem.HeapIdle,
+		"heap_inuse_bytes":   mem.HeapInuse,
+		"heap_released_bytes": mem.HeapReleased,
+		"total_alloc_bytes":  mem.TotalAlloc,
+		"sys_bytes":          mem.Sys,
+	}
+
+	wsInfo := gin.H{"available": false}
+	if h.hub != nil {
+		wsInfo = gin.H{
+			"available":   true,
+			"connections": h.hub.ConnectionCount(),
+			"shards":      h.hub.ShardCount(),
+		}
+	}
+
+	storageInfo := gin.H{"configured": false}
+	if h.storage != nil {
+		st := h.storage.Stat(ctx)
+		storageInfo = gin.H{
+			"configured": true,
+			"reachable":  st.Reachable,
+			"endpoint":   st.Endpoint,
+			"bucket":     st.Bucket,
+			"use_ssl":    st.UseSSL,
+			"latency_ms": st.LatencyMS,
+		}
+		if st.Error != "" {
+			storageInfo["error"] = st.Error
+		}
+	}
+
+	// 1h app_logs counts grouped by level. Failure here must not fail the
+	// whole health response — fall through with zeros if the table query
+	// errors (e.g., during migrations).
+	logRate := gin.H{}
+	rows, err := h.db.Pool.Query(ctx, `
+		SELECT level, COUNT(*) FROM app_logs
+		WHERE created_at > NOW() - INTERVAL '1 hour'
+		GROUP BY level
+	`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var level string
+			var n int64
+			if err := rows.Scan(&level, &n); err == nil {
+				logRate[level] = n
+			}
+		}
+	} else {
+		h.logger.Warn("log-rate query failed", zap.Error(err))
+	}
 
 	utils.SendSuccess(c, http.StatusOK, "ok", gin.H{
 		"db":               dbInfo,
 		"redis":            redisInfo,
+		"process":          process,
+		"ws":               wsInfo,
+		"storage":          storageInfo,
+		"log_rate_1h":      logRate,
 		"goroutines":       runtime.NumGoroutine(),
 		"heap_alloc_bytes": mem.HeapAlloc,
 		"heap_sys_bytes":   mem.HeapSys,
 		"gc_pause_ns_p99":  mem.PauseNs[(mem.NumGC+255)%256],
 	})
+}
+
+// parseRedisInfo walks a Redis INFO blob and returns a flat map of all
+// `key:value` lines. Section headers (`# Server`) are ignored.
+func parseRedisInfo(raw string) map[string]string {
+	out := make(map[string]string, 64)
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if i := strings.IndexByte(line, ':'); i > 0 {
+			out[line[:i]] = strings.TrimSpace(line[i+1:])
+		}
+	}
+	return out
 }
 
 // TableStats returns row counts for every public-schema table. Useful

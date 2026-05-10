@@ -266,6 +266,25 @@ func (h *Hub) IsUserConnected(userID string) bool {
 	return exists
 }
 
+// ConnectionCount returns the total number of currently connected clients
+// across all shards. Cheap O(numShards) lock-walk; safe for hot
+// /admin/system/health polls.
+func (h *Hub) ConnectionCount() int {
+	total := 0
+	for _, s := range h.shards {
+		s.mu.RLock()
+		total += len(s.clients)
+		s.mu.RUnlock()
+	}
+	return total
+}
+
+// ShardCount returns how many shards back the hub. Surfaced for telemetry
+// so admins can correlate balance vs. cardinality.
+func (h *Hub) ShardCount() int {
+	return len(h.shards)
+}
+
 // GetConnectedUserIDs returns a list of all connected user IDs across
 // all shards. O(N); intended for diagnostics and admin only.
 func (h *Hub) GetConnectedUserIDs() []string {

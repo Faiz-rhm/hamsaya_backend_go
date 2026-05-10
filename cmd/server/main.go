@@ -365,7 +365,7 @@ func main() {
 	authHandler := handlers.NewAuthHandler(authService, validator, logger)
 	adminCookieCfg := utils.NewCookieConfig(cfg.Server.Env, cfg.Server.AdminCookieDomain)
 	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
-	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, logger)
+	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, wsHub, storageService.Client(), logger)
 	customRoleRepo := repositories.NewCustomRoleRepository(db)
 	adminAuthHandler := handlers.NewAdminAuthHandler(authService, customRoleRepo, validator, logger, adminCookieCfg, cfg.JWT)
 	customRoleHandler := handlers.NewCustomRoleHandler(customRoleRepo, logger)

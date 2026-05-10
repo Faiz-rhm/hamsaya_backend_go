@@ -61,15 +61,23 @@ func SendError(c *gin.Context, statusCode int, message string, err error) {
 	}
 
 	if err != nil {
-		// Always log full error server-side for debugging and monitoring
-		GetLogger().Errorw("API Error",
+		// 4xx = client mistake (warn-worthy, not alert-worthy);
+		// 5xx = server fault (real error, page-on-call).
+		// Logging every 401/404/422 at error level floods app_logs and
+		// triggers false alarms on the /health Errors counter.
+		fields := []interface{}{
 			"status", statusCode,
 			"message", message,
 			"error", err.Error(),
 			"path", c.Request.URL.Path,
 			"method", c.Request.Method,
 			"client_ip", c.ClientIP(),
-		)
+		}
+		if statusCode >= 500 {
+			GetLogger().Errorw("API Error", fields...)
+		} else {
+			GetLogger().Warnw("API Client Error", fields...)
+		}
 
 		// Only expose error details in development environment.
 		// An unset ENV defaults to production-safe behavior (no detail exposure).

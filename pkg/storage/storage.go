@@ -90,6 +90,38 @@ func NewClient(cfg *Config, logger *zap.Logger) (*Client, error) {
 	return client, nil
 }
 
+// Stats reports MinIO/S3 reachability and bucket identity for admin
+// telemetry. Reachable is determined by a BucketExists probe — cheap
+// HEAD-equivalent that doesn't enumerate objects.
+type Stats struct {
+	Reachable bool   `json:"reachable"`
+	Endpoint  string `json:"endpoint"`
+	Bucket    string `json:"bucket"`
+	UseSSL    bool   `json:"use_ssl"`
+	LatencyMS int64  `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// Stat probes the bucket and returns reachability + identity. Object count
+// and total size are intentionally omitted — listing a multi-million-object
+// bucket on every admin poll would be expensive.
+func (c *Client) Stat(ctx context.Context) Stats {
+	out := Stats{
+		Endpoint: c.endpoint,
+		Bucket:   c.bucketName,
+		UseSSL:   c.useSSL,
+	}
+	start := time.Now()
+	exists, err := c.client.BucketExists(ctx, c.bucketName)
+	out.LatencyMS = time.Since(start).Milliseconds()
+	if err != nil {
+		out.Error = err.Error()
+		return out
+	}
+	out.Reachable = exists
+	return out
+}
+
 // ensureBucket ensures the bucket exists, creates it if not
 func (c *Client) ensureBucket(ctx context.Context) error {
 	exists, err := c.client.BucketExists(ctx, c.bucketName)

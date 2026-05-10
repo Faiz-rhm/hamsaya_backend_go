@@ -281,7 +281,7 @@ func buildRouter(
 	customRoleRepo := repositories.NewCustomRoleRepository(db)
 	adminAuthHandler := handlers.NewAdminAuthHandler(authSvc, customRoleRepo, validator, logger, adminCookieCfg, cfg.JWT)
 	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
-	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, logger)
+	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, wsHub, nil, logger)
 	postHandler := handlers.NewPostHandler(postSvc, nil, validator, logger)
 	commentHandler := handlers.NewCommentHandler(commentSvc, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatSvc, wsHub, validator, logger, cfg)
