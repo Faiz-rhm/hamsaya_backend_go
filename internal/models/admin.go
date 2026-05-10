@@ -457,11 +457,18 @@ type UpdateBusinessStatusRequest struct {
 }
 
 // BroadcastNotificationRequest is the request to send a broadcast notification
+//
+// Targeting precedence (most-specific wins):
+//  1. UserIDs       — exact list, ignores other filters
+//  2. Provinces[]   — every user whose profile.province is in the list
+//  3. Province      — legacy single-province field, kept for backwards compat
+//  4. (none)        — broadcasts to every user
 type BroadcastNotificationRequest struct {
-	Title    string   `json:"title" binding:"required,max=100"`
-	Message  string   `json:"message" binding:"required,max=500"`
-	Province *string  `json:"province,omitempty"`
-	UserIDs  []string `json:"user_ids,omitempty"`
+	Title     string   `json:"title" binding:"required,max=100"`
+	Message   string   `json:"message" binding:"required,max=500"`
+	Province  *string  `json:"province,omitempty"`
+	Provinces []string `json:"provinces,omitempty"`
+	UserIDs   []string `json:"user_ids,omitempty"`
 }
 
 // AdminInboxCounts powers the admin header notification bell. Each field is

@@ -869,11 +869,16 @@ func (s *AdminService) BroadcastNotification(ctx context.Context, req *models.Br
 	var userIDs []string
 	var err error
 
-	if len(req.UserIDs) > 0 {
+	switch {
+	case len(req.UserIDs) > 0:
 		userIDs = req.UserIDs
-	} else if req.Province != nil && *req.Province != "" {
+	case len(req.Provinces) > 0:
+		userIDs, err = s.adminRepo.GetUserIDsByProvinces(ctx, req.Provinces)
+	case req.Province != nil && *req.Province != "":
+		// Legacy single-province path — kept for backwards compat with
+		// callers that haven't migrated to Provinces[] yet.
 		userIDs, err = s.adminRepo.GetUserIDsByProvince(ctx, *req.Province)
-	} else {
+	default:
 		userIDs, err = s.adminRepo.GetAllUserIDs(ctx)
 	}
 

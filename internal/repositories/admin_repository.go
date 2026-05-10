@@ -68,6 +68,7 @@ type AdminRepository interface {
 	
 	GetAllUserIDs(ctx context.Context) ([]string, error)
 	GetUserIDsByProvince(ctx context.Context, province string) ([]string, error)
+	GetUserIDsByProvinces(ctx context.Context, provinces []string) ([]string, error)
 	ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error)
 	GetInboxCounts(ctx context.Context) (*models.AdminInboxCounts, error)
 
@@ -2025,13 +2026,44 @@ func (r *adminRepository) GetAllUserIDs(ctx context.Context) ([]string, error) {
 }
 
 func (r *adminRepository) GetUserIDsByProvince(ctx context.Context, province string) ([]string, error) {
+	// profiles.id IS the user id (1:1 PK == users.id), so the join uses
+	// p.id, not p.user_id (no such column exists).
 	query := `
 		SELECT u.id
 		FROM users u
-		JOIN profiles p ON u.id = p.user_id
+		JOIN profiles p ON u.id = p.id
 		WHERE p.province = $1 AND u.deleted_at IS NULL
 	`
 	rows, err := r.db.Pool.Query(ctx, query, province)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, nil
+}
+
+// GetUserIDsByProvinces returns the union of user ids across the given
+// provinces. Empty input returns no error and no ids — caller decides
+// whether to treat empty selection as "all users" or "no-op".
+func (r *adminRepository) GetUserIDsByProvinces(ctx context.Context, provinces []string) ([]string, error) {
+	if len(provinces) == 0 {
+		return nil, nil
+	}
+	rows, err := r.db.Pool.Query(ctx, `
+		SELECT u.id
+		FROM users u
+		JOIN profiles p ON u.id = p.id
+		WHERE p.province = ANY($1) AND u.deleted_at IS NULL
+	`, provinces)
 	if err != nil {
 		return nil, err
 	}

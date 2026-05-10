@@ -1302,6 +1302,14 @@ func (m *MockAdminRepository) GetUserIDsByProvince(ctx context.Context, province
 	return args.Get(0).([]string), args.Error(1)
 }
 
+func (m *MockAdminRepository) GetUserIDsByProvinces(ctx context.Context, provinces []string) ([]string, error) {
+	args := m.Called(ctx, provinces)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 func (m *MockAdminRepository) ListBroadcastHistory(ctx context.Context, limit int) ([]*models.BroadcastHistoryItem, error) {
 	args := m.Called(ctx, limit)
 	if args.Get(0) == nil {
