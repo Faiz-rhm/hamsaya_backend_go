@@ -78,9 +78,8 @@ func (h *AdminAuthHandler) AdminLogin(c *gin.Context) {
 	}
 
 	if resp.RequiresMFA {
-		// MFA flow still uses the JSON challenge contract; cookies are only
-		// minted after a successful second factor (TODO: extend MFA verify
-		// endpoint with a parallel /auth/admin/mfa-verify counterpart).
+		// MFA flow uses the JSON challenge contract; cookies are only minted
+		// after a successful second factor via AdminMFAVerify (below).
 		utils.SendSuccess(c, http.StatusOK, "MFA verification required", resp)
 		return
 	}
