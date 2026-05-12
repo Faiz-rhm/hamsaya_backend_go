@@ -9,18 +9,35 @@ DB_HOST="${DB_HOST:-postgres}"
 DB_PORT="${DB_PORT:-5432}"
 DB_USER="${DB_USER:-postgres}"
 DB_NAME="${DB_NAME:-hamsaya}"
+REDIS_HOST="${REDIS_HOST:-redis}"
+REDIS_PORT="${REDIS_PORT:-6379}"
 
-echo "[entrypoint] Waiting for ${DB_HOST}:${DB_PORT}..."
-i=0
-until nc -z "${DB_HOST}" "${DB_PORT}" 2>/dev/null; do
-  i=$((i + 1))
-  if [ "${i}" -ge 60 ]; then
-    echo "[entrypoint] Timed out after 60s waiting for ${DB_HOST}:${DB_PORT}"
-    exit 1
+wait_for_tcp() {
+  name="$1"; host="$2"; port="$3"; timeout="${4:-90}"
+  echo "[entrypoint] Waiting for ${name} (${host}:${port})..."
+  i=0
+  until nc -z "${host}" "${port}" 2>/dev/null; do
+    i=$((i + 1))
+    if [ "${i}" -ge "${timeout}" ]; then
+      echo "[entrypoint] Timed out after ${timeout}s waiting for ${name} (${host}:${port})"
+      exit 1
+    fi
+    sleep 1
+  done
+  echo "[entrypoint] ${name} reachable after ${i}s."
+}
+
+wait_for_tcp postgres "${DB_HOST}" "${DB_PORT}" 90
+wait_for_tcp redis "${REDIS_HOST}" "${REDIS_PORT}" 90
+
+# MinIO is reachable as STORAGE_ENDPOINT=host:port. Wait but don't block.
+if [ -n "${STORAGE_ENDPOINT}" ]; then
+  storage_host="${STORAGE_ENDPOINT%%:*}"
+  storage_port="${STORAGE_ENDPOINT##*:}"
+  if [ "${storage_host}" != "${storage_port}" ]; then
+    wait_for_tcp minio "${storage_host}" "${storage_port}" 60 || true
   fi
-  sleep 1
-done
-echo "[entrypoint] Database reachable after ${i}s."
+fi
 
 reset_db() {
   echo "[entrypoint] Dropping and recreating database ${DB_NAME}..."
