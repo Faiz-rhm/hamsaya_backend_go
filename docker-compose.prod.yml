@@ -241,37 +241,9 @@ services:
         max_attempts: 3
         window: 120s
 
-  # Nginx Reverse Proxy
-  nginx:
-    image: nginx:alpine
-    container_name: hamsaya-nginx-prod
-    restart: unless-stopped
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - nginx_cache:/var/cache/nginx
-      - nginx_logs:/var/log/nginx
-    networks:
-      - hamsaya_network
-    depends_on:
-      - api
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 512M
-        reservations:
-          cpus: '0.25'
-          memory: 128M
+  # NOTE: Standalone nginx reverse-proxy service removed. Dokploy provides
+  # Traefik on host ports 80/443 — configure domain routing in the Dokploy
+  # panel to send traffic to api:8080 on the project network.
 
   # NOTE: Standalone db-backup cron service removed. Backups handled in-app by
   # BackupService (pg_dump → gpg AES256 → MinIO + local volume + GFS retention).
@@ -280,9 +252,6 @@ services:
 networks:
   hamsaya_network:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.25.0.0/16
 
 volumes:
   postgres_data:
@@ -290,8 +259,4 @@ volumes:
   redis_data:
     driver: local
   minio_data:
-    driver: local
-  nginx_cache:
-    driver: local
-  nginx_logs:
     driver: local
