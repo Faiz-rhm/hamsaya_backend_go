@@ -8,11 +8,15 @@ services:
       POSTGRES_DB: ${DB_NAME:-hamsaya}
       POSTGRES_USER: ${DB_USER:-postgres}
       POSTGRES_PASSWORD: ${DB_PASSWORD:?Database password required}
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=en_US.UTF-8 --lc-ctype=en_US.UTF-8"
+      # Alpine musl libc lacks full locales; use C.UTF-8 which is always present.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --lc-collate=C.UTF-8 --lc-ctype=C.UTF-8"
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./migrations:/docker-entrypoint-initdb.d:ro
+      # NOTE: do NOT mount ./migrations into /docker-entrypoint-initdb.d.
+      # Migrations are golang-migrate format (.up.sql + .down.sql pairs);
+      # postgres initdb would run both directions on first boot. The api
+      # container runs `migrate up` against an empty DB at startup instead.
     ports:
       - "127.0.0.1:5432:5432"  # Only expose to localhost
     networks:

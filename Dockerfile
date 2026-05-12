@@ -10,8 +10,9 @@ WORKDIR /app
 # Copy source and vendored modules (build offline, no go mod download)
 COPY . .
 
-# Build binary (CGO required for go-webp). Uses -mod=mod so deps are resolved at build time.
+# Build binaries (CGO required for go-webp on server). Uses -mod=mod so deps are resolved at build time.
 RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o main ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o migrate ./cmd/migrate
 
 # Final stage
 FROM alpine:latest
@@ -32,9 +33,16 @@ RUN addgroup -g 1000 app && \
 
 WORKDIR /home/app
 
-# Copy binary from builder
+# Copy binaries from builder
 COPY --from=builder --chown=app:app /app/main .
+COPY --from=builder --chown=app:app /app/migrate ./migrate
 COPY --from=builder --chown=app:app /app/migrations ./migrations
+
+# Entrypoint runs DB migrations then exec's the server. Idempotent — safe
+# to re-run on every container start (migrate is a no-op when schema is
+# already current).
+COPY --from=builder --chown=app:app /app/scripts/entrypoint.sh ./entrypoint.sh
+RUN chmod +x ./entrypoint.sh
 
 # Backup target directory. Created+chowned BEFORE the named docker volume
 # mounts so the volume inherits app:app ownership on first mount (Docker
@@ -61,5 +69,5 @@ EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# Run the binary
-CMD ["./main"]
+# Run migrations then start server
+CMD ["./entrypoint.sh"]
