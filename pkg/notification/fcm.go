@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -13,6 +14,21 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/api/option"
 )
+
+// normalizePEM accepts either a raw PEM string, a single-line PEM with literal
+// "\n" escape sequences, or a base64-encoded PEM blob (no header line) and
+// returns a PEM with real newlines. Base64 form is preferred when the value is
+// pasted into env panels that mangle newlines (e.g. Dokploy compose .env).
+func normalizePEM(value string) string {
+	if strings.Contains(value, "-----BEGIN") {
+		return strings.ReplaceAll(value, `\n`, "\n")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(value))
+	if err == nil && strings.Contains(string(decoded), "-----BEGIN") {
+		return string(decoded)
+	}
+	return value
+}
 
 // apnsExpirationSeconds is how long APNs should retry delivery if the device
 // is offline or asleep. Without this header, APNs uses an opaque default and
@@ -47,8 +63,8 @@ func NewFCMClient(cfg FCMConfig, logger *zap.Logger) (*FCMClient, error) {
 		opt = option.WithCredentialsFile(cfg.CredentialsPath)
 	} else if cfg.ProjectID != "" && cfg.PrivateKey != "" && cfg.ClientEmail != "" {
 		// Build a service-account JSON from individual env vars so no file is needed.
-		// Replace literal "\n" sequences (common when storing PEM in env vars) with real newlines.
-		privateKey := strings.ReplaceAll(cfg.PrivateKey, `\n`, "\n")
+		// Accept PEM, \n-escaped PEM, or base64-encoded PEM (Dokploy-safe).
+		privateKey := normalizePEM(cfg.PrivateKey)
 		credJSON, err := json.Marshal(map[string]string{ //#nosec G101 -- credential field names, not values
 			"type":                        "service_account",
 			"project_id":                  cfg.ProjectID,
