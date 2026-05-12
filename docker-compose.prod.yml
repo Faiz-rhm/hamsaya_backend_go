@@ -123,9 +123,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-      target: production
-      args:
-        - GO_VERSION=1.21
     image: hamsaya/backend:${VERSION:-latest}
     container_name: hamsaya-api-prod
     restart: unless-stopped
