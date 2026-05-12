@@ -208,8 +208,31 @@ services:
       # Monitoring
       SENTRY_DSN: ${SENTRY_DSN:-}
       PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-false}
+      OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-true}
+
+      # JWT extras
+      JWT_REFRESH_GRACE: ${JWT_REFRESH_GRACE:-60s}
+      DEVICE_CREDENTIAL_DURATION: ${DEVICE_CREDENTIAL_DURATION:-4320h}
+
+      # Firebase service-account fields (PEM may be base64; see normalizePEM)
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+      FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
+
+      # Email (Resend takes precedence over SMTP when set)
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+
+      # MFA (AES-GCM encryption of stored TOTP secrets) — required at boot
+      MFA_SECRET_ENCRYPTION_KEY: ${MFA_SECRET_ENCRYPTION_KEY:?MFA_SECRET_ENCRYPTION_KEY required (32-byte hex)}
+
+      # Encrypted DB backups (in-app BackupService)
+      BACKUP_ENABLED: ${BACKUP_ENABLED:-true}
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:?BACKUP_PASSPHRASE required when BACKUP_ENABLED=true}
+      BACKUP_LOCAL_DIR: ${BACKUP_LOCAL_DIR:-/var/lib/hamsaya/backups}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-hamsaya-backups}
+    volumes:
+      - backup_data:/var/lib/hamsaya/backups
     ports:
-      - "127.0.0.1:8080:8080"  # Only expose to localhost (nginx will proxy)
+      - "127.0.0.1:8080:8080"  # Loopback only; Dokploy Traefik routes to api:8080 over docker network
     networks:
       - hamsaya_network
     depends_on:
@@ -259,4 +282,6 @@ volumes:
   redis_data:
     driver: local
   minio_data:
+    driver: local
+  backup_data:
     driver: local
