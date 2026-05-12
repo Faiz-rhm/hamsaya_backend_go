@@ -1,5 +1,6 @@
 #!/bin/sh
 set -e
+set -o pipefail  # so 'migrate | tee' exits non-zero when migrate fails
 
 # Wait for postgres DNS + TCP. Dokploy / compose depends_on with
 # condition:service_healthy is unreliable across orchestrators, and the
@@ -21,47 +22,37 @@ until nc -z "${DB_HOST}" "${DB_PORT}" 2>/dev/null; do
 done
 echo "[entrypoint] Database reachable after ${i}s."
 
-# Self-heal corrupt DB state (one-shot). When postgres was previously
-# booted with ./migrations bind-mounted into /docker-entrypoint-initdb.d,
-# initdb ran .up.sql AND .down.sql files in alphabetical order and left a
-# partial schema with an empty schema_migrations table. The migrator then
-# crash-loops on "relation already exists". Detect that exact state and
-# drop+recreate the database so migrate up starts from a clean slate.
-#
-# Trigger conditions (BOTH must be true to avoid trashing healthy DBs):
-#   1. schema_migrations table is empty or missing
-#   2. At least one app table (users) already exists
-#
-# Operator override: set RESET_DB_ON_BOOT=true to force a reset regardless.
-echo "[entrypoint] Checking for corrupt initdb state..."
-PG="psql -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER} -tA"
-export PGPASSWORD="${DB_PASSWORD}"
+reset_db() {
+  echo "[entrypoint] Dropping and recreating database ${DB_NAME}..."
+  PGPASSWORD="${DB_PASSWORD}" psql -h "${DB_HOST}" -p "${DB_PORT}" -U "${DB_USER}" -d postgres -v ON_ERROR_STOP=1 \
+    -c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE);" \
+    -c "CREATE DATABASE ${DB_NAME};"
+  echo "[entrypoint] Database recreated."
+}
 
-needs_reset=0
+# Operator-forced reset.
 if [ "${RESET_DB_ON_BOOT}" = "true" ]; then
-  echo "[entrypoint] RESET_DB_ON_BOOT=true — forcing reset."
-  needs_reset=1
-else
-  users_exists=$(${PG} -d "${DB_NAME}" -c "SELECT to_regclass('public.users') IS NOT NULL;" 2>/dev/null || echo "f")
-  if [ "${users_exists}" = "t" ]; then
-    migrations_count=$(${PG} -d "${DB_NAME}" -c "SELECT COALESCE((SELECT COUNT(*) FROM schema_migrations), 0);" 2>/dev/null || echo "0")
-    if [ "${migrations_count}" = "0" ]; then
-      echo "[entrypoint] Detected partial schema with empty schema_migrations — auto-reset."
-      needs_reset=1
-    fi
+  echo "[entrypoint] RESET_DB_ON_BOOT=true — forcing reset before migrations."
+  reset_db
+fi
+
+# Run migrations. If the run fails because the schema is half-populated
+# (the classic corrupted-initdb signature), reset the database in place
+# and retry once. Any other failure is real and exits non-zero.
+echo "[entrypoint] Running database migrations..."
+migrate_log=$(mktemp)
+if ! ./migrate up 2>&1 | tee "${migrate_log}"; then
+  if grep -q "already exists" "${migrate_log}"; then
+    echo "[entrypoint] Migrations failed with 'already exists' — corrupt initdb state detected. Resetting and retrying..."
+    reset_db
+    ./migrate up
+  else
+    echo "[entrypoint] Migration failed for a non-recoverable reason. Aborting."
+    rm -f "${migrate_log}"
+    exit 1
   fi
 fi
-
-if [ "${needs_reset}" = "1" ]; then
-  echo "[entrypoint] Dropping and recreating database ${DB_NAME}..."
-  ${PG} -d postgres -c "DROP DATABASE IF EXISTS ${DB_NAME} WITH (FORCE);"
-  ${PG} -d postgres -c "CREATE DATABASE ${DB_NAME};"
-  echo "[entrypoint] Database recreated."
-fi
-unset PGPASSWORD
-
-echo "[entrypoint] Running database migrations..."
-./migrate up
+rm -f "${migrate_log}"
 
 echo "[entrypoint] Starting server..."
 exec ./main
