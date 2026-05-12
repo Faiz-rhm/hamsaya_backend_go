@@ -10,9 +10,14 @@ WORKDIR /app
 # Copy source and vendored modules (build offline, no go mod download)
 COPY . .
 
-# Build binaries (CGO required for go-webp on server). Uses -mod=mod so deps are resolved at build time.
-RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o main ./cmd/server
-RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o migrate ./cmd/migrate
+# Server / seed / seed-admin transitively import pkg/storage which needs
+# go-webp (CGO). migrate / db-reset / backfill-notifications are pure Go.
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/main             ./cmd/server
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/seed             ./cmd/seed
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/seed-admin       ./cmd/seed-admin
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o /out/migrate          ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o /out/db-reset         ./cmd/db-reset
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o /out/backfill-notifications ./cmd/backfill-notifications
 
 # Final stage
 FROM alpine:latest
@@ -20,29 +25,34 @@ FROM alpine:latest
 # Install runtime deps:
 #   ca-certificates, tzdata — TLS + timezone
 #   libwebp                 — runtime for go-webp
-#   postgresql-client       — pg_dump used by the backup job
+#   postgresql-client       — pg_dump + psql for backups + ops tooling
 #   gnupg                   — symmetric encryption of dumps before upload
-RUN apk --no-cache add ca-certificates tzdata libwebp postgresql-client gnupg
+#   bash, make              — let operators run helper commands
+RUN apk --no-cache add ca-certificates tzdata libwebp postgresql-client gnupg bash make
 
 # Set timezone
 ENV TZ=UTC
 
 # Create app user
 RUN addgroup -g 1000 app && \
-    adduser -D -u 1000 -G app app
+    adduser -D -u 1000 -G app app -s /bin/bash
 
-WORKDIR /home/app
+# Use /app as the working directory so it matches dev expectations.
+WORKDIR /app
 
-# Copy binaries from builder
-COPY --from=builder --chown=app:app /app/main .
-COPY --from=builder --chown=app:app /app/migrate ./migrate
-COPY --from=builder --chown=app:app /app/migrations ./migrations
+# Copy binaries from builder.
+COPY --from=builder --chown=app:app /out/main                    ./main
+COPY --from=builder --chown=app:app /out/migrate                 ./migrate
+COPY --from=builder --chown=app:app /out/seed                    ./seed
+COPY --from=builder --chown=app:app /out/seed-admin              ./seed-admin
+COPY --from=builder --chown=app:app /out/db-reset                ./db-reset
+COPY --from=builder --chown=app:app /out/backfill-notifications  ./backfill-notifications
 
-# Entrypoint runs DB migrations then exec's the server. Idempotent — safe
-# to re-run on every container start (migrate is a no-op when schema is
-# already current).
-COPY --from=builder --chown=app:app /app/scripts/entrypoint.sh ./entrypoint.sh
-RUN chmod +x ./entrypoint.sh
+# Migrations + entrypoint + Makefile (for `make <target>` inside the container).
+COPY --from=builder --chown=app:app /app/migrations        ./migrations
+COPY --from=builder --chown=app:app /app/scripts           ./scripts
+COPY --from=builder --chown=app:app /app/Makefile.runtime  ./Makefile
+RUN chmod +x ./scripts/entrypoint.sh
 
 # Backup target directory. Created+chowned BEFORE the named docker volume
 # mounts so the volume inherits app:app ownership on first mount (Docker
@@ -70,4 +80,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
 # Run migrations then start server
-CMD ["./entrypoint.sh"]
+CMD ["./scripts/entrypoint.sh"]
