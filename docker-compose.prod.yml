@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # PostgreSQL Database with PostGIS
   postgres:
@@ -227,7 +225,8 @@ services:
       retries: 3
       start_period: 60s
     deploy:
-      replicas: 2
+      # replicas removed: incompatible with container_name in standalone Compose.
+      # For HA, drop container_name and re-enable replicas (Dokploy / Swarm).
       resources:
         limits:
           cpus: '2'
