@@ -202,6 +202,19 @@ func (s *ProfileService) UpdateProfile(ctx context.Context, userID string, req *
 		return nil, utils.NewInternalError("Failed to update profile", err)
 	}
 
+	// Phone is owned by the User row, not the Profile row. Persist it
+	// here so the mobile edit-profile screen can round-trip a phone
+	// number through PUT /users/me without a separate endpoint.
+	if req.Phone != nil {
+		if user, uerr := s.userRepo.GetByID(ctx, userID); uerr == nil {
+			user.Phone = req.Phone
+			if err := s.userRepo.Update(ctx, user); err != nil {
+				s.logger.Warn("Failed to persist phone update",
+					zap.String("user_id", userID), zap.Error(err))
+			}
+		}
+	}
+
 	s.logger.Info("Profile updated",
 		zap.String("user_id", userID),
 		zap.Bool("is_complete", profile.IsComplete),

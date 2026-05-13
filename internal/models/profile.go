@@ -16,6 +16,10 @@ type UpdateProfileRequest struct {
 	About        *string              `json:"about,omitempty" validate:"omitempty,max=500"`
 	Gender       *string              `json:"gender,omitempty" validate:"omitempty,oneof=male female other prefer_not_to_say"`
 	DOB          *time.Time           `json:"dob,omitempty"`
+	// Phone lives on the User row, not the Profile row, but the mobile
+	// edit-profile screen surfaces it alongside other profile fields, so
+	// accept it here and let ProfileService persist it via userRepo.Update.
+	Phone        *string              `json:"phone,omitempty" validate:"omitempty,max=32"`
 	Website      *string              `json:"website,omitempty" validate:"omitempty,url"`
 	Country      *string              `json:"country,omitempty" validate:"omitempty,max=100"`
 	Province     *string              `json:"province,omitempty" validate:"omitempty,max=100"`
