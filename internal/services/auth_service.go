@@ -1415,23 +1415,9 @@ func (s *AuthService) sendPasswordChangedNotification(ctx context.Context, userI
 	})
 }
 
-// sendEmailVerifiedNotification confirms successful email verification.
-func (s *AuthService) sendEmailVerifiedNotification(ctx context.Context, userID string) {
-	if s.notificationService == nil {
-		return
-	}
-	bgtasks.Submit(func(ctxDetach context.Context) {
-		title := "Email verified"
-		msg := "Your email address is now verified. Full access unlocked."
-		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
-			UserID:  userID,
-			Type:    models.NotificationTypeEmailVerified,
-			Title:   &title,
-			Message: &msg,
-			Data:    map[string]interface{}{},
-		})
-	})
-}
+// (sendEmailVerifiedNotification removed in commit f9b590c — verification
+// now completes silently. Restore from git history if the notification
+// behaviour is ever re-enabled.)
 
 // generateDeviceCredentialSecret returns 32 random bytes encoded as URL-safe
 // base64. ~256 bits of entropy — large enough that brute-force lookup against
