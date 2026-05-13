@@ -80,15 +80,16 @@ func NewUserRepository(db *database.DB) UserRepository {
 // Create creates a new user
 func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 	query := `
-		INSERT INTO users (id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+		INSERT INTO users (id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
 			oauth_provider, oauth_provider_id, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 	`
 
 	_, err := r.db.Pool.Exec(ctx, query,
 		user.ID,
 		user.Email,
 		user.Phone,
+		user.PhoneCountryCode,
 		user.PasswordHash,
 		user.EmailVerified,
 		user.PhoneVerified,
@@ -114,7 +115,7 @@ func (r *userRepository) Create(ctx context.Context, user *models.User) error {
 // GetByID retrieves a user by ID
 func (r *userRepository) GetByID(ctx context.Context, id string) (*models.User, error) {
 	query := `
-		SELECT id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+		SELECT id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
 			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
 			locked_until, created_at, updated_at, deleted_at
 		FROM users
@@ -126,6 +127,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*models.User, 
 		&user.ID,
 		&user.Email,
 		&user.Phone,
+		&user.PhoneCountryCode,
 		&user.PasswordHash,
 		&user.EmailVerified,
 		&user.PhoneVerified,
@@ -154,7 +156,7 @@ func (r *userRepository) GetByID(ctx context.Context, id string) (*models.User, 
 // GetByIDIncludingDeleted retrieves a user by ID even if soft-deleted
 func (r *userRepository) GetByIDIncludingDeleted(ctx context.Context, id string) (*models.User, error) {
 	query := `
-		SELECT id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+		SELECT id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
 			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
 			locked_until, created_at, updated_at, deleted_at
 		FROM users
@@ -166,6 +168,7 @@ func (r *userRepository) GetByIDIncludingDeleted(ctx context.Context, id string)
 		&user.ID,
 		&user.Email,
 		&user.Phone,
+		&user.PhoneCountryCode,
 		&user.PasswordHash,
 		&user.EmailVerified,
 		&user.PhoneVerified,
@@ -194,7 +197,7 @@ func (r *userRepository) GetByIDIncludingDeleted(ctx context.Context, id string)
 // GetByEmail retrieves a user by email
 func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.User, error) {
 	query := `
-		SELECT id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+		SELECT id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
 			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
 			locked_until, created_at, updated_at, deleted_at
 		FROM users
@@ -206,6 +209,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 		&user.ID,
 		&user.Email,
 		&user.Phone,
+		&user.PhoneCountryCode,
 		&user.PasswordHash,
 		&user.EmailVerified,
 		&user.PhoneVerified,
@@ -234,7 +238,7 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 // GetByEmailIncludingDeleted retrieves a user by email, including soft-deleted
 func (r *userRepository) GetByEmailIncludingDeleted(ctx context.Context, email string) (*models.User, error) {
 	query := `
-		SELECT id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+		SELECT id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
 			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
 			locked_until, created_at, updated_at, deleted_at
 		FROM users
@@ -246,6 +250,7 @@ func (r *userRepository) GetByEmailIncludingDeleted(ctx context.Context, email s
 		&user.ID,
 		&user.Email,
 		&user.Phone,
+		&user.PhoneCountryCode,
 		&user.PasswordHash,
 		&user.EmailVerified,
 		&user.PhoneVerified,
@@ -275,8 +280,9 @@ func (r *userRepository) GetByEmailIncludingDeleted(ctx context.Context, email s
 func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 	query := `
 		UPDATE users
-		SET email = $2, phone = $3, password_hash = $4, email_verified = $5,
-			phone_verified = $6, mfa_enabled = $7, role = $8, updated_at = $9
+		SET email = $2, phone = $3, phone_country_code = $4, password_hash = $5,
+			email_verified = $6, phone_verified = $7, mfa_enabled = $8, role = $9,
+			updated_at = $10
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 
@@ -284,6 +290,7 @@ func (r *userRepository) Update(ctx context.Context, user *models.User) error {
 		user.ID,
 		user.Email,
 		user.Phone,
+		user.PhoneCountryCode,
 		user.PasswordHash,
 		user.EmailVerified,
 		user.PhoneVerified,
@@ -934,12 +941,12 @@ func (r *userRepository) CreateUserWithProfile(ctx context.Context, user *models
 	return r.db.WithTransaction(ctx, func(tx pgx.Tx) error {
 		// Create user
 		userQuery := `
-			INSERT INTO users (id, email, phone, password_hash, email_verified, phone_verified, mfa_enabled, role,
+			INSERT INTO users (id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
 				oauth_provider, oauth_provider_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+			VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 		`
 		_, err := tx.Exec(ctx, userQuery,
-			user.ID, user.Email, user.Phone, user.PasswordHash,
+			user.ID, user.Email, user.Phone, user.PhoneCountryCode, user.PasswordHash,
 			user.EmailVerified, user.PhoneVerified, user.MFAEnabled, user.Role,
 			user.OAuthProvider, user.OAuthProviderID, user.CreatedAt, user.UpdatedAt,
 		)

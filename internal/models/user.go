@@ -46,6 +46,10 @@ type User struct {
 	ID                   string             `json:"id"`
 	Email                string             `json:"email"`
 	Phone                *string            `json:"phone,omitempty"`
+	// PhoneCountryCode is the ISO-3166 alpha-2 region the phone number
+	// belongs to (e.g. "AF", "US"). Persisted so the mobile picker can
+	// restore the user's last region without re-parsing E.164.
+	PhoneCountryCode     *string            `json:"phone_country_code,omitempty"`
 	PasswordHash         *string            `json:"-"` // Never expose password hash
 	EmailVerified        bool               `json:"email_verified"`
 	PhoneVerified        bool               `json:"phone_verified"`

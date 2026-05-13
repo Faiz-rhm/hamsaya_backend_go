@@ -19,7 +19,8 @@ type UpdateProfileRequest struct {
 	// Phone lives on the User row, not the Profile row, but the mobile
 	// edit-profile screen surfaces it alongside other profile fields, so
 	// accept it here and let ProfileService persist it via userRepo.Update.
-	Phone        *string              `json:"phone,omitempty" validate:"omitempty,max=32"`
+	Phone            *string `json:"phone,omitempty" validate:"omitempty,max=32"`
+	PhoneCountryCode *string `json:"phone_country_code,omitempty" validate:"omitempty,len=2"`
 	Website      *string              `json:"website,omitempty" validate:"omitempty,url"`
 	Country      *string              `json:"country,omitempty" validate:"omitempty,max=100"`
 	Province     *string              `json:"province,omitempty" validate:"omitempty,max=100"`
@@ -68,8 +69,9 @@ type FullProfileResponse struct {
 	// needs to round-trip it through the same response so users can see
 	// and update their saved number. Pulled from user.Phone in
 	// ToFullProfileResponse.
-	Phone         *string   `json:"phone,omitempty"`
-	EmailVerified bool      `json:"email_verified"`
+	Phone            *string `json:"phone,omitempty"`
+	PhoneCountryCode *string `json:"phone_country_code,omitempty"`
+	EmailVerified    bool    `json:"email_verified"`
 	PhoneVerified bool      `json:"phone_verified"`
 	MFAEnabled    bool      `json:"mfa_enabled"`
 
@@ -156,9 +158,10 @@ func ToFullProfileResponse(user *User, profile *Profile) *FullProfileResponse {
 		IsComplete:    profile.IsComplete,
 		CreatedAt:     profile.CreatedAt,
 		UpdatedAt:     profile.UpdatedAt,
-		Email:         user.Email,
-		Phone:         user.Phone,
-		EmailVerified: user.EmailVerified,
+		Email:            user.Email,
+		Phone:            user.Phone,
+		PhoneCountryCode: user.PhoneCountryCode,
+		EmailVerified:    user.EmailVerified,
 		PhoneVerified: user.PhoneVerified,
 		MFAEnabled:    user.MFAEnabled,
 		// Stats will be populated by service layer
