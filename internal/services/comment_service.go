@@ -11,7 +11,6 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/bgtasks"
-	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
 
@@ -112,12 +111,11 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 		UpdatedAt:       now,
 	}
 
-	// Handle location
+	// Handle location — repo's INSERT builds the geography column via
+	// ST_MakePoint(lng, lat) from these two values.
 	if req.Latitude != nil && req.Longitude != nil {
-		comment.Location = &pgtype.Point{
-			P:     pgtype.Vec2{X: *req.Longitude, Y: *req.Latitude},
-			Valid: true,
-		}
+		comment.Latitude = req.Latitude
+		comment.Longitude = req.Longitude
 	}
 
 	// Store mentioned user IDs (order matches @mentions in text for client)
@@ -563,11 +561,12 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 		}
 	}
 
-	// Add location info
-	if comment.Location != nil && comment.Location.Valid {
+	// Add location info — Latitude/Longitude are unpacked from the
+	// geography column in the repo SELECT.
+	if comment.Latitude != nil && comment.Longitude != nil {
 		response.Location = &models.LocationInfo{
-			Latitude:  &comment.Location.P.Y,
-			Longitude: &comment.Location.P.X,
+			Latitude:  comment.Latitude,
+			Longitude: comment.Longitude,
 		}
 	}
 

@@ -2,25 +2,26 @@ package models
 
 import (
 	"time"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // PostComment represents a comment on a post
 type PostComment struct {
-	ID                string         `json:"id"`
-	PostID            string         `json:"post_id"`
-	UserID            string         `json:"user_id"`
-	BusinessID        *string        `json:"business_id,omitempty"`
-	ParentCommentID   *string        `json:"parent_comment_id,omitempty"`
-	Text              string         `json:"text"`
-	Location          *pgtype.Point  `json:"location,omitempty"`
-	TotalLikes        int            `json:"total_likes"`
-	TotalReplies      int            `json:"total_replies"`
-	CreatedAt         time.Time      `json:"created_at"`
-	UpdatedAt         time.Time      `json:"updated_at"`
-	DeletedAt         *time.Time     `json:"-"`
-	MentionedUserIDs  []string       `json:"-"` // Stored in DB as JSONB; order matches @mentions in text
+	ID              string     `json:"id"`
+	PostID          string     `json:"post_id"`
+	UserID          string     `json:"user_id"`
+	BusinessID      *string    `json:"business_id,omitempty"`
+	ParentCommentID *string    `json:"parent_comment_id,omitempty"`
+	Text            string     `json:"text"`
+	// Latitude / Longitude are unpacked from the GEOGRAPHY(POINT, 4326)
+	// `location` column via ST_Y / ST_X. nil when no point was attached.
+	Latitude         *float64  `json:"latitude,omitempty"`
+	Longitude        *float64  `json:"longitude,omitempty"`
+	TotalLikes       int       `json:"total_likes"`
+	TotalReplies     int       `json:"total_replies"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+	DeletedAt        *time.Time `json:"-"`
+	MentionedUserIDs []string  `json:"-"` // Stored in DB as JSONB; order matches @mentions in text
 }
 
 // CommentAttachment represents an attachment on a comment

@@ -53,12 +53,23 @@ func (r *commentRepository) Create(ctx context.Context, comment *models.PostComm
 	if len(comment.MentionedUserIDs) > 0 {
 		mentionedJSON, _ = json.Marshal(comment.MentionedUserIDs)
 	}
+
+	// `location` is a GEOGRAPHY(POINT, 4326) column. Building it from
+	// the lat/lng inline via ST_MakePoint keeps the repo unaware of
+	// PostGIS WKB internals. When the user didn't attach a point, the
+	// CASE branch returns NULL so the column stays empty.
 	query := `
 		INSERT INTO post_comments (
 			id, post_id, user_id, business_id, parent_comment_id, text, location,
 			total_likes, total_replies, created_at, updated_at, mentioned_user_ids
 		) VALUES (
-			$1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+			$1, $2, $3, $4, $5, $6,
+			CASE
+				WHEN $7::double precision IS NOT NULL AND $8::double precision IS NOT NULL
+					THEN ST_SetSRID(ST_MakePoint($8, $7), 4326)::geography
+				ELSE NULL
+			END,
+			$9, $10, $11, $12, $13
 		)
 	`
 
@@ -69,7 +80,8 @@ func (r *commentRepository) Create(ctx context.Context, comment *models.PostComm
 		comment.BusinessID,
 		comment.ParentCommentID,
 		comment.Text,
-		comment.Location,
+		comment.Latitude,
+		comment.Longitude,
 		comment.TotalLikes,
 		comment.TotalReplies,
 		comment.CreatedAt,
@@ -84,7 +96,9 @@ func (r *commentRepository) Create(ctx context.Context, comment *models.PostComm
 func (r *commentRepository) GetByID(ctx context.Context, commentID string) (*models.PostComment, error) {
 	query := `
 		SELECT
-			id, post_id, user_id, business_id, parent_comment_id, text, location,
+			id, post_id, user_id, business_id, parent_comment_id, text,
+			ST_Y(location::geometry)::double precision,
+			ST_X(location::geometry)::double precision,
 			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE id = $1 AND deleted_at IS NULL
@@ -99,7 +113,8 @@ func (r *commentRepository) GetByID(ctx context.Context, commentID string) (*mod
 		&comment.BusinessID,
 		&comment.ParentCommentID,
 		&comment.Text,
-		&comment.Location,
+		&comment.Latitude,
+		&comment.Longitude,
 		&comment.TotalLikes,
 		&comment.TotalReplies,
 		&comment.CreatedAt,
@@ -154,7 +169,9 @@ func (r *commentRepository) Delete(ctx context.Context, commentID string) error 
 func (r *commentRepository) GetByPostID(ctx context.Context, postID string, limit, offset int) ([]*models.PostComment, error) {
 	query := `
 		SELECT
-			id, post_id, user_id, business_id, parent_comment_id, text, location,
+			id, post_id, user_id, business_id, parent_comment_id, text,
+			ST_Y(location::geometry)::double precision,
+			ST_X(location::geometry)::double precision,
 			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE post_id = $1 AND parent_comment_id IS NULL AND deleted_at IS NULL
@@ -169,7 +186,9 @@ func (r *commentRepository) GetByPostID(ctx context.Context, postID string, limi
 func (r *commentRepository) GetReplies(ctx context.Context, parentCommentID string, limit, offset int) ([]*models.PostComment, error) {
 	query := `
 		SELECT
-			id, post_id, user_id, business_id, parent_comment_id, text, location,
+			id, post_id, user_id, business_id, parent_comment_id, text,
+			ST_Y(location::geometry)::double precision,
+			ST_X(location::geometry)::double precision,
 			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE parent_comment_id = $1 AND deleted_at IS NULL
@@ -186,7 +205,9 @@ func (r *commentRepository) GetReplies(ctx context.Context, parentCommentID stri
 func (r *commentRepository) GetByUserID(ctx context.Context, userID string, limit, offset int) ([]*models.PostComment, error) {
 	query := `
 		SELECT
-			id, post_id, user_id, business_id, parent_comment_id, text, location,
+			id, post_id, user_id, business_id, parent_comment_id, text,
+			ST_Y(location::geometry)::double precision,
+			ST_X(location::geometry)::double precision,
 			total_likes, total_replies, created_at, updated_at, deleted_at, mentioned_user_ids
 		FROM post_comments
 		WHERE user_id = $1 AND deleted_at IS NULL
@@ -365,7 +386,8 @@ func (r *commentRepository) queryComments(ctx context.Context, query string, arg
 			&comment.BusinessID,
 			&comment.ParentCommentID,
 			&comment.Text,
-			&comment.Location,
+			&comment.Latitude,
+			&comment.Longitude,
 			&comment.TotalLikes,
 			&comment.TotalReplies,
 			&comment.CreatedAt,
