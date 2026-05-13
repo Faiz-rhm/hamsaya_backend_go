@@ -60,6 +60,11 @@ type FullProfileResponse struct {
 
 	// User info
 	Email         string    `json:"email"`
+	// Phone lives on User, not Profile, but the mobile edit-profile UI
+	// needs to round-trip it through the same response so users can see
+	// and update their saved number. Pulled from user.Phone in
+	// ToFullProfileResponse.
+	Phone         *string   `json:"phone,omitempty"`
 	EmailVerified bool      `json:"email_verified"`
 	PhoneVerified bool      `json:"phone_verified"`
 	MFAEnabled    bool      `json:"mfa_enabled"`
@@ -148,6 +153,7 @@ func ToFullProfileResponse(user *User, profile *Profile) *FullProfileResponse {
 		CreatedAt:     profile.CreatedAt,
 		UpdatedAt:     profile.UpdatedAt,
 		Email:         user.Email,
+		Phone:         user.Phone,
 		EmailVerified: user.EmailVerified,
 		PhoneVerified: user.PhoneVerified,
 		MFAEnabled:    user.MFAEnabled,
