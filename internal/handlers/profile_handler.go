@@ -14,24 +14,27 @@ import (
 
 // ProfileHandler handles profile-related endpoints
 type ProfileHandler struct {
-	profileService *services.ProfileService
-	storageService *services.StorageService
-	validator      *utils.Validator
-	logger         *zap.Logger
+	profileService          *services.ProfileService
+	storageService          *services.StorageService
+	deletionRequestService  *services.DeletionRequestService
+	validator               *utils.Validator
+	logger                  *zap.Logger
 }
 
 // NewProfileHandler creates a new profile handler
 func NewProfileHandler(
 	profileService *services.ProfileService,
 	storageService *services.StorageService,
+	deletionRequestService *services.DeletionRequestService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *ProfileHandler {
 	return &ProfileHandler{
-		profileService: profileService,
-		storageService: storageService,
-		validator:      validator,
-		logger:         logger,
+		profileService:         profileService,
+		storageService:         storageService,
+		deletionRequestService: deletionRequestService,
+		validator:              validator,
+		logger:                 logger,
 	}
 }
 
@@ -364,7 +367,26 @@ func (h *ProfileHandler) DeleteAccount(c *gin.Context) {
 		return
 	}
 
-	if err := h.profileService.DeactivateAccount(c.Request.Context(), userID.(string)); err != nil {
+	uid := userID.(string)
+
+	// Open a GDPR-style deletion request before soft-deleting so the
+	// admin panel's deletion-requests page surfaces every user-initiated
+	// deletion. Best-effort: a failure here does not block the user from
+	// finishing their delete — they shouldn't get stuck because of an
+	// internal bookkeeping problem.
+	if h.deletionRequestService != nil {
+		if _, err := h.deletionRequestService.Create(
+			c.Request.Context(),
+			uid,
+			"User initiated account deletion",
+			c.ClientIP(),
+		); err != nil {
+			h.logger.Warn("Failed to record deletion request",
+				zap.String("user_id", uid), zap.Error(err))
+		}
+	}
+
+	if err := h.profileService.DeactivateAccount(c.Request.Context(), uid); err != nil {
 		h.handleError(c, err)
 		return
 	}

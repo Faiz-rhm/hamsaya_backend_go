@@ -386,7 +386,7 @@ func main() {
 	customRoleHandler := handlers.NewCustomRoleHandler(customRoleRepo, logger)
 	mfaHandler := handlers.NewMFAHandler(mfaService, validator, logger)
 	oauthHandler := handlers.NewOAuthHandler(authService, oauthService, validator, logger)
-	profileHandler := handlers.NewProfileHandler(profileService, storageService, validator, logger)
+	profileHandler := handlers.NewProfileHandler(profileService, storageService, deletionRequestService, validator, logger)
 	relationshipsHandler := handlers.NewRelationshipsHandler(relationshipsService, logger)
 	postHandler := handlers.NewPostHandler(postService, storageService, validator, logger)
 	commentHandler := handlers.NewCommentHandler(commentService, validator, logger)

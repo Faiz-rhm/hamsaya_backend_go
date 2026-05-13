@@ -1132,8 +1132,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, session
 		// Continue anyway
 	}
 
-	// In-app + push notification
-	s.sendPasswordChangedNotification(ctx, userID)
+	// In-app / push notification intentionally skipped — operator
+	// preference: password change is confirmed by the email channel
+	// alone, no in-app banner or push delivery.
 
 	s.logger.Info("Password changed successfully", zap.String("user_id", userID))
 	return nil
@@ -1402,23 +1403,9 @@ func (s *AuthService) sendWelcomeNotification(ctx context.Context, userID, first
 	})
 }
 
-// sendPasswordChangedNotification confirms a successful password change.
-func (s *AuthService) sendPasswordChangedNotification(ctx context.Context, userID string) {
-	if s.notificationService == nil {
-		return
-	}
-	bgtasks.Submit(func(ctxDetach context.Context) {
-		title := "Password updated"
-		msg := "Your password was changed successfully. If this wasn't you, contact support immediately."
-		_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
-			UserID:  userID,
-			Type:    models.NotificationTypePasswordChanged,
-			Title:   &title,
-			Message: &msg,
-			Data:    map[string]interface{}{},
-		})
-	})
-}
+// (sendPasswordChangedNotification removed — password-change confirmation
+// is now delivered via email only. Restore from git history if the in-app
+// notification ever needs to come back.)
 
 // (sendEmailVerifiedNotification removed in commit f9b590c — verification
 // now completes silently. Restore from git history if the notification
