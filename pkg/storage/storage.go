@@ -70,7 +70,7 @@ func NewClient(cfg *Config, logger *zap.Logger) (*Client, error) {
 	client := &Client{
 		client:     minioClient,
 		bucketName: cfg.BucketName,
-		cdnURL:     cfg.CDNURL,
+		cdnURL:     normalizeCDNURL(cfg.CDNURL),
 		useSSL:     cfg.UseSSL,
 		endpoint:   cfg.Endpoint,
 		logger:     logger,
@@ -122,7 +122,11 @@ func (c *Client) Stat(ctx context.Context) Stats {
 	return out
 }
 
-// ensureBucket ensures the bucket exists, creates it if not
+// ensureBucket ensures the bucket exists AND that its policy is set to
+// public-read for s3:GetObject. The policy step is idempotent and runs
+// on every boot — operators who recreate the bucket out-of-band (or
+// inherit a private bucket from a prior deploy) don't have to wipe
+// MinIO state to restore image visibility.
 func (c *Client) ensureBucket(ctx context.Context) error {
 	exists, err := c.client.BucketExists(ctx, c.bucketName)
 	if err != nil {
@@ -134,23 +138,24 @@ func (c *Client) ensureBucket(ctx context.Context) error {
 			return fmt.Errorf("failed to create bucket: %w", err)
 		}
 		c.logger.Info("Created storage bucket", zap.String("bucket", c.bucketName))
+	}
 
-		// Set bucket policy to public-read for uploaded files
-		policy := fmt.Sprintf(`{
-			"Version": "2012-10-17",
-			"Statement": [
-				{
-					"Effect": "Allow",
-					"Principal": {"AWS": ["*"]},
-					"Action": ["s3:GetObject"],
-					"Resource": ["arn:aws:s3:::%s/*"]
-				}
-			]
-		}`, c.bucketName)
+	policy := fmt.Sprintf(`{
+		"Version": "2012-10-17",
+		"Statement": [
+			{
+				"Effect": "Allow",
+				"Principal": {"AWS": ["*"]},
+				"Action": ["s3:GetObject"],
+				"Resource": ["arn:aws:s3:::%s/*"]
+			}
+		]
+	}`, c.bucketName)
 
-		if err := c.client.SetBucketPolicy(ctx, c.bucketName, policy); err != nil {
-			c.logger.Warn("Failed to set bucket policy", zap.Error(err))
-		}
+	if err := c.client.SetBucketPolicy(ctx, c.bucketName, policy); err != nil {
+		c.logger.Warn("Failed to apply public-read bucket policy", zap.Error(err))
+	} else {
+		c.logger.Info("Applied public-read bucket policy", zap.String("bucket", c.bucketName))
 	}
 
 	return nil
@@ -377,6 +382,18 @@ func EnsureBucketInStorageURL(url, bucketName string) string {
 		return url[:idx+3+pathIdx] + "/" + bucketName + path
 	}
 	return url
+}
+
+// normalizeCDNURL strips trailing slashes and the legacy "/storage" path
+// segment that operators sometimes paste into CDN_URL by analogy with
+// the admin panel's /storage proxy. Backend URLs are MinIO path-style
+// (base + "/" + bucket + "/" + key), so any extra path segment breaks
+// the URL — guard against the common mistake at config-load time.
+func normalizeCDNURL(raw string) string {
+	out := strings.TrimRight(raw, "/")
+	out = strings.TrimSuffix(out, "/storage")
+	out = strings.TrimRight(out, "/")
+	return out
 }
 
 // getPublicURL constructs the public URL for an object.
