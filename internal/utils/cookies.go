@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -38,12 +39,21 @@ type CookieConfig struct {
 }
 
 // NewCookieConfig returns sane defaults given a deployment env string
-// ("development" / "staging" / "production"). Secure is forced on outside of
-// development.
+// ("development" / "staging" / "production"). Secure is forced on outside
+// of development. Set the COOKIE_INSECURE=true env var to override and
+// emit non-Secure cookies in production-tagged environments — useful for
+// deployments still served over plain HTTP (e.g. raw sslip.io / IP hosts
+// before TLS is wired up). Browsers silently drop Secure cookies on
+// http:// origins, which surfaces as 'login works but page stays on
+// /login' since the auth cookies never persist.
 func NewCookieConfig(env, domain string) CookieConfig {
+	secure := env != "development"
+	if v := os.Getenv("COOKIE_INSECURE"); v == "true" || v == "1" {
+		secure = false
+	}
 	return CookieConfig{
 		Domain:   domain,
-		Secure:   env != "development",
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 	}
 }
