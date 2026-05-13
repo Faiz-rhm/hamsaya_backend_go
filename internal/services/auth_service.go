@@ -228,17 +228,10 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 
 	// USER EXISTS - Login flow
 	if err == nil && existingUser != nil {
-		// Check if account is locked. Return the same generic message as wrong-password
-		// so attackers cannot distinguish locked accounts from non-existent ones.
-		if existingUser.IsLocked() {
-			s.logger.Warn("Login attempt for locked account",
-				zap.String("user_id", existingUser.ID),
-				zap.Time("locked_until", *existingUser.LockedUntil),
-			)
-			return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
-		}
-
-		// Verify password
+		// Verify password FIRST so we can return a specific "suspended"
+		// message only to clients that proved they own the account.
+		// Wrong-password attempts still get the generic 401 so attackers
+		// can't enumerate locked vs. non-existent accounts.
 		if existingUser.PasswordHash == nil || !s.passwordService.Verify(req.Password, *existingUser.PasswordHash) {
 			// Increment failed login attempts
 			attempts := existingUser.FailedLoginAttempts + 1
@@ -258,6 +251,18 @@ func (s *AuthService) UnifiedAuth(ctx context.Context, req *models.UnifiedAuthRe
 			)
 
 			return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
+		}
+
+		// Password is correct. If the account is locked / suspended,
+		// surface a clear message so the mobile client can log the user
+		// out and route them to a "contact support" UI instead of
+		// looping on bad-credentials toasts.
+		if existingUser.IsLocked() {
+			s.logger.Warn("Login attempt for locked account (valid password)",
+				zap.String("user_id", existingUser.ID),
+				zap.Time("locked_until", *existingUser.LockedUntil),
+			)
+			return nil, utils.NewForbiddenError("Your account has been suspended", utils.ErrForbidden)
 		}
 
 		// Check if MFA is enabled
