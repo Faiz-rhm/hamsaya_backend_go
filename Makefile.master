@@ -10,7 +10,8 @@
 .PHONY: help \
         migrate-up migrate-status \
         seed-master seed-admin seed-business-categories \
-        shell
+        shell \
+        db-reset seed-demo migrate-down backfill-notifications
 
 help:
 	@echo "Production-safe targets (idempotent):"
@@ -42,3 +43,12 @@ seed-business-categories:
 
 shell:
 	@bash
+
+# Destructive targets are intentionally not implemented here. They are
+# .PHONY-declared so the same-named binary on disk doesn't satisfy them
+# with "Nothing to be done", and they print a redirect to Makefile.demo.
+db-reset seed-demo migrate-down backfill-notifications:
+	@echo "✘ '$@' is destructive / demo-only and is not in the master Makefile."
+	@echo "  Run it explicitly with:"
+	@echo "    make -f Makefile.demo $@"
+	@exit 1
