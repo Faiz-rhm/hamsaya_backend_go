@@ -458,9 +458,14 @@ func main() {
 
 			// Admin SPA cookie-auth flow (HttpOnly + CSRF). Parallel to the
 			// JSON-token endpoints above; mobile clients keep using /login.
-			auth.POST("/admin/login", rateLimiter.LimitLoginAttempts(), adminAuthHandler.AdminLogin)
-			auth.POST("/admin/refresh", rateLimiter.LimitAuth(), adminAuthHandler.AdminRefresh)
-			auth.POST("/admin/mfa/verify", rateLimiter.LimitAuth(), adminAuthHandler.AdminMFAVerify)
+			// Rate limiting intentionally disabled on /admin/login and the
+			// MFA/refresh helpers per operator request. Brute-force defence
+			// for the admin panel must come from external means (IP allow-
+			// list at the reverse proxy, MFA on every admin, account lockout
+			// after N failed attempts in auth_service).
+			auth.POST("/admin/login", adminAuthHandler.AdminLogin)
+			auth.POST("/admin/refresh", adminAuthHandler.AdminRefresh)
+			auth.POST("/admin/mfa/verify", adminAuthHandler.AdminMFAVerify)
 			auth.POST("/admin/logout", authMiddleware.RequireAuth(), middleware.CSRF(), adminAuthHandler.AdminLogout)
 
 			// Protected auth routes (require authentication)
