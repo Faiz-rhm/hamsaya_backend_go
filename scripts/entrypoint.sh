@@ -71,18 +71,20 @@ if ! ./migrate up 2>&1 | tee "${migrate_log}"; then
 fi
 rm -f "${migrate_log}"
 
-# Ensure a super-admin user exists. cmd/seed-admin is idempotent: it
-# creates admin@hamsaya.af / Admin123! if missing, or upgrades the
-# existing row to RoleSuperAdmin and resets the password. Without this
-# step a freshly initialised database has no admin tier user, so the
-# admin panel login returns 403 ('Admin privileges required'). Skip
-# with SEED_ADMIN_ON_BOOT=false once the default credentials have been
-# rotated so re-deploys do not silently reset them.
-if [ "${SEED_ADMIN_ON_BOOT:-true}" = "true" ]; then
-  echo "[entrypoint] Seeding admin user (idempotent)..."
-  ./seed-admin || echo "[entrypoint] seed-admin returned non-zero (continuing)."
+# Apply the master seed (production-essential, idempotent): super-admin
+# user, sell_categories, business_categories, daily_post_limits,
+# starter custom_roles. Skipping the admin step alone would leave a
+# freshly-initialised database with no admin user and the admin panel
+# returns 403. Skip with SEED_MASTER_ON_BOOT=false once defaults have
+# been rotated so re-deploys do not silently reset credentials.
+#
+# Legacy: SEED_ADMIN_ON_BOOT=false still disables the seed for
+# operators carrying that flag forward from earlier releases.
+if [ "${SEED_MASTER_ON_BOOT:-${SEED_ADMIN_ON_BOOT:-true}}" = "true" ]; then
+  echo "[entrypoint] Applying master seed (admin + categories + roles)..."
+  ./seed-master || echo "[entrypoint] seed-master returned non-zero (continuing)."
 else
-  echo "[entrypoint] SEED_ADMIN_ON_BOOT=false — skipping admin seed."
+  echo "[entrypoint] SEED_MASTER_ON_BOOT=false — skipping master seed."
 fi
 
 echo "[entrypoint] Starting server..."

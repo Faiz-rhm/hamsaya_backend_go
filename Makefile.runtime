@@ -1,28 +1,31 @@
 # Hamsaya runtime Makefile — shipped inside the production container.
-#
-# Targets here invoke pre-built Go binaries (no Go toolchain in the
-# runtime image). For full dev tasks (test/lint/build) run `make` in a
-# checkout outside the container.
-#
-# Usage from inside the api container:
-#   docker exec -it hamsaya-api-prod make help
-#   docker exec -it hamsaya-api-prod make seed
-#   docker exec -it hamsaya-api-prod make migrate-up
-#   docker exec -it hamsaya-api-prod make db-reset
+# Targets invoke pre-built Go binaries (no Go toolchain in the runtime
+# image). For full dev tasks (test/lint/build) run `make` in a checkout
+# outside the container.
 
-.PHONY: help migrate-up migrate-down migrate-status seed seed-admin seed-business-categories db-reset backfill-notifications shell
+.PHONY: help migrate-up migrate-down migrate-status \
+        seed-master seed-demo seed-admin \
+        seed-business-categories \
+        db-reset backfill-notifications shell
 
 help:
 	@echo "Available targets:"
-	@echo "  migrate-up             Apply all pending migrations"
-	@echo "  migrate-down           Roll back the last migration"
-	@echo "  migrate-status         Show applied / pending migrations"
-	@echo "  seed                   Insert sample data (incl. sell categories)"
-	@echo "  seed-admin             Create admin user"
-	@echo "  seed-business-categories  Seed business categories only (no wipe)"
-	@echo "  db-reset               Wipe data, keep schema, re-run category seed"
-	@echo "  backfill-notifications One-off: backfill notifications from likes/comments"
-	@echo "  shell                  Drop into bash inside the container"
+	@echo ""
+	@echo "  PRODUCTION (safe, idempotent — run any time)"
+	@echo "    migrate-up               Apply all pending migrations"
+	@echo "    migrate-status           Show applied / pending migrations"
+	@echo "    seed-master              Admin user + sell + business categories + daily limits + custom roles"
+	@echo "    seed-admin               Just the super-admin user (subset of seed-master)"
+	@echo "    seed-business-categories Re-seed business_categories only (truncates first)"
+	@echo ""
+	@echo "  DEMO / DEV ONLY (DO NOT run against production)"
+	@echo "    seed-demo                Fake users + posts + businesses for local demos"
+	@echo "    db-reset                 TRUNCATE app tables, then re-seed master data"
+	@echo "    migrate-down             Roll back the last migration"
+	@echo ""
+	@echo "  TOOLING"
+	@echo "    backfill-notifications   One-off backfill from existing likes/comments"
+	@echo "    shell                    Drop into bash inside the container"
 
 migrate-up:
 	./migrate up
@@ -33,8 +36,11 @@ migrate-down:
 migrate-status:
 	./migrate status
 
-seed:
-	./seed
+seed-master:
+	./seed-master
+
+seed-demo:
+	./seed-demo
 
 seed-admin:
 	./seed-admin

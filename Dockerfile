@@ -10,10 +10,12 @@ WORKDIR /app
 # Copy source and vendored modules (build offline, no go mod download)
 COPY . .
 
-# Server / seed / seed-admin transitively import pkg/storage which needs
-# go-webp (CGO). migrate / db-reset / backfill-notifications are pure Go.
+# Server / seed-demo / seed-master / seed-admin transitively import
+# pkg/storage which needs go-webp (CGO). migrate / db-reset /
+# backfill-notifications are pure Go.
 RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/main             ./cmd/server
-RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/seed             ./cmd/seed
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/seed-master      ./cmd/seed-master
+RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/seed-demo        ./cmd/seed-demo
 RUN CGO_ENABLED=1 GOOS=linux go build -mod=mod -a -o /out/seed-admin       ./cmd/seed-admin
 RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o /out/migrate          ./cmd/migrate
 RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -a -o /out/db-reset         ./cmd/db-reset
@@ -43,7 +45,8 @@ WORKDIR /app
 # Copy binaries from builder.
 COPY --from=builder --chown=app:app /out/main                    ./main
 COPY --from=builder --chown=app:app /out/migrate                 ./migrate
-COPY --from=builder --chown=app:app /out/seed                    ./seed
+COPY --from=builder --chown=app:app /out/seed-master             ./seed-master
+COPY --from=builder --chown=app:app /out/seed-demo               ./seed-demo
 COPY --from=builder --chown=app:app /out/seed-admin              ./seed-admin
 COPY --from=builder --chown=app:app /out/db-reset                ./db-reset
 COPY --from=builder --chown=app:app /out/backfill-notifications  ./backfill-notifications

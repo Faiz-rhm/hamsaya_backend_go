@@ -1,3 +1,8 @@
+// Command seed-demo inserts non-production sample data: fake users, fake
+// posts, fake businesses, and example categories. Intended for local
+// development and demo environments only — never run against production.
+// For the idempotent production seed (admin user, real categories,
+// roles, daily limits) use the `seed-master` command instead.
 package main
 
 import (
