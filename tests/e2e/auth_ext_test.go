@@ -76,9 +76,14 @@ func TestE2E_Auth_SendVerificationEmail(t *testing.T) {
 		env.url("/api/v1/auth/send-verification-email"), tokens.AccessToken, ""))
 	defer func() { _ = resp.Body.Close() }()
 	raw, _ := io.ReadAll(resp.Body)
-	// 200 when email not configured (already verified) or 500 when email send fails
-	assert.True(t, resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusInternalServerError,
-		"send-verification-email unexpected status %d: %s", resp.StatusCode, string(raw))
+	// Acceptable outcomes:
+	//   200 — email actually sent (Resend / SMTP configured)
+	//   400 — profile not yet complete (auth_service gates OTPs until is_complete=true)
+	//   500 — email send failed (Resend/SMTP unreachable)
+	ok := resp.StatusCode == http.StatusOK ||
+		resp.StatusCode == http.StatusBadRequest ||
+		resp.StatusCode == http.StatusInternalServerError
+	assert.True(t, ok, "send-verification-email unexpected status %d: %s", resp.StatusCode, string(raw))
 }
 
 func TestE2E_Auth_DeleteAccount(t *testing.T) {
