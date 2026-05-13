@@ -20,6 +20,7 @@ func setupCtx() (*gin.Context, *httptest.ResponseRecorder) {
 
 func TestSetAdminAuthCookies_FlagsAndScope(t *testing.T) {
 	c, w := setupCtx()
+	t.Setenv("COOKIE_SECURE", "true")
 	cfg := NewCookieConfig("production", "admin.example.com")
 	SetAdminAuthCookies(c, cfg, "atok", "rtok", "csrftok", 5*time.Minute, 7*24*time.Hour)
 
