@@ -71,5 +71,19 @@ if ! ./migrate up 2>&1 | tee "${migrate_log}"; then
 fi
 rm -f "${migrate_log}"
 
+# Ensure a super-admin user exists. cmd/seed-admin is idempotent: it
+# creates admin@hamsaya.af / Admin123! if missing, or upgrades the
+# existing row to RoleSuperAdmin and resets the password. Without this
+# step a freshly initialised database has no admin tier user, so the
+# admin panel login returns 403 ('Admin privileges required'). Skip
+# with SEED_ADMIN_ON_BOOT=false once the default credentials have been
+# rotated so re-deploys do not silently reset them.
+if [ "${SEED_ADMIN_ON_BOOT:-true}" = "true" ]; then
+  echo "[entrypoint] Seeding admin user (idempotent)..."
+  ./seed-admin || echo "[entrypoint] seed-admin returned non-zero (continuing)."
+else
+  echo "[entrypoint] SEED_ADMIN_ON_BOOT=false — skipping admin seed."
+fi
+
 echo "[entrypoint] Starting server..."
 exec ./main
