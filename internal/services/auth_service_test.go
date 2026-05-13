@@ -667,11 +667,10 @@ func TestAuthService_VerifyEmail(t *testing.T) {
 
 		user := testutil.CreateTestUser("user-2", "verify@example.com")
 		user.EmailVerified = false
-		profile := testutil.CreateTestProfile("user-2", "Verify", "User")
+		_ = testutil.CreateTestProfile("user-2", "Verify", "User")
 
 		userRepo.On("GetByID", mock.Anything, "user-2").Return(user, nil)
 		userRepo.On("Update", mock.Anything, mock.AnythingOfType("*models.User")).Return(nil)
-		userRepo.On("GetProfileByUserID", mock.Anything, "user-2").Return(profile, nil)
 
 		svc := newTestAuthService(userRepo, ts)
 		err = svc.VerifyEmail(ctx, &models.VerifyEmailRequest{Token: verificationCode})
@@ -867,6 +866,21 @@ func TestAuthService_SendVerificationEmailForUser(t *testing.T) {
 		svc := newTestAuthService(userRepo, tokenStorage)
 		err := svc.SendVerificationEmailForUser(context.Background(), "u-1")
 		require.NoError(t, err)
+	})
+
+	t.Run("profile incomplete — refuses", func(t *testing.T) {
+		userRepo := new(mocks.MockUserRepository)
+		user := testutil.CreateTestUser("u-2", "test2@example.com")
+		user.EmailVerified = false
+		profile := testutil.CreateTestProfile("u-2", "", "")
+		profile.IsComplete = false
+		userRepo.On("GetByID", mock.Anything, "u-2").Return(user, nil)
+		userRepo.On("GetProfileByUserID", mock.Anything, "u-2").Return(profile, nil)
+
+		svc := newTestAuthService(userRepo, tokenStorage)
+		err := svc.SendVerificationEmailForUser(context.Background(), "u-2")
+		require.Error(t, err)
+		assert.Contains(t, strings.ToLower(err.Error()), "complete your profile")
 	})
 }
 

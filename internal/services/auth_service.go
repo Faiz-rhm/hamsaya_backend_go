@@ -893,31 +893,19 @@ func (s *AuthService) VerifyEmail(ctx context.Context, req *models.VerifyEmailRe
 		// Continue anyway
 	}
 
-	// Get profile for welcome email
-	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
-	if err != nil {
-		s.logger.Error("Failed to get profile", zap.Error(err))
-		// Continue without welcome email
-	} else {
-		// Send welcome email
-		name := ""
-		if profile.FirstName != nil && profile.LastName != nil {
-			name = *profile.FirstName + " " + *profile.LastName
-		}
-		if err := s.emailService.SendWelcomeEmail(user.Email, name); err != nil {
-			s.logger.Error("Failed to send welcome email", zap.Error(err))
-			// Continue anyway
-		}
-	}
-
-	// In-app notification confirming verification
-	s.sendEmailVerifiedNotification(ctx, userID)
+	// No welcome email and no in-app/push notification on successful
+	// verification — operator preference: verifying is a self-service
+	// step and the user already sees the success in the UI.
 
 	s.logger.Info("Email verified successfully", zap.String("user_id", userID))
 	return nil
 }
 
-// SendVerificationEmailForUser sends a verification code email to the given user (e.g. after profile completed via PATCH).
+// SendVerificationEmailForUser sends a verification code email to the
+// given user. Refuses to send before the user has completed their
+// profile (profile.IsComplete == true) — operator preference: no OTP
+// should ever land in a user's inbox until they have a real profile so
+// abandoned skeleton accounts can't trigger email noise.
 func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID string) error {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
@@ -925,6 +913,16 @@ func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID s
 	}
 	if user.EmailVerified {
 		return nil
+	}
+
+	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
+	if err != nil {
+		return utils.NewInternalError("Failed to load profile", err)
+	}
+	if profile == nil || !profile.IsComplete {
+		s.logger.Info("Skipping verification email — profile not complete",
+			zap.String("user_id", userID))
+		return utils.NewBadRequestError("Complete your profile before requesting a verification code", nil)
 	}
 
 	verificationCode, err := s.jwtService.GenerateVerificationCode()
@@ -937,11 +935,10 @@ func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID s
 	}
 
 	name := user.Email
-	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
-	if err == nil && profile.FirstName != nil && profile.LastName != nil {
-		name = strings.TrimSpace(*profile.FirstName + " " + *profile.LastName)
-		if name == "" {
-			name = user.Email
+	if profile.FirstName != nil && profile.LastName != nil {
+		joined := strings.TrimSpace(*profile.FirstName + " " + *profile.LastName)
+		if joined != "" {
+			name = joined
 		}
 	}
 
