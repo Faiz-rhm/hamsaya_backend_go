@@ -51,10 +51,16 @@ COPY --from=builder --chown=app:app /out/seed-admin              ./seed-admin
 COPY --from=builder --chown=app:app /out/db-reset                ./db-reset
 COPY --from=builder --chown=app:app /out/backfill-notifications  ./backfill-notifications
 
-# Migrations + entrypoint + Makefile (for `make <target>` inside the container).
-COPY --from=builder --chown=app:app /app/migrations        ./migrations
-COPY --from=builder --chown=app:app /app/scripts           ./scripts
-COPY --from=builder --chown=app:app /app/Makefile.runtime  ./Makefile
+# Migrations + entrypoint + Makefiles.
+#   Makefile (== Makefile.master) — production-safe, idempotent ops.
+#                                   Default `make` target list.
+#   Makefile.demo                  — destructive / demo-only ops.
+#                                   Invoke with `make -f Makefile.demo <target>`.
+COPY --from=builder --chown=app:app /app/migrations       ./migrations
+COPY --from=builder --chown=app:app /app/scripts          ./scripts
+COPY --from=builder --chown=app:app /app/Makefile.master  ./Makefile
+COPY --from=builder --chown=app:app /app/Makefile.master  ./Makefile.master
+COPY --from=builder --chown=app:app /app/Makefile.demo    ./Makefile.demo
 RUN chmod +x ./scripts/entrypoint.sh
 
 # Backup target directory. Created+chowned BEFORE the named docker volume

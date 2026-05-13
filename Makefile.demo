@@ -1,0 +1,29 @@
+# Hamsaya — demo / destructive Makefile.
+#
+# DO NOT RUN AGAINST PRODUCTION DATA. Every target here either inserts
+# fake data, wipes tables, or rolls back schema. Invoke explicitly:
+#
+#   make -f Makefile.demo <target>
+
+.PHONY: help \
+        seed-demo db-reset migrate-down backfill-notifications
+
+help:
+	@echo "Destructive / demo-only targets (DO NOT RUN IN PRODUCTION):"
+	@echo ""
+	@echo "  seed-demo              Insert fake users / posts / businesses"
+	@echo "  db-reset               TRUNCATE app tables then re-seed master"
+	@echo "  migrate-down           Roll back the last applied migration"
+	@echo "  backfill-notifications One-off backfill from existing likes/comments"
+
+seed-demo:
+	./seed-demo
+
+db-reset:
+	./db-reset
+
+migrate-down:
+	./migrate down
+
+backfill-notifications:
+	./backfill-notifications

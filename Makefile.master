@@ -1,0 +1,44 @@
+# Hamsaya — master (production-safe) Makefile.
+#
+# Shipped to the production container as /app/Makefile (default `make`
+# entry point). Every target is idempotent and safe to run against a
+# live database. Demo / destructive operations live in Makefile.demo
+# and must be invoked explicitly:
+#
+#   make -f Makefile.demo <target>
+
+.PHONY: help \
+        migrate-up migrate-status \
+        seed-master seed-admin seed-business-categories \
+        shell
+
+help:
+	@echo "Production-safe targets (idempotent):"
+	@echo ""
+	@echo "  migrate-up               Apply all pending migrations"
+	@echo "  migrate-status           Show applied / pending migrations"
+	@echo "  seed-master              Admin + sell + business categories + daily limits + custom roles"
+	@echo "  seed-admin               Just the super-admin user (subset of seed-master)"
+	@echo "  seed-business-categories Re-seed business_categories only (truncates first)"
+	@echo "  shell                    Drop into bash inside the container"
+	@echo ""
+	@echo "Destructive / demo targets live in Makefile.demo. Invoke them with:"
+	@echo "  make -f Makefile.demo <target>"
+
+migrate-up:
+	./migrate up
+
+migrate-status:
+	./migrate status
+
+seed-master:
+	./seed-master
+
+seed-admin:
+	./seed-admin
+
+seed-business-categories:
+	SEED_BUSINESS_CATEGORIES_ONLY=1 ./db-reset
+
+shell:
+	@bash
