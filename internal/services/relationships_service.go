@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
@@ -82,14 +83,11 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 				return
 			}
 			actorName := actor.FullName()
-			if actorName == "" {
-				actorName = "Someone"
-			}
 			actorAvatarColor := ""
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor
 			}
-			title := actorName + " started following you"
+			title := strings.TrimSpace(actorName + " started following you")
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           followerID,

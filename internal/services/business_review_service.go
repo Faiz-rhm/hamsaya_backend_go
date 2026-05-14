@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/hamsaya/backend/internal/models"
@@ -145,13 +146,13 @@ func (s *BusinessReviewService) notifyOwner(business *models.BusinessProfile, re
 	}()
 
 	ctx := context.Background()
-	reviewerName := "Someone"
+	reviewerName := ""
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, reviewerID); err == nil && actor != nil {
 		if name := actor.FullName(); name != "" {
 			reviewerName = name
 		}
 	}
-	title := reviewerName + " left a review on your business"
+	title := strings.TrimSpace(reviewerName + " left a review on your business")
 	msg := title
 	data := map[string]interface{}{
 		"actor_id":    reviewerID,

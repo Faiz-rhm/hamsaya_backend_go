@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -98,9 +99,6 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 				return
 			}
 			actorName := actor.FullName()
-			if actorName == "" {
-				actorName = "Someone"
-			}
 			actorAvatarColor := ""
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor
@@ -113,7 +111,7 @@ func (s *EventService) SetEventInterest(ctx context.Context, postID, userID stri
 				suffix = " is going to your event"
 			}
 
-			title := actorName + suffix
+			title := strings.TrimSpace(actorName + suffix)
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,

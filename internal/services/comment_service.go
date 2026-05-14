@@ -161,7 +161,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 
 	if post.UserID != nil && *post.UserID != userID && s.notificationService != nil {
 		bgtasks.Submit(func(ctxDetach context.Context) {
-			actorName := "Someone"
+			actorName := ""
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
@@ -175,7 +175,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			} else {
 				s.logger.Warn("Failed to get actor for comment notification, using fallback", zap.Error(err))
 			}
-			title := actorName + " commented on your post"
+			title := strings.TrimSpace(actorName + " commented on your post")
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,
@@ -212,7 +212,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			if post.UserID != nil && parentComment.UserID == *post.UserID {
 				return
 			}
-			actorName := "Someone"
+			actorName := ""
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
@@ -224,7 +224,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 					actorAvatarColor = *actor.AvatarColor
 				}
 			}
-			title := actorName + " replied to your comment"
+			title := strings.TrimSpace(actorName + " replied to your comment")
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,
@@ -251,7 +251,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 	// Notify each tagged/mentioned user (skip self and post owner to avoid duplicate)
 	if len(req.TaggedUserIDs) > 0 && s.notificationService != nil {
 		bgtasks.Submit(func(ctxDetach context.Context) {
-			actorName := "Someone"
+			actorName := ""
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
@@ -278,7 +278,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 					continue
 				}
 				notified[taggedID] = true
-				title := actorName + " mentioned you in a comment"
+				title := strings.TrimSpace(actorName + " mentioned you in a comment")
 				msg := title
 				data := map[string]interface{}{
 					"actor_id":           userID,
@@ -469,7 +469,7 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 
 	if comment.UserID != userID && s.notificationService != nil {
 		bgtasks.Submit(func(ctxDetach context.Context) {
-			actorName := "Someone"
+			actorName := ""
 			var actorAvatar interface{}
 			var actorAvatarColor string
 			if actor, err := s.userRepo.GetProfileByUserID(ctxDetach, userID); err == nil {
@@ -481,7 +481,7 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 					actorAvatarColor = *actor.AvatarColor
 				}
 			}
-			title := actorName + " liked your comment"
+			title := strings.TrimSpace(actorName + " liked your comment")
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,

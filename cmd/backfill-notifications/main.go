@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -37,11 +38,11 @@ func main() {
 			uuid_generate_v4(),
 			p.user_id,
 			'LIKE',
-			COALESCE(TRIM(pr.first_name || ' ' || pr.last_name), 'Someone') || ' liked your post',
-			COALESCE(TRIM(pr.first_name || ' ' || pr.last_name), 'Someone') || ' liked your post',
+			TRIM(COALESCE(NULLIF(TRIM(pr.first_name || ' ' || pr.last_name), ''), '') || ' liked your post'),
+			TRIM(COALESCE(NULLIF(TRIM(pr.first_name || ' ' || pr.last_name), ''), '') || ' liked your post'),
 			jsonb_build_object(
 				'actor_id', pl.user_id,
-				'actor_name', COALESCE(TRIM(pr.first_name || ' ' || pr.last_name), 'Someone'),
+				'actor_name', COALESCE(NULLIF(TRIM(pr.first_name || ' ' || pr.last_name), ''), ''),
 				'actor_avatar', pr.avatar,
 				'post_id', p.id
 			),
@@ -67,7 +68,7 @@ func main() {
 	// Backfill COMMENT notifications: post_comments where commenter != post owner
 	commentRows, err := db.Pool.Query(ctx, `
 		SELECT pc.post_id, pc.user_id AS actor_id, p.user_id AS recipient_id, pc.created_at,
-			COALESCE(TRIM(pr.first_name || ' ' || pr.last_name), 'Someone') AS actor_name,
+			COALESCE(NULLIF(TRIM(pr.first_name || ' ' || pr.last_name), ''), '') AS actor_name,
 			pr.avatar AS actor_avatar
 		FROM post_comments pc
 		JOIN posts p ON p.id = pc.post_id AND p.deleted_at IS NULL AND p.user_id IS NOT NULL AND p.user_id != pc.user_id
@@ -113,7 +114,7 @@ func main() {
 			"post_id":      postID,
 		}
 		dataJSON, _ := json.Marshal(data)
-		title := actorName + " commented on your post"
+		title := strings.TrimSpace(actorName + " commented on your post")
 		_, err = db.Pool.Exec(ctx, `
 			INSERT INTO notifications (id, user_id, type, title, message, data, read, created_at)
 			VALUES ($1, $2, 'COMMENT', $3, $4, $5, false, $6)

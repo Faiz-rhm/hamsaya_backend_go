@@ -1491,7 +1491,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 // sendPostNotification fires a notification for the post owner when someone likes or shares the post.
 // If the post belongs to a business, data.business_id is set so it only appears in business notifications.
 func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, recipientUserID, postID string, notifType models.NotificationType, action string) {
-	actorName := "Someone"
+	actorName := ""
 	var actorAvatar interface{}
 	var actorAvatarColor string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, actorUserID); err == nil {
@@ -1505,7 +1505,7 @@ func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, rec
 	} else {
 		s.logger.Warn("Failed to get actor profile for notification, using fallback", zap.Error(err), zap.String("actor_user_id", actorUserID))
 	}
-	title := actorName + " " + action
+	title := strings.TrimSpace(actorName + " " + action)
 	msg := title
 	data := map[string]interface{}{
 		"actor_id":           actorUserID,
@@ -1553,7 +1553,7 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 		return
 	}
 
-	actorName := "Someone"
+	actorName := ""
 	var actorAvatar interface{}
 	var actorAvatarColor string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, posterUserID); err == nil {
@@ -1573,7 +1573,7 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 		}
 	}
 
-	title := displayName + " posted"
+	title := strings.TrimSpace(displayName + " posted")
 	msg := title
 	data := map[string]interface{}{
 		"actor_id":           posterUserID,

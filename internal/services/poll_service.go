@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -199,14 +200,11 @@ func (s *PollService) VotePoll(ctx context.Context, pollID, userID, optionID str
 				return
 			}
 			actorName := actor.FullName()
-			if actorName == "" {
-				actorName = "Someone"
-			}
 			actorAvatarColor := ""
 			if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 				actorAvatarColor = *actor.AvatarColor
 			}
-			title := actorName + " voted on your poll"
+			title := strings.TrimSpace(actorName + " voted on your poll")
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,

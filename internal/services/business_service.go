@@ -552,7 +552,7 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 	if business.UserID != userID {
 		bgtasks.Submit(func(ctxDetach context.Context) {
 			actor, _ := s.userRepo.GetProfileByUserID(ctxDetach, userID)
-			actorName := "Someone"
+			actorName := ""
 			actorAvatar := ""
 			actorAvatarColor := ""
 			if actor != nil {
@@ -566,7 +566,7 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 					actorAvatarColor = *actor.AvatarColor
 				}
 			}
-			title := actorName + " started following your business"
+			title := strings.TrimSpace(actorName + " started following your business")
 			msg := title
 			data := map[string]interface{}{
 				"actor_id":           userID,
