@@ -286,7 +286,7 @@ func buildRouter(
 	commentHandler := handlers.NewCommentHandler(commentSvc, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatSvc, wsHub, validator, logger, cfg)
 	searchHandler := handlers.NewSearchHandler(searchSvc, validator, logger)
-	profileHandler := handlers.NewProfileHandler(profileSvc, nil, validator, logger)
+	profileHandler := handlers.NewProfileHandler(profileSvc, nil, nil, validator, logger)
 	relationshipsHandler := handlers.NewRelationshipsHandler(relationshipsSvc, logger)
 	businessHandler := handlers.NewBusinessHandler(businessSvc, nil, validator, logger)
 	categoryHandler := handlers.NewCategoryHandler(categorySvc, validator, logger)
