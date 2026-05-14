@@ -69,12 +69,15 @@ func TestAuthService_Login(t *testing.T) {
 		checkResponse func(*testing.T, *models.AuthResponse)
 	}{
 		{
-			// Locked accounts must return the same generic error as wrong-password
-			// to prevent account enumeration via distinct error responses.
-			name: "account locked",
+			// Locked account + correct password → 403 "suspended" so the
+			// mobile client can surface a clear contact-support state.
+			// Wrong-password against the same locked account still returns
+			// the generic 401 (covered by the "wrong password" case).
+			name: "locked account with correct password",
 			setupMocks: func(userRepo *mocks.MockUserRepository, _ *TokenStorageService) {
 				lockTime := time.Now().Add(30 * time.Minute)
 				user := testutil.CreateTestUser("user-1", "test@example.com")
+				user.PasswordHash = func() *string { s := testPasswordHash; return &s }()
 				user.LockedUntil = &lockTime
 				userRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(user, nil)
 			},
@@ -83,7 +86,7 @@ func TestAuthService_Login(t *testing.T) {
 				return ts, func() {}
 			},
 			request:       &models.LoginRequest{Email: "test@example.com", Password: "password"},
-			expectedError: "invalid email or password",
+			expectedError: "suspended",
 		},
 		{
 			name: "wrong password",

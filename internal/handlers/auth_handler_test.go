@@ -256,15 +256,18 @@ func TestAuthHandler_Login(t *testing.T) {
 			wantSuccess: false,
 		},
 		{
-			name: "account locked",
-			body: map[string]interface{}{"email": "locked@example.com", "password": "Password1!"},
+			// Locked + correct password → 403 (mobile shows suspended UI).
+			// Wrong password against locked stays 401 (covered below).
+			name: "locked account with correct password",
+			body: map[string]interface{}{"email": "locked@example.com", "password": "password"},
 			setupMocks: func(r *mocks.MockUserRepository) {
 				lockTime := time.Now().Add(30 * time.Minute)
 				user := testutil.CreateTestUser("user-1", "locked@example.com")
+				user.PasswordHash = &[]string{authTestPasswordHash}[0]
 				user.LockedUntil = &lockTime
 				r.On("GetByEmail", mock.Anything, "locked@example.com").Return(user, nil)
 			},
-			wantCode:    http.StatusUnauthorized,
+			wantCode:    http.StatusForbidden,
 			wantSuccess: false,
 		},
 		{
