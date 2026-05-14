@@ -106,6 +106,9 @@ func TestPasswordService_Verify(t *testing.T) {
 func TestPasswordService_ValidatePasswordStrength(t *testing.T) {
 	service := NewPasswordService()
 
+	// After the policy relaxation (length-only), every password ≥8
+	// chars is accepted regardless of character classes. Tests below
+	// keep coverage of the still-enforced minimum-length rule.
 	tests := []struct {
 		name     string
 		password string
@@ -129,28 +132,24 @@ func TestPasswordService_ValidatePasswordStrength(t *testing.T) {
 			errMsg:   "at least 8 characters long",
 		},
 		{
-			name:     "no uppercase",
+			name:     "lowercase only accepted",
 			password: "mysecure123!",
-			wantErr:  true,
-			errMsg:   "uppercase letter",
+			wantErr:  false,
 		},
 		{
-			name:     "no lowercase",
+			name:     "uppercase only accepted",
 			password: "MYSECURE123!",
-			wantErr:  true,
-			errMsg:   "lowercase letter",
+			wantErr:  false,
 		},
 		{
-			name:     "no number",
+			name:     "no digit accepted",
 			password: "MySecurePass!",
-			wantErr:  true,
-			errMsg:   "number",
+			wantErr:  false,
 		},
 		{
-			name:     "no special character",
+			name:     "no special accepted",
 			password: "MySecure123",
-			wantErr:  true,
-			errMsg:   "special character",
+			wantErr:  false,
 		},
 		{
 			name:     "empty password",
@@ -159,10 +158,9 @@ func TestPasswordService_ValidatePasswordStrength(t *testing.T) {
 			errMsg:   "at least 8 characters long",
 		},
 		{
-			name:     "only spaces",
+			name:     "only spaces still meets length",
 			password: "        ",
-			wantErr:  true,
-			errMsg:   "uppercase letter",
+			wantErr:  false,
 		},
 	}
 
