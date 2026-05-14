@@ -507,17 +507,9 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 	}
 
 	// USER EXISTS (or was just reactivated) - Normal login flow.
-	// Locked accounts return the same generic message as wrong-password to prevent
-	// account enumeration via distinct error responses.
-	if user.IsLocked() {
-		s.logger.Warn("Login attempt for locked account",
-			zap.String("user_id", user.ID),
-			zap.Time("locked_until", *user.LockedUntil),
-		)
-		return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
-	}
-
-	// Verify password
+	// Verify password FIRST so we only reveal "suspended" to clients
+	// that proved they own the account. Wrong-password attempts still
+	// get the generic 401 — attackers can't tell locked vs. non-existent.
 	if user.PasswordHash == nil || !s.passwordService.Verify(req.Password, *user.PasswordHash) {
 		// Increment failed login attempts
 		attempts := user.FailedLoginAttempts + 1
@@ -537,6 +529,17 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		)
 
 		return nil, utils.NewUnauthorizedError("Invalid email or password", nil)
+	}
+
+	// Password is correct. Now surface suspension as a clear 403 so the
+	// mobile client can log the user out and route to a "contact
+	// support" UI instead of looping on bad-credentials toasts.
+	if user.IsLocked() {
+		s.logger.Warn("Login attempt for locked account (valid password)",
+			zap.String("user_id", user.ID),
+			zap.Time("locked_until", *user.LockedUntil),
+		)
+		return nil, utils.NewForbiddenError("Your account has been suspended", utils.ErrForbidden)
 	}
 
 	// Check if MFA is enabled
