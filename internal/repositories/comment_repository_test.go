@@ -114,16 +114,16 @@ func TestCommentRepository_GetByUserID(t *testing.T) {
 		rows := testutil.NewFuncRows(
 			func(dest ...any) error {
 				// id, post_id, user_id, business_id, parent_comment_id, text,
-				// location, total_likes, total_replies, created_at, updated_at,
-				// deleted_at, mentioned_user_ids
+				// latitude, longitude, total_likes, total_replies,
+				// created_at, updated_at, deleted_at, mentioned_user_ids
 				*dest[0].(*string) = "c1"
 				*dest[1].(*string) = "p1"
 				*dest[2].(*string) = "user-target"
 				*dest[5].(*string) = "first"
-				*dest[7].(*int) = 0
 				*dest[8].(*int) = 0
-				*dest[9].(*time.Time) = now
+				*dest[9].(*int) = 0
 				*dest[10].(*time.Time) = now
+				*dest[11].(*time.Time) = now
 				return nil
 			},
 			func(dest ...any) error {
@@ -131,8 +131,8 @@ func TestCommentRepository_GetByUserID(t *testing.T) {
 				*dest[1].(*string) = "p2"
 				*dest[2].(*string) = "user-target"
 				*dest[5].(*string) = "second"
-				*dest[9].(*time.Time) = now
 				*dest[10].(*time.Time) = now
+				*dest[11].(*time.Time) = now
 				return nil
 			},
 		)

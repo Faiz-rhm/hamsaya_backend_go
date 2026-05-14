@@ -770,11 +770,13 @@ func TestAuthService_UnifiedAuth_ExistingUser(t *testing.T) {
 	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	tokenStorage := NewTokenStorageService(rdb, zap.NewNop())
 
-	t.Run("locked account", func(t *testing.T) {
+	t.Run("locked account with correct password", func(t *testing.T) {
 		userRepo := new(mocks.MockUserRepository)
 		locked := time.Now().Add(1 * time.Hour)
 		user := testutil.CreateTestUser("u-1", "test@example.com")
 		user.LockedUntil = &locked
+		hash := testPasswordHash
+		user.PasswordHash = &hash
 		userRepo.On("GetByEmail", mock.Anything, "test@example.com").Return(user, nil)
 
 		svc := newTestAuthService(userRepo, tokenStorage)
@@ -782,8 +784,9 @@ func TestAuthService_UnifiedAuth_ExistingUser(t *testing.T) {
 			Email: "test@example.com", Password: "password",
 		})
 		require.Error(t, err)
-		// Locked accounts return generic error to prevent account enumeration.
-		assert.Contains(t, strings.ToLower(err.Error()), "invalid email or password")
+		// Correct password + locked → 403 'suspended' so the mobile client
+		// can show a real explanation instead of a credentials toast.
+		assert.Contains(t, strings.ToLower(err.Error()), "suspended")
 	})
 
 	t.Run("wrong password", func(t *testing.T) {
