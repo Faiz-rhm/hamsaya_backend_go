@@ -196,22 +196,12 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		zap.String("email", email),
 	)
 
-	// Send verification code email if not already verified (Resend or SMTP)
-	if !existingUser.EmailVerified {
-		verificationCode, err := s.jwtService.GenerateVerificationCode()
-		if err == nil {
-			ttl := 24 * time.Hour
-			if storeErr := s.tokenStorage.StoreVerificationToken(ctx, existingUser.ID, verificationCode, ttl); storeErr == nil {
-				name := strings.TrimSpace(req.FirstName + " " + req.LastName)
-				if name == "" {
-					name = email
-				}
-				if sendErr := s.emailService.SendVerificationEmail(email, name, verificationCode); sendErr != nil {
-					s.logger.Warn("Failed to send verification email after profile complete", zap.String("email", email), zap.Error(sendErr))
-				}
-			}
-		}
-	}
+	// NOTE: OTP send used to fire here too, which combined with
+	// profile_service.UpdateProfile's IsComplete-transition handler
+	// produced two verification emails per registration. profile_service
+	// is now the single source of truth — mobile always calls
+	// `PUT /users/me` with is_complete=true after register, which
+	// triggers the OTP exactly once.
 
 	// Generate AAL1 token pair for existing user
 	return s.generateAuthResponse(ctx, existingUser, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
