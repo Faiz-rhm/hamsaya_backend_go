@@ -54,45 +54,15 @@ func (s *PasswordService) GenerateSecureToken(length int) (string, error) {
 	return base64.URLEncoding.EncodeToString(bytes), nil
 }
 
-// ValidatePasswordStrength validates password strength
+// ValidatePasswordStrength validates password strength.
+// Operator preference: minimum 8 characters, no character-class
+// requirements (no forced upper/lower/number/special). Length + bcrypt
+// cost-13 hashing carries the security weight; complexity rules push
+// users toward predictable patterns (`Password1!`) without adding real
+// entropy.
 func (s *PasswordService) ValidatePasswordStrength(password string) error {
 	if len(password) < 8 {
 		return fmt.Errorf("password must be at least 8 characters long")
 	}
-
-	var (
-		hasUpper   bool
-		hasLower   bool
-		hasNumber  bool
-		hasSpecial bool
-	)
-
-	for _, char := range password {
-		switch {
-		case char >= 'A' && char <= 'Z':
-			hasUpper = true
-		case char >= 'a' && char <= 'z':
-			hasLower = true
-		case char >= '0' && char <= '9':
-			hasNumber = true
-		case char == '!' || char == '@' || char == '#' || char == '$' || char == '%' ||
-			char == '^' || char == '&' || char == '*' || char == '(' || char == ')':
-			hasSpecial = true
-		}
-	}
-
-	if !hasUpper {
-		return fmt.Errorf("password must contain at least one uppercase letter")
-	}
-	if !hasLower {
-		return fmt.Errorf("password must contain at least one lowercase letter")
-	}
-	if !hasNumber {
-		return fmt.Errorf("password must contain at least one number")
-	}
-	if !hasSpecial {
-		return fmt.Errorf("password must contain at least one special character (!@#$%%^&*())")
-	}
-
 	return nil
 }
