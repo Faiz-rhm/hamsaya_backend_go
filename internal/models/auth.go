@@ -13,8 +13,8 @@ import "time"
 type RegisterRequest struct {
 	Email      string   `json:"email" validate:"required,email,max=320"`
 	Password   string   `json:"password" validate:"required,min=8,max=128"`
-	FirstName  string   `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
-	LastName   string   `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
+	FirstName  string   `json:"first_name,omitempty" validate:"omitempty,min=1,max=100"`
+	LastName   string   `json:"last_name,omitempty" validate:"omitempty,min=1,max=100"`
 	Latitude   float64  `json:"latitude,omitempty" validate:"omitempty,latitude"`
 	Longitude  float64  `json:"longitude,omitempty" validate:"omitempty,longitude"`
 	DeviceInfo *string  `json:"device_info,omitempty" validate:"omitempty,max=512"`
@@ -36,8 +36,8 @@ type LoginRequest struct {
 type UnifiedAuthRequest struct {
 	Email      string   `json:"email" validate:"required,email,max=320"`
 	Password   string   `json:"password" validate:"required,min=8,max=128"`
-	FirstName  *string  `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
-	LastName   *string  `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
+	FirstName  *string  `json:"first_name,omitempty" validate:"omitempty,min=1,max=100"`
+	LastName   *string  `json:"last_name,omitempty" validate:"omitempty,min=1,max=100"`
 	Latitude   *float64 `json:"latitude,omitempty" validate:"omitempty,latitude"`
 	Longitude  *float64 `json:"longitude,omitempty" validate:"omitempty,longitude"`
 	DeviceInfo *string  `json:"device_info,omitempty" validate:"omitempty,max=512"`

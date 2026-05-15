@@ -10,8 +10,8 @@ type LocationCoordinates struct {
 
 // UpdateProfileRequest represents a request to update user profile
 type UpdateProfileRequest struct {
-	FirstName    *string              `json:"first_name,omitempty" validate:"omitempty,min=2,max=100"`
-	LastName     *string              `json:"last_name,omitempty" validate:"omitempty,min=2,max=100"`
+	FirstName    *string              `json:"first_name,omitempty" validate:"omitempty,min=1,max=100"`
+	LastName     *string              `json:"last_name,omitempty" validate:"omitempty,min=1,max=100"`
 	AvatarColor  *string              `json:"avatar_color,omitempty" validate:"omitempty,len=7"` // e.g. #RRGGBB
 	About        *string              `json:"about,omitempty" validate:"omitempty,max=500"`
 	Gender       *string              `json:"gender,omitempty" validate:"omitempty,oneof=male female other prefer_not_to_say"`
