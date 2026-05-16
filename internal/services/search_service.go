@@ -2,12 +2,24 @@ package services
 
 import (
 	"context"
+	"fmt"
+	"math"
+	"time"
 
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/cache"
 	"go.uber.org/zap"
 )
+
+// discoverTTL is the cache lifetime for the geographic discover response.
+// 30 seconds is long enough that one user moving the radius slider or
+// reopening the tab pulls from cache; short enough that a freshly-created
+// post / business / event surfaces almost immediately. The (lat, lng)
+// inputs are bucketed to ~110m so users in the same neighbourhood share
+// cache entries even when their GPS jitters.
+const discoverTTL = 30 * time.Second
 
 // SearchService handles search and discovery operations
 type SearchService struct {
@@ -18,6 +30,7 @@ type SearchService struct {
 	categoryRepo     repositories.CategoryRepository
 	relationshipsRepo repositories.RelationshipsRepository
 	logger           *zap.Logger
+	cache            *cache.Cache // optional; nil = no discover caching
 }
 
 // NewSearchService creates a new search service
@@ -39,6 +52,29 @@ func NewSearchService(
 		relationshipsRepo: relationshipsRepo,
 		logger:           logger,
 	}
+}
+
+// WithCache attaches a cache namespace. Call once at startup. Optional.
+func (s *SearchService) WithCache(c *cache.Cache) *SearchService {
+	s.cache = c
+	return s
+}
+
+// discoverCacheKey buckets the (lat, lng) inputs to 3 decimal places —
+// roughly 110m at the equator, smaller toward the poles — so callers in
+// the same neighbourhood hit the same cache entry. Other inputs (filter,
+// type, radius, limit) participate verbatim because their cardinality is
+// small and they radically change the result set.
+func discoverCacheKey(req *models.DiscoverRequest) string {
+	bucket := func(f float64) float64 {
+		return math.Round(f*1000) / 1000
+	}
+	pt := "any"
+	if req.Type != nil {
+		pt = string(*req.Type)
+	}
+	return fmt.Sprintf("d:%s:%s:%.3f:%.3f:%.0f:%d",
+		req.Filter, pt, bucket(req.Latitude), bucket(req.Longitude), req.RadiusKm, req.Limit)
 }
 
 // Search performs a global search across posts, users, and businesses
@@ -124,6 +160,19 @@ func (s *SearchService) Discover(ctx context.Context, userID *string, req *model
 	if limit == 0 {
 		limit = 100
 	}
+	req.Limit = limit
+
+	// Cache lookup — discover response is intentionally viewer-agnostic
+	// (no liked-by-me / following fields in the markers), so all viewers
+	// in the same geographic bucket share a single cache entry. Massive
+	// hit rate on the Discover tab cold-open and radius-slider drag.
+	cacheKey := discoverCacheKey(req)
+	if s.cache != nil {
+		var cached models.DiscoverResponse
+		if hit, _ := s.cache.Get(ctx, cacheKey, &cached); hit {
+			return &cached, nil
+		}
+	}
 
 	response := &models.DiscoverResponse{
 		Posts:      []*models.DiscoverPost{},
@@ -173,6 +222,10 @@ func (s *SearchService) Discover(ctx context.Context, userID *string, req *model
 		zap.Float64("radius_km", req.RadiusKm),
 		zap.Int("total_results", response.Total),
 	)
+
+	if s.cache != nil {
+		_ = s.cache.Set(ctx, cacheKey, response, discoverTTL)
+	}
 
 	return response, nil
 }

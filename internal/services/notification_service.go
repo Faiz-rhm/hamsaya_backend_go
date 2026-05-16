@@ -10,6 +10,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/cache"
 	fcmclient "github.com/hamsaya/backend/pkg/notification"
 	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/redis/go-redis/v9"
@@ -19,6 +20,13 @@ import (
 const (
 	fcmTokenPrefix = "fcm:token:"
 	fcmTokenTTL    = 90 * 24 * time.Hour // 90 days
+
+	// unreadCountTTL keeps the badge counter cached briefly. The mobile
+	// app polls the unread-count endpoint frequently for the bell badge;
+	// 30 seconds is long enough to drop most of that load and short
+	// enough that staleness is invisible (a new notification arrives via
+	// WS, which also invalidates the cache).
+	unreadCountTTL = 30 * time.Second
 )
 
 // NotificationService handles notification operations
@@ -30,6 +38,7 @@ type NotificationService struct {
 	redisClient      *redis.Client
 	wsHub            *websocket.Hub
 	logger           *zap.Logger
+	cache            *cache.Cache // optional; nil = no caching for unread-count
 }
 
 // NewNotificationService creates a new notification service
@@ -51,6 +60,33 @@ func NewNotificationService(
 		wsHub:            wsHub,
 		logger:           logger,
 	}
+}
+
+// WithCache attaches a cache namespace. Call once at startup. Optional —
+// without it, every unread-count poll hits Postgres directly.
+func (s *NotificationService) WithCache(c *cache.Cache) *NotificationService {
+	s.cache = c
+	return s
+}
+
+// unreadCountKey builds a per-(user, businessScope) cache key. Empty
+// business scope = personal notifications.
+func unreadCountKey(userID string, businessID *string) string {
+	scope := "user"
+	if businessID != nil && *businessID != "" {
+		scope = "biz:" + *businessID
+	}
+	return "unread:" + userID + ":" + scope
+}
+
+// invalidateUnreadForUser drops cached counts for every scope variant a
+// given user might query. Called after any write that could change the
+// unread state for that user.
+func (s *NotificationService) invalidateUnreadForUser(ctx context.Context, userID string) {
+	if s.cache == nil {
+		return
+	}
+	s.cache.DelPattern(ctx, "unread:"+userID+":*")
 }
 
 // channelForType returns the Android notification channel ID for the type.
@@ -188,6 +224,11 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 		go s.sendPushNotification(context.WithoutCancel(ctx), notification)
 	}
 
+	// New unread notification → drop cached counts for this recipient so
+	// the badge bumps up on the next poll instead of waiting for the
+	// 30-second TTL.
+	s.invalidateUnreadForUser(ctx, notification.UserID)
+
 	return notification.ToNotificationResponse(), nil
 }
 
@@ -260,6 +301,7 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, userID, notificati
 		return utils.NewInternalError("Failed to mark notification as read", err)
 	}
 
+	s.invalidateUnreadForUser(ctx, userID)
 	return nil
 }
 
@@ -274,6 +316,7 @@ func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID string) 
 	}
 
 	s.logger.Info("All notifications marked as read", zap.String("user_id", userID))
+	s.invalidateUnreadForUser(ctx, userID)
 	return nil
 }
 
@@ -299,11 +342,21 @@ func (s *NotificationService) DeleteNotification(ctx context.Context, userID, no
 	}
 
 	s.logger.Info("Notification deleted", zap.String("notification_id", notificationID))
+	s.invalidateUnreadForUser(ctx, userID)
 	return nil
 }
 
 // GetUnreadCount gets the count of unread notifications. When businessID is set, counts only that business's notifications.
 func (s *NotificationService) GetUnreadCount(ctx context.Context, userID string, businessID *string) (int, error) {
+	key := unreadCountKey(userID, businessID)
+
+	if s.cache != nil {
+		var cached int
+		if hit, _ := s.cache.Get(ctx, key, &cached); hit {
+			return cached, nil
+		}
+	}
+
 	count, err := s.notificationRepo.GetUnreadCount(ctx, userID, businessID)
 	if err != nil {
 		s.logger.Error("Failed to get unread count",
@@ -313,6 +366,9 @@ func (s *NotificationService) GetUnreadCount(ctx context.Context, userID string,
 		return 0, utils.NewInternalError("Failed to get unread count", err)
 	}
 
+	if s.cache != nil {
+		_ = s.cache.Set(ctx, key, count, unreadCountTTL)
+	}
 	return count, nil
 }
 

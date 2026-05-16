@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"hash/fnv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -12,10 +13,21 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/bgtasks"
+	"github.com/hamsaya/backend/pkg/cache"
 	"github.com/hamsaya/backend/pkg/geocoding"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
+
+// businessProfileTTL is the cache lifetime for the enriched business
+// profile response. 5 minutes is a calculated trade-off: short enough
+// that follow-count / view-count drift on the detail page stays minor,
+// long enough that the public-facing business page (the hottest
+// authenticated read in the app) hits Postgres at most every 5 minutes
+// per (business, viewer) pair. Mutations (UpdateBusiness, DeleteBusiness,
+// status change, follow/unfollow) eagerly bust by business id, so the
+// 5-minute window only matters for passive drift, not user-driven edits.
+const businessProfileTTL = 5 * time.Minute
 
 // BusinessService handles business profile operations
 type BusinessService struct {
@@ -23,6 +35,7 @@ type BusinessService struct {
 	userRepo            repositories.UserRepository
 	notificationService *NotificationService
 	logger              *zap.Logger
+	cache               *cache.Cache // optional; nil = no caching
 }
 
 // NewBusinessService creates a new business service
@@ -38,6 +51,34 @@ func NewBusinessService(
 		notificationService: notificationService,
 		logger:               logger,
 	}
+}
+
+// WithCache attaches a cache namespace. Call once at startup. Optional —
+// when not called, every read hits Postgres (current behavior).
+func (s *BusinessService) WithCache(c *cache.Cache) *BusinessService {
+	s.cache = c
+	return s
+}
+
+// businessCacheKey produces a per-viewer key. Anonymous viewers share
+// the same cached payload ("anon"); authenticated viewers each get their
+// own slot because the enriched response includes per-viewer fields
+// (is_following).
+func businessCacheKey(businessID string, viewerID *string) string {
+	v := "anon"
+	if viewerID != nil && *viewerID != "" {
+		v = *viewerID
+	}
+	return businessID + ":" + v
+}
+
+// invalidateBusinessCache drops every cached variant for a business id.
+// Called after every mutation so the next read picks up fresh data.
+func (s *BusinessService) invalidateBusinessCache(ctx context.Context, businessID string) {
+	if s.cache == nil {
+		return
+	}
+	s.cache.DelPattern(ctx, businessID+":*")
 }
 
 // CreateBusiness creates a new business profile
@@ -141,6 +182,31 @@ func (s *BusinessService) CreateBusiness(ctx context.Context, userID string, req
 // GetBusiness gets a business profile by ID.
 // If status is false (not visible to others), only the owner can view; others get 404.
 func (s *BusinessService) GetBusiness(ctx context.Context, businessID string, viewerID *string) (*models.BusinessResponse, error) {
+	cacheKey := businessCacheKey(businessID, viewerID)
+
+	// Try cache first. A hit still triggers the async view increment for
+	// non-owners, so analytics stay accurate even when Postgres is bypassed.
+	if s.cache != nil {
+		var cached models.BusinessResponse
+		if hit, _ := s.cache.Get(ctx, cacheKey, &cached); hit {
+			// Visibility check uses the cached Status; same semantics as
+			// the post-fetch check below.
+			if !cached.Status {
+				isOwner := viewerID != nil && *viewerID == cached.UserID
+				if !isOwner {
+					return nil, utils.NewNotFoundError("Business not found", nil)
+				}
+			}
+			isOwnerCached := viewerID != nil && *viewerID == cached.UserID
+			if !isOwnerCached {
+				bgtasks.Submit(func(taskCtx context.Context) {
+					_ = s.businessRepo.IncrementViews(taskCtx, businessID)
+				})
+			}
+			return &cached, nil
+		}
+	}
+
 	// Get business
 	business, err := s.businessRepo.GetByID(ctx, businessID)
 	if err != nil {
@@ -168,7 +234,14 @@ func (s *BusinessService) GetBusiness(ctx context.Context, businessID string, vi
 	}
 
 	// Enrich business
-	return s.enrichBusiness(ctx, business, viewerID)
+	resp, err := s.enrichBusiness(ctx, business, viewerID)
+	if err != nil {
+		return nil, err
+	}
+	if s.cache != nil && resp != nil {
+		_ = s.cache.Set(ctx, cacheKey, resp, businessProfileTTL)
+	}
+	return resp, nil
 }
 
 // GetUserBusinesses gets all businesses for a user
@@ -329,6 +402,10 @@ func (s *BusinessService) UpdateBusiness(ctx context.Context, businessID, userID
 
 	s.logger.Info("Business updated", zap.String("business_id", businessID), zap.String("user_id", userID))
 
+	// Drop every cached variant so the GetBusiness call below — and any
+	// subsequent read from a different viewer — returns the fresh row.
+	s.invalidateBusinessCache(ctx, businessID)
+
 	// Return enriched business
 	return s.GetBusiness(ctx, businessID, &userID)
 }
@@ -353,6 +430,7 @@ func (s *BusinessService) DeleteBusiness(ctx context.Context, businessID, userID
 	}
 
 	s.logger.Info("Business deleted", zap.String("business_id", businessID), zap.String("user_id", userID))
+	s.invalidateBusinessCache(ctx, businessID)
 	return nil
 }
 
@@ -586,6 +664,9 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 	}
 
 	s.logger.Info("Business followed", zap.String("business_id", businessID), zap.String("user_id", userID))
+	// Follower count + viewer.is_following changed for every viewer of this
+	// business — evict all variants so the next read shows the new state.
+	s.invalidateBusinessCache(ctx, businessID)
 	return nil
 }
 
@@ -598,6 +679,7 @@ func (s *BusinessService) UnfollowBusiness(ctx context.Context, businessID, user
 	}
 
 	s.logger.Info("Business unfollowed", zap.String("business_id", businessID), zap.String("user_id", userID))
+	s.invalidateBusinessCache(ctx, businessID)
 	return nil
 }
 
@@ -743,20 +825,48 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 	}
 	response.Country = business.Country
 
-	// Get categories (always set so API returns "categories" key, never null)
-	response.Categories = []models.BusinessCategory{}
-	categories, err := s.businessRepo.GetCategoriesByBusinessID(ctx, business.ID)
-	if err == nil && len(categories) > 0 {
-		response.Categories = make([]models.BusinessCategory, len(categories))
-		for i, cat := range categories {
-			response.Categories[i] = *cat
-		}
-	}
+	// Fan out the three independent DB lookups (categories, hours,
+	// is_following) so the enrichment takes ~max(3 queries) instead of
+	// ~sum(3 queries). Each goroutine writes to its own field of the
+	// response — no shared mutable state, no mutex needed. Errors are
+	// individually logged but never fail the request (same semantics as
+	// the previous serial version).
+	var wg sync.WaitGroup
 
-	// Get business hours
-	hours, err := s.businessRepo.GetHoursByBusinessID(ctx, business.ID)
-	if err == nil && len(hours) > 0 {
-		var hoursResponse []models.BusinessHoursResponse
+	response.Categories = []models.BusinessCategory{} // never nil even on error
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		categories, err := s.businessRepo.GetCategoriesByBusinessID(ctx, business.ID)
+		if err != nil {
+			s.logger.Warn("enrichBusiness: categories fetch failed",
+				zap.String("business_id", business.ID), zap.Error(err))
+			return
+		}
+		if len(categories) == 0 {
+			return
+		}
+		out := make([]models.BusinessCategory, len(categories))
+		for i, cat := range categories {
+			out[i] = *cat
+		}
+		response.Categories = out
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		hours, err := s.businessRepo.GetHoursByBusinessID(ctx, business.ID)
+		if err != nil {
+			s.logger.Warn("enrichBusiness: hours fetch failed",
+				zap.String("business_id", business.ID), zap.Error(err))
+			return
+		}
+		if len(hours) == 0 {
+			return
+		}
+		hoursResponse := make([]models.BusinessHoursResponse, 0, len(hours))
 		for _, h := range hours {
 			hourResp := models.BusinessHoursResponse{
 				Day:      h.Day,
@@ -773,15 +883,26 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 			hoursResponse = append(hoursResponse, hourResp)
 		}
 		response.Hours = hoursResponse
+	}()
+
+	// Skip the IsFollowing query when the viewer is anonymous — saves an
+	// entire roundtrip on every unauthenticated business view.
+	if viewerID != nil && *viewerID != "" {
+		viewer := *viewerID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			isFollowing, err := s.businessRepo.IsFollowing(ctx, business.ID, viewer)
+			if err != nil {
+				s.logger.Warn("enrichBusiness: is_following fetch failed",
+					zap.String("business_id", business.ID), zap.Error(err))
+				return
+			}
+			response.IsFollowing = isFollowing
+		}()
 	}
 
-	// Get following status if viewer is authenticated
-	if viewerID != nil && *viewerID != "" {
-		isFollowing, err := s.businessRepo.IsFollowing(ctx, business.ID, *viewerID)
-		if err == nil {
-			response.IsFollowing = isFollowing
-		}
-	}
+	wg.Wait()
 
 	return response, nil
 }

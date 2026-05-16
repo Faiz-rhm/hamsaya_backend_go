@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -1172,17 +1173,30 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		UpdatedAt:     post.UpdatedAt,
 	}
 
-	// Get author info
+	// Fan out the independent DB lookups (author, business, attachments)
+	// so latency drops from ~sum-of-queries to ~max-of-queries. Each
+	// goroutine writes to its own field; the closure over fetchedBusiness
+	// is the only shared field, guarded by businessMu.
+	var wg sync.WaitGroup
+	var fetchedBusiness *models.BusinessProfile
+	var businessMu sync.Mutex
+
 	if post.UserID != nil {
-		profile, err := s.userRepo.GetProfileByUserID(ctx, *post.UserID)
-		if err == nil {
+		userID := *post.UserID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
+			if err != nil {
+				return
+			}
 			avatarColor := profile.AvatarColor
 			if avatarColor == nil || *avatarColor == "" {
 				c := models.DefaultAvatarColorForProfile(profile.ID)
 				avatarColor = &c
 			}
 			response.Author = &models.AuthorInfo{
-				UserID:       *post.UserID,
+				UserID:       userID,
 				FirstName:    profile.FirstName,
 				LastName:     profile.LastName,
 				FullName:     profile.FullName(),
@@ -1192,15 +1206,21 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 				District:     profile.District,
 				Neighborhood: profile.Neighborhood,
 			}
-		}
+		}()
 	}
 
-	// Get business info if post is from a business
-	var fetchedBusiness *models.BusinessProfile
 	if post.BusinessID != nil && *post.BusinessID != "" {
-		business, err := s.businessRepo.GetByID(ctx, *post.BusinessID)
-		if err == nil {
+		bid := *post.BusinessID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			business, err := s.businessRepo.GetByID(ctx, bid)
+			if err != nil {
+				return
+			}
+			businessMu.Lock()
 			fetchedBusiness = business
+			businessMu.Unlock()
 			avatarColor := business.AvatarColor
 			if avatarColor == nil || *avatarColor == "" {
 				c := defaultAvatarColorForBusinessID(business.ID)
@@ -1220,25 +1240,33 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 				District:     business.District,
 				Neighborhood: business.Neighborhood,
 			}
-		}
+		}()
 	}
 
-	// Get attachments (return full objects with IDs so the client can reference them)
-	attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
-	if err == nil && len(attachments) > 0 {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		attachments, err := s.postRepo.GetAttachmentsByPostID(ctx, post.ID)
+		if err != nil || len(attachments) == 0 {
+			return
+		}
 		bucket := s.storageBucketName
 		if bucket == "" {
 			bucket = "hamsaya-uploads"
 		}
+		out := make([]models.AttachmentResponse, 0, len(attachments))
 		for _, att := range attachments {
 			photo := att.Photo
 			photo.URL = storage.EnsureBucketInStorageURL(photo.URL, bucket)
-			response.Attachments = append(response.Attachments, models.AttachmentResponse{
+			out = append(out, models.AttachmentResponse{
 				ID:    att.ID,
 				Photo: photo,
 			})
 		}
-	}
+		response.Attachments = out
+	}()
+
+	wg.Wait()
 
 	// Add type-specific fields
 	if post.Type == models.PostTypeSell {

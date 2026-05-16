@@ -4,6 +4,7 @@ import (
 	"context"
 	"hash/fnv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -529,9 +530,20 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 		UpdatedAt:       comment.UpdatedAt,
 	}
 
-	// Get author info
-	profile, err := s.userRepo.GetProfileByUserID(ctx, comment.UserID)
-	if err == nil {
+	// Fan out the independent DB lookups for this comment so latency is
+	// ~max(N queries) instead of ~sum(N queries). Each goroutine owns its
+	// own field of `response`; the mutex below only guards the rare race
+	// when two goroutines append to the same slice.
+	var wg sync.WaitGroup
+
+	// Author profile
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		profile, err := s.userRepo.GetProfileByUserID(ctx, comment.UserID)
+		if err != nil {
+			return
+		}
 		avatarColor := profile.AvatarColor
 		if avatarColor == nil || *avatarColor == "" {
 			c := models.DefaultAvatarColorForProfile(profile.ID)
@@ -548,18 +560,42 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 			District:     profile.District,
 			Neighborhood: profile.Neighborhood,
 		}
-	}
+	}()
 
-	// Get attachments (include ID so client can reference them for deletion)
-	attachments, err := s.commentRepo.GetAttachmentsByCommentID(ctx, comment.ID)
-	if err == nil && len(attachments) > 0 {
+	// Attachments
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		attachments, err := s.commentRepo.GetAttachmentsByCommentID(ctx, comment.ID)
+		if err != nil || len(attachments) == 0 {
+			return
+		}
+		out := make([]models.CommentAttachmentResponse, 0, len(attachments))
 		for _, att := range attachments {
-			response.Attachments = append(response.Attachments, models.CommentAttachmentResponse{
+			out = append(out, models.CommentAttachmentResponse{
 				ID:    att.ID,
 				Photo: att.Photo,
 			})
 		}
+		response.Attachments = out
+	}()
+
+	// Liked-by-me (only when viewer authenticated)
+	if viewerID != nil && *viewerID != "" {
+		wg.Add(1)
+		viewer := *viewerID
+		go func() {
+			defer wg.Done()
+			liked, err := s.commentRepo.IsLikedByUser(ctx, viewer, comment.ID)
+			if err == nil {
+				response.LikedByMe = liked
+			}
+		}()
+		// IsMine is a string compare — no need to defer to goroutine.
+		response.IsMine = comment.UserID == viewer
 	}
+
+	wg.Wait()
 
 	// Add location info — Latitude/Longitude are unpacked from the
 	// geography column in the repo SELECT.
@@ -568,16 +604,6 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 			Latitude:  comment.Latitude,
 			Longitude: comment.Longitude,
 		}
-	}
-
-	// Get engagement status if viewer is authenticated
-	if viewerID != nil && *viewerID != "" {
-		liked, err := s.commentRepo.IsLikedByUser(ctx, *viewerID, comment.ID)
-		if err == nil {
-			response.LikedByMe = liked
-		}
-		// Check if comment belongs to the viewer
-		response.IsMine = comment.UserID == *viewerID
 	}
 
 	// Populate mentioned users (ordered to match @mentions in text) for tap-to-profile

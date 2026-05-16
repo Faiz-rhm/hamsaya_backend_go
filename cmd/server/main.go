@@ -160,10 +160,17 @@ func main() {
 
 	// Connect to database
 	sugaredLogger.Info("Connecting to database...")
-	db, err := database.NewWithTracer(&cfg.Database, &database.SlowQueryTracer{
-		Logger:    logger.Named("pgx"),
-		Threshold: 200 * time.Millisecond,
-	})
+	// Chain two pgx tracers: SlowQueryTracer logs anything over 200ms,
+	// and NewPGXTracer emits db_queries_total / db_query_duration_seconds
+	// to the OTel meter so Grafana panels show per-table query rates +
+	// latency without manual instrumentation in every repo.
+	db, err := database.NewWithTracer(&cfg.Database, database.NewMultiTracer(
+		&database.SlowQueryTracer{
+			Logger:    logger.Named("pgx"),
+			Threshold: 200 * time.Millisecond,
+		},
+		observability.NewPGXTracer(),
+	))
 	if err != nil {
 		sugaredLogger.Fatalw("Failed to connect to database", "error", err)
 	}
@@ -295,9 +302,11 @@ func main() {
 		sugaredLogger.Info("Transcode pool started (4 workers)")
 	}
 	profileService := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, emailService, tokenStorage, jwtService, logger)
-	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger)
+	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger).
+		WithCache(cache.New(redisClient, "notifications", logger))
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
-	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
+	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger).
+		WithCache(cache.New(redisClient, "businesses", logger))
 	businessReviewService := services.NewBusinessReviewService(businessReviewRepo, businessRepo, userRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger).
 		WithCache(cache.New(redisClient, "categories", logger))
@@ -312,7 +321,8 @@ func main() {
 	authService := services.NewAuthService(userRepo, adminRepo, passwordService, jwtService, emailService, tokenStorage, mfaService, cfg, logger)
 	authService.SetNotificationService(notificationService)
 	chatService := services.NewChatService(conversationRepo, messageRepo, userRepo, businessRepo, relationshipsRepo, notificationService, wsHub, logger)
-	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger)
+	searchService := services.NewSearchService(searchRepo, postRepo, userRepo, businessRepo, categoryRepo, relationshipsRepo, logger).
+		WithCache(cache.New(redisClient, "discover", logger))
 	reportService := services.NewReportService(reportRepo, postRepo, userRepo, validator)
 	feedbackService := services.NewFeedbackService(feedbackRepo, validator)
 	adminService := services.NewAdminService(adminRepo, db, fcmClient, notificationService, logger)
