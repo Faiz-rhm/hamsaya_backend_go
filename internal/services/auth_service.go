@@ -13,6 +13,7 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/bgtasks"
+	"github.com/hamsaya/backend/pkg/observability"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
@@ -153,6 +154,7 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 			zap.String("user_id", userID),
 			zap.String("email", email),
 		)
+		observability.RecordUserCreated(ctx, "email")
 
 		// Welcome notification — best-effort; failures don't break registration.
 		s.sendWelcomeNotification(ctx, userID, req.FirstName)
@@ -497,6 +499,7 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 			zap.String("user_id", userID),
 			zap.String("email", email),
 		)
+		observability.RecordUserCreated(ctx, "email")
 
 		// Verification email is sent by profile_service when is_complete transitions
 		// false → true, so new users verify only after finishing onboarding.

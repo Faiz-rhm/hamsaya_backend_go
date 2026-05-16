@@ -8,6 +8,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/observability"
 	ws "github.com/hamsaya/backend/pkg/websocket"
 	"go.uber.org/zap"
 )
@@ -111,6 +112,8 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 		)
 		return nil, utils.NewInternalError("Failed to send message", err)
 	}
+
+	observability.RecordMessageCreated(ctx)
 
 	// Update conversation's last_message_at
 	if err := s.conversationRepo.UpdateLastMessageAt(ctx, conversation.ID); err != nil {

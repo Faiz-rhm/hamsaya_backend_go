@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
+	"github.com/hamsaya/backend/pkg/observability"
 	"go.uber.org/zap"
 )
 
@@ -184,11 +185,13 @@ func (h *Hub) Shutdown() {
 // Register adds a client to its shard.
 func (h *Hub) Register(client *Client) {
 	h.shardFor(client.ID).register <- client
+	observability.WebSocketConnected(context.Background())
 }
 
 // Unregister removes a client from its shard.
 func (h *Hub) Unregister(client *Client) {
 	h.shardFor(client.ID).unregister <- client
+	observability.WebSocketDisconnected(context.Background())
 }
 
 // SendToUser sends a message to a specific user via the user's shard.

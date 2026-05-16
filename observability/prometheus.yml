@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: hamsaya-backend
+    metrics_path: /metrics
+    static_configs:
+      # The backend is running on the host machine (not inside the
+      # observability compose network). host.docker.internal works on
+      # Mac, Windows, and Linux when `extra_hosts` is set.
+      - targets:
+          - host.docker.internal:8080

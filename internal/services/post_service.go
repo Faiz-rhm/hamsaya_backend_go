@@ -14,6 +14,7 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/bgtasks"
+	"github.com/hamsaya/backend/pkg/observability"
 	"github.com/hamsaya/backend/pkg/storage"
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
@@ -347,6 +348,8 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		zap.String("user_id", userID),
 		zap.String("type", string(req.Type)),
 	)
+
+	observability.RecordPostCreated(ctx, string(req.Type))
 
 	// Notify followers of the new post (user followers or business followers).
 	// Dispatched through bgtasks so the work is awaited on graceful shutdown

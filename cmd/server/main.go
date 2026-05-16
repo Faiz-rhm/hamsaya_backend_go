@@ -147,6 +147,13 @@ func main() {
 		sugaredLogger = logger.Sugar()
 	}
 
+	// Install the metrics handle as the package-wide singleton so services
+	// can call observability.RecordPostCreated / RecordUserCreated /
+	// RecordMessageCreated / WebSocketConnected without us threading the
+	// telemetry struct through every constructor. Safe with nil — the
+	// helpers become no-ops when telemetry was disabled or init failed.
+	observability.SetGlobal(telem.Metrics())
+
 	// Initialize validator
 	validator := utils.NewValidator()
 
