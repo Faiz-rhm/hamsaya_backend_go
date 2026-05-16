@@ -452,6 +452,13 @@ func (h *SearchHandler) Discover(c *gin.Context) {
 		return
 	}
 
+	// Short client/edge cache: the response is keyed by (filter, lat,
+	// lng, radius) so cache hit rate is per-device. Even 30s helps when
+	// the user toggles tabs and reopens the Discover screen. Backend
+	// cache already memoises this at the service layer; this header
+	// just extends it one hop further to the mobile HTTP cache.
+	c.Header("Cache-Control", "private, max-age=30")
+
 	utils.SendSuccess(c, http.StatusOK, "Discovery completed successfully", results)
 }
 

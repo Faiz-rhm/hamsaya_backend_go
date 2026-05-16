@@ -132,6 +132,14 @@ func (h *CategoryHandler) ListCategories(c *gin.Context) {
 		return
 	}
 
+	// Aggressive public cache: categories change rarely (admin-only) so
+	// CDNs / mobile dio_cache_interceptor / browsers can hold the
+	// response for an hour. Vary by Accept-Language so per-locale variants
+	// don't collide. Overrides the global no-store header from
+	// SecurityHeaders middleware — last-write-wins on the Gin writer.
+	c.Header("Cache-Control", "public, max-age=3600, s-maxage=3600")
+	c.Header("Vary", "Accept-Language")
+
 	utils.SendSuccess(c, http.StatusOK, "Categories retrieved successfully", categories)
 }
 
