@@ -20,6 +20,7 @@ import (
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/bgtasks"
+	"github.com/hamsaya/backend/pkg/cache"
 	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
 	"github.com/hamsaya/backend/pkg/database"
 	"github.com/hamsaya/backend/pkg/secrets"
@@ -298,7 +299,8 @@ func main() {
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger)
 	businessReviewService := services.NewBusinessReviewService(businessReviewRepo, businessRepo, userRepo, notificationService, logger)
-	categoryService := services.NewCategoryService(categoryRepo, logger)
+	categoryService := services.NewCategoryService(categoryRepo, logger).
+		WithCache(cache.New(redisClient, "categories", logger))
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
 	dailyLimitService := services.NewDailyLimitService(dailyLimitRepo, db, redisClient, logger)
 	monetizationService := services.NewMonetizationService(monetizationRepo, storageService, logger)

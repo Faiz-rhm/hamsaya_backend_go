@@ -8,13 +8,21 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/cache"
 	"go.uber.org/zap"
 )
+
+// categoryListTTL is the cache lifetime for the public active-categories
+// list. Categories change rarely (admin-only CRUD), so a 1-hour ceiling
+// is conservative; mutations bust the cache eagerly so users see admin
+// edits the instant they happen, not in an hour.
+const categoryListTTL = 1 * time.Hour
 
 // CategoryService handles business logic for marketplace categories
 type CategoryService struct {
 	categoryRepo repositories.CategoryRepository
 	logger       *zap.Logger
+	cache        *cache.Cache // optional; nil = no caching
 }
 
 // NewCategoryService creates a new category service
@@ -23,6 +31,22 @@ func NewCategoryService(categoryRepo repositories.CategoryRepository, logger *za
 		categoryRepo: categoryRepo,
 		logger:       logger,
 	}
+}
+
+// WithCache attaches a cache namespace. Call once at startup. Optional —
+// when not called, every read hits Postgres (current behavior).
+func (s *CategoryService) WithCache(c *cache.Cache) *CategoryService {
+	s.cache = c
+	return s
+}
+
+// invalidateCache drops every cached category list (all locales). Called
+// after any write so the next read picks up fresh data.
+func (s *CategoryService) invalidateCache(ctx context.Context) {
+	if s.cache == nil {
+		return
+	}
+	s.cache.DelPattern(ctx, "*")
 }
 
 // CreateCategory creates a new marketplace category (admin operation)
@@ -58,6 +82,7 @@ func (s *CategoryService) CreateCategory(ctx context.Context, req *models.Create
 		zap.String("name", req.Name),
 	)
 
+	s.invalidateCache(ctx)
 	return category.ToCategoryResponse(models.LocaleEN), nil
 }
 
@@ -91,8 +116,21 @@ func (s *CategoryService) GetAllCategories(ctx context.Context, locale string) (
 	return responses, nil
 }
 
-// GetActiveCategories retrieves only active categories (public operation). locale controls the name in the response.
+// GetActiveCategories retrieves only active categories (public operation).
+// locale controls the name in the response. Cached for [categoryListTTL]
+// per locale — categories are admin-edited so this is the highest-leverage
+// cache in the app (huge read:write ratio, every Discover / Sales screen
+// triggers it on cold start).
 func (s *CategoryService) GetActiveCategories(ctx context.Context, locale string) ([]*models.CategoryResponse, error) {
+	cacheKey := "active:" + locale
+
+	if s.cache != nil {
+		var cached []*models.CategoryResponse
+		if hit, _ := s.cache.Get(ctx, cacheKey, &cached); hit {
+			return cached, nil
+		}
+	}
+
 	categories, err := s.categoryRepo.GetActiveCategories(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get active categories", zap.Error(err))
@@ -102,6 +140,10 @@ func (s *CategoryService) GetActiveCategories(ctx context.Context, locale string
 	responses := make([]*models.CategoryResponse, len(categories))
 	for i, category := range categories {
 		responses[i] = category.ToCategoryResponse(locale)
+	}
+
+	if s.cache != nil {
+		_ = s.cache.Set(ctx, cacheKey, responses, categoryListTTL)
 	}
 
 	return responses, nil
@@ -147,6 +189,7 @@ func (s *CategoryService) UpdateCategory(ctx context.Context, categoryID string,
 		zap.String("name", category.Name),
 	)
 
+	s.invalidateCache(ctx)
 	return category.ToCategoryResponse(models.LocaleEN), nil
 }
 
@@ -175,6 +218,7 @@ func (s *CategoryService) DeleteCategory(ctx context.Context, categoryID string)
 		zap.String("category_id", categoryID),
 	)
 
+	s.invalidateCache(ctx)
 	return nil
 }
 
