@@ -16,6 +16,7 @@ import (
 	"github.com/hamsaya/backend/config"
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/nsfw"
 	"github.com/hamsaya/backend/pkg/storage"
 	"go.uber.org/zap"
 	_ "golang.org/x/image/webp"
@@ -40,6 +41,11 @@ type StorageService struct {
 	logger    *zap.Logger
 	client    *storage.Client
 	processor *storage.ImageProcessor
+	// nsfwClient is optional. When non-nil, every uploaded image (decoded
+	// bytes, pre-storage) is sent to the NSFW classifier sidecar. If the
+	// classifier marks IsExplicit, the upload is rejected with 400. Wiring
+	// is a single call to WithNSFWScanner from main.go.
+	nsfwClient *nsfw.Client
 }
 
 // NewStorageService creates a new storage service
@@ -75,6 +81,42 @@ func NewStorageService(cfg *config.Config, logger *zap.Logger) *StorageService {
 		client:    client,
 		processor: storage.NewImageProcessor(),
 	}
+}
+
+// WithNSFWScanner attaches a classifier client. Call once at startup
+// after NewStorageService. Pass nil to disable scanning (default).
+func (s *StorageService) WithNSFWScanner(c *nsfw.Client) *StorageService {
+	s.nsfwClient = c
+	return s
+}
+
+// scanForNSFW runs the optional NudeNet pass on raw image bytes. A
+// scanner outage is non-fatal — we log and let the upload through so a
+// flaky sidecar can't take down the whole upload pipeline.
+func (s *StorageService) scanForNSFW(ctx context.Context, data []byte, filename, contentType string) error {
+	if s.nsfwClient == nil {
+		return nil
+	}
+	res := s.nsfwClient.Scan(ctx, data, filename, contentType)
+	if res.ScannerError != nil {
+		s.logger.Warn("nsfw scan skipped — scanner unavailable",
+			zap.Error(res.ScannerError),
+			zap.String("filename", filename),
+		)
+		return nil
+	}
+	if res.IsExplicit {
+		s.logger.Warn("nsfw upload rejected",
+			zap.String("top_class", res.TopClass),
+			zap.Float64("top_score", res.TopScore),
+			zap.String("filename", filename),
+		)
+		return utils.NewBadRequestError(
+			"This image was flagged by our automated safety check and cannot be uploaded.",
+			nil,
+		)
+	}
+	return nil
 }
 
 // Client returns the underlying storage client. May be nil when storage
@@ -117,6 +159,13 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 	if !s.isValidImageType(mimeFromFormat(format)) {
 		return nil, utils.NewBadRequestError(
 			fmt.Sprintf("Decoded image format %q is not allowed. Only JPEG, PNG, and WebP are accepted", format), nil)
+	}
+
+	// NSFW gate. Runs on the raw decoded bytes so the classifier sees the
+	// same content the user submitted (before resize/recompress which
+	// could lose detail). Skipped silently when the scanner isn't wired.
+	if err := s.scanForNSFW(ctx, data, header.Filename, mimeFromFormat(format)); err != nil {
+		return nil, err
 	}
 
 	// Process image based on type
