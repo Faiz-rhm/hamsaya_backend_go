@@ -352,6 +352,38 @@ func Load() (*Config, error) {
 		}
 	}
 
+	// pgxpool defaults when env vars are unset. Without these, pgxpool falls
+	// back to its built-in default of 4 max connections which throttles even
+	// modest production loads (Postgres-side context switches are cheap
+	// compared to acquire-wait time on the pool).
+	//
+	// Production targets a single web instance handling ~200 RPS:
+	//   * MaxConns 25 leaves headroom for pgbouncer/replicas if added later
+	//   * MinConns 5 keeps a warm pool to absorb traffic spikes
+	//   * MaxConnLifetime 1h forces periodic reconnects so long-lived
+	//     connections pick up server-side config / TLS rotation.
+	//   * MaxConnIdleTime 30m frees up idle workers during quiet hours.
+	if cfg.Database.MaxConns == 0 {
+		if cfg.Server.Env == "production" {
+			cfg.Database.MaxConns = 25
+		} else {
+			cfg.Database.MaxConns = 10
+		}
+	}
+	if cfg.Database.MinConns == 0 {
+		if cfg.Server.Env == "production" {
+			cfg.Database.MinConns = 5
+		} else {
+			cfg.Database.MinConns = 2
+		}
+	}
+	if cfg.Database.MaxConnLifetime == 0 {
+		cfg.Database.MaxConnLifetime = time.Hour
+	}
+	if cfg.Database.MaxConnIdleTime == 0 {
+		cfg.Database.MaxConnIdleTime = 30 * time.Minute
+	}
+
 	// Reject weak or default JWT secrets at startup to prevent accidental insecure deployments.
 	const defaultJWTSecret = "your-super-secret-jwt-key-change-this-in-production"
 	if cfg.JWT.Secret == "" || cfg.JWT.Secret == defaultJWTSecret || len(cfg.JWT.Secret) < 32 {
