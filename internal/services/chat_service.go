@@ -404,12 +404,17 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 func (s *ChatService) notifyMessageSent(message *models.Message, recipientID string, conversation *models.Conversation) {
 	// Real-time WebSocket frame for foreground app
 	if s.wsHub != nil {
+		var businessID *string
+		if conversation != nil && conversation.BusinessID != nil && *conversation.BusinessID != "" {
+			businessID = conversation.BusinessID
+		}
 		wsMessage := models.WSMessage{
 			Type: "message",
 			Payload: models.WSMessagePayload{
 				ConversationID: message.ConversationID,
 				MessageID:      message.ID,
 				SenderID:       message.SenderID,
+				BusinessID:     businessID,
 				Content:        message.Content,
 				MessageType:    message.MessageType,
 				CreatedAt:      message.CreatedAt,

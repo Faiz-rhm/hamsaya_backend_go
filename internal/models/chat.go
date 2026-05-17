@@ -116,14 +116,19 @@ type WSMessage struct {
 	Payload interface{} `json:"payload"`
 }
 
-// WSMessagePayload represents the payload for a new message over WebSocket
+// WSMessagePayload represents the payload for a new message over WebSocket.
+// BusinessID identifies which scope the conversation belongs to. The mobile
+// client uses it to invalidate the correct conversationsProvider (personal
+// vs business-scoped); without it, business-chat unread badges never update
+// in real time.
 type WSMessagePayload struct {
-	ConversationID string       `json:"conversation_id"`
-	MessageID      string       `json:"message_id"`
-	SenderID       string       `json:"sender_id"`
-	Content        *string      `json:"content"`
-	MessageType    MessageType  `json:"message_type"`
-	CreatedAt      time.Time    `json:"created_at"`
+	ConversationID string      `json:"conversation_id"`
+	MessageID      string      `json:"message_id"`
+	SenderID       string      `json:"sender_id"`
+	BusinessID     *string     `json:"business_id,omitempty"`
+	Content        *string     `json:"content"`
+	MessageType    MessageType `json:"message_type"`
+	CreatedAt      time.Time   `json:"created_at"`
 }
 
 // WSTypingPayload represents the payload for typing indicators
