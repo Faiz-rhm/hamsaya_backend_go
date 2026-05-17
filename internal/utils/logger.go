@@ -10,8 +10,17 @@ import (
 var Logger *zap.SugaredLogger
 var baseLogger *zap.Logger
 
-// InitLogger initializes the global logger
+// InitLogger initializes the global logger.
+//
+// In production (ENV=production) the logger emits JSON without ANSI color
+// codes, runs in non-development mode (no DPanic stack traces), and defaults
+// to InfoLevel when LOG_LEVEL is unset — keeping debug spam out of the
+// shipped server logs and aligning with log-aggregator expectations.
+// In any other environment the legacy human-friendly console encoder is
+// used so local development still gets coloured, readable output.
 func InitLogger(level string) error {
+	isProduction := os.Getenv("ENV") == "production"
+
 	var zapLevel zapcore.Level
 	switch level {
 	case "debug":
@@ -23,7 +32,20 @@ func InitLogger(level string) error {
 	case "error":
 		zapLevel = zapcore.ErrorLevel
 	default:
-		zapLevel = zapcore.InfoLevel
+		if isProduction {
+			zapLevel = zapcore.InfoLevel
+		} else {
+			zapLevel = zapcore.InfoLevel
+		}
+	}
+
+	levelEncoder := zapcore.CapitalColorLevelEncoder
+	encoding := "console"
+	development := true
+	if isProduction {
+		levelEncoder = zapcore.CapitalLevelEncoder
+		encoding = "json"
+		development = false
 	}
 
 	encoderConfig := zapcore.EncoderConfig{
@@ -35,7 +57,7 @@ func InitLogger(level string) error {
 		MessageKey:     "message",
 		StacktraceKey:  "stacktrace",
 		LineEnding:     zapcore.DefaultLineEnding,
-		EncodeLevel:    zapcore.CapitalColorLevelEncoder,
+		EncodeLevel:    levelEncoder,
 		EncodeTime:     zapcore.ISO8601TimeEncoder,
 		EncodeDuration: zapcore.SecondsDurationEncoder,
 		EncodeCaller:   zapcore.ShortCallerEncoder,
@@ -43,8 +65,8 @@ func InitLogger(level string) error {
 
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(zapLevel),
-		Development:      true,
-		Encoding:         "console",
+		Development:      development,
+		Encoding:         encoding,
 		EncoderConfig:    encoderConfig,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
