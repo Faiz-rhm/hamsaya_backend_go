@@ -129,13 +129,15 @@ func (r *notificationRepository) List(ctx context.Context, filter *models.GetNot
 	}
 
 	// Business scope: when filter.BusinessID is set, only that business's notifications;
-	// when not set (user feed), show user-level notifications AND NEW_POST (so "Faiz store posted" appears in main list).
+	// when not set (user feed), show user-level notifications PLUS NEW_POST and MESSAGE
+	// even when stamped with business_id — owners must see DMs to their business in the
+	// personal bell, otherwise they only surface inside the business notification page.
 	if filter.BusinessID != nil && *filter.BusinessID != "" {
 		fmt.Fprintf(&queryBuilder, " AND data->>'business_id' = $%d", argCount)
 		args = append(args, *filter.BusinessID)
 		argCount++
 	} else {
-		queryBuilder.WriteString(" AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type = 'NEW_POST')")
+		queryBuilder.WriteString(" AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type IN ('NEW_POST', 'MESSAGE'))")
 	}
 
 	// Order by created_at DESC
@@ -258,7 +260,7 @@ func (r *notificationRepository) GetUnreadCount(ctx context.Context, userID stri
 			SELECT COUNT(*)
 			FROM notifications
 			WHERE user_id = $1 AND read = false
-			  AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type = 'NEW_POST')
+			  AND (data->>'business_id' IS NULL OR data->>'business_id' = '' OR type IN ('NEW_POST', 'MESSAGE'))
 		`
 		args = []interface{}{userID}
 	}
