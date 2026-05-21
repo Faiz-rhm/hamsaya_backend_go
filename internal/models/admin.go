@@ -61,6 +61,14 @@ type EngagementAnalytics struct {
 	TotalShares      int64            `json:"total_shares"`
 }
 
+// AdminProvinceUserCount is one row in the per-province user breakdown
+// returned by GET /admin/users/province-stats. Used by the admin panel
+// users tab to power the province filter + show totals.
+type AdminProvinceUserCount struct {
+	Province string `json:"province"`
+	Total    int64  `json:"total"`
+}
+
 // AdminUserFilter contains filters for listing users in admin panel
 type AdminUserFilter struct {
 	Search   string   `form:"search"`

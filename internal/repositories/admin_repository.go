@@ -21,6 +21,9 @@ type AdminRepository interface {
 	GetEngagementAnalytics(ctx context.Context, period string) (*models.EngagementAnalytics, error)
 	
 	ListUsers(ctx context.Context, filter *models.AdminUserFilter) ([]*models.AdminUserResponse, int64, error)
+	// GetUserProvinceCounts returns a per-province breakdown of users with
+	// non-empty province set on their profile, ordered by descending count.
+	GetUserProvinceCounts(ctx context.Context) ([]*models.AdminProvinceUserCount, error)
 	GetUserByID(ctx context.Context, userID string) (*models.AdminUserResponse, error)
 	GetUserBio(ctx context.Context, userID string) (*string, error)
 	GetUserPosts(ctx context.Context, userID string, limit int) ([]*models.AdminPostResponse, error)
@@ -339,6 +342,40 @@ func (r *adminRepository) GetEngagementAnalytics(ctx context.Context, period str
 	}
 	
 	return analytics, nil
+}
+
+// GetUserProvinceCounts groups every profile by its province field and
+// returns the size of each group. Rows with NULL or empty province are
+// excluded so the result reflects users who actually picked a location.
+// Used by the admin users tab to power the province filter dropdown and
+// to surface a per-province total at the top of the list.
+func (r *adminRepository) GetUserProvinceCounts(ctx context.Context) ([]*models.AdminProvinceUserCount, error) {
+	const query = `
+		SELECT province, COUNT(*) AS total
+		FROM profiles
+		WHERE province IS NOT NULL AND province <> ''
+		GROUP BY province
+		ORDER BY total DESC, province ASC
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list province counts: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*models.AdminProvinceUserCount, 0, 32)
+	for rows.Next() {
+		c := &models.AdminProvinceUserCount{}
+		if err := rows.Scan(&c.Province, &c.Total); err != nil {
+			return nil, fmt.Errorf("failed to scan province count: %w", err)
+		}
+		out = append(out, c)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating province counts: %w", err)
+	}
+	return out, nil
 }
 
 func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUserFilter) ([]*models.AdminUserResponse, int64, error) {

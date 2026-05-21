@@ -993,6 +993,14 @@ func (m *MockAdminRepository) GetUserAnalytics(ctx context.Context, period strin
 	return args.Get(0).(*models.UserAnalytics), args.Error(1)
 }
 
+func (m *MockAdminRepository) GetUserProvinceCounts(ctx context.Context) ([]*models.AdminProvinceUserCount, error) {
+	args := m.Called(ctx)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.AdminProvinceUserCount), args.Error(1)
+}
+
 func (m *MockAdminRepository) GetPostAnalytics(ctx context.Context, period string) (*models.PostAnalytics, error) {
 	args := m.Called(ctx, period)
 	if args.Get(0) == nil {

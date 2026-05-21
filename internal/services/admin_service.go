@@ -92,6 +92,17 @@ func (s *AdminService) GetBusinessAnalytics(ctx context.Context, period string) 
 }
 
 // ListUsers lists users with filtering and pagination
+// GetUserProvinceStats returns per-province user totals for the admin
+// users tab. Wraps the repo call with logging + standard error mapping.
+func (s *AdminService) GetUserProvinceStats(ctx context.Context) ([]*models.AdminProvinceUserCount, error) {
+	stats, err := s.adminRepo.GetUserProvinceCounts(ctx)
+	if err != nil {
+		s.logger.Error("Failed to get province user counts", zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get province user counts", err)
+	}
+	return stats, nil
+}
+
 func (s *AdminService) ListUsers(ctx context.Context, filter *models.AdminUserFilter) (*models.PaginatedResponse, error) {
 	users, total, err := s.adminRepo.ListUsers(ctx, filter)
 	if err != nil {

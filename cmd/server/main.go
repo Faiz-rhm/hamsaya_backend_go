@@ -729,6 +729,7 @@ func main() {
 			// User Management — read for all admins; suspend/unsuspend admin-only;
 			// delete admin-only; role change super_admin-only.
 			admin.GET("/users", adminHandler.ListUsers)
+			admin.GET("/users/province-stats", adminHandler.GetUserProvinceStats)
 			admin.GET("/users/:user_id", adminHandler.GetUser)
 			admin.POST("/users/:user_id/suspend", adminOnly, adminHandler.SuspendUser)
 			admin.POST("/users/:user_id/unsuspend", adminOnly, adminHandler.UnsuspendUser)

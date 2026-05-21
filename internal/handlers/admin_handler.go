@@ -170,6 +170,27 @@ func (h *AdminHandler) GetBusinessAnalytics(c *gin.Context) {
 // @Failure 403 {object} utils.Response
 // @Failure 500 {object} utils.Response
 // @Router /admin/users [get]
+// GetUserProvinceStats godoc
+// @Summary List per-province user totals
+// @Description Returns one row per province with the number of users whose
+// profile.province matches. Rows with empty/null province are excluded.
+// @Tags admin
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=[]models.AdminProvinceUserCount}
+// @Failure 401 {object} utils.Response
+// @Failure 403 {object} utils.Response
+// @Failure 500 {object} utils.Response
+// @Router /admin/users/province-stats [get]
+func (h *AdminHandler) GetUserProvinceStats(c *gin.Context) {
+	stats, err := h.adminService.GetUserProvinceStats(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Province user counts retrieved successfully", stats)
+}
+
 func (h *AdminHandler) ListUsers(c *gin.Context) {
 	var filter models.AdminUserFilter
 	if err := c.ShouldBindQuery(&filter); err != nil {
