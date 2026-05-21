@@ -481,7 +481,9 @@ func (r *adminRepository) GetTopContent(ctx context.Context, period, metric stri
 
 	// posts.status is BOOLEAN — true = visible. CASE-convert to the
 	// canonical "ACTIVE"/"HIDDEN" labels so the JSON response matches the
-	// rest of the admin API.
+	// rest of the admin API. LEFT JOIN LATERAL pulls the first attachment
+	// per post so the admin panel can render a thumbnail; LIMIT 1 keeps
+	// the join cheap even on multi-attachment posts.
 	query := fmt.Sprintf(`
 		SELECT
 			p.id, p.type,
@@ -492,10 +494,18 @@ func (r *adminRepository) GetTopContent(ctx context.Context, period, metric stri
 			p.total_likes, p.total_comments, p.total_shares,
 			0 AS report_count,
 			p.created_at, p.updated_at,
-			p.%s AS score
+			p.%s AS score,
+			att.preview_url
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		LEFT JOIN profiles pr ON pr.id = p.user_id
+		LEFT JOIN LATERAL (
+			SELECT a.photo->>'url' AS preview_url
+			FROM attachments a
+			WHERE a.post_id = p.id AND a.deleted_at IS NULL
+			ORDER BY a.created_at ASC
+			LIMIT 1
+		) att ON TRUE
 		WHERE p.deleted_at IS NULL
 		  AND p.status = true
 		  %s
@@ -521,6 +531,7 @@ func (r *adminRepository) GetTopContent(ctx context.Context, period, metric stri
 			&item.ReportCount,
 			&item.CreatedAt, &item.UpdatedAt,
 			&item.Score,
+			&item.PreviewURL,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan top content row: %w", err)
 		}

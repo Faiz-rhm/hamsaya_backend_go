@@ -95,6 +95,10 @@ type AdminTopContentItem struct {
 	// Score is the metric value that drove the ranking — count of likes,
 	// comments, or shares within the window, depending on the `metric` arg.
 	Score int64 `json:"score"`
+	// PreviewURL is the first attachment's photo URL (if any). Used by the
+	// admin panel to render a thumbnail next to the title — without it
+	// the trending list is a wall of text.
+	PreviewURL *string `json:"preview_url,omitempty"`
 }
 
 // AdminUserFilter contains filters for listing users in admin panel
