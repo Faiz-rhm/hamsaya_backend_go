@@ -43,62 +43,71 @@ type RateLimitConfig struct {
 	KeyPrefix   string        // Redis key prefix
 }
 
-// DefaultRateLimits defines default rate limits for different endpoint types
+// DefaultRateLimits defines default rate limits for different endpoint types.
+//
+// Caps were loosened across the board to reduce false-positive throttles
+// from NAT'd users (mobile carrier IPs, office Wi-Fi, university networks
+// where many devices share one IP) while keeping each limit well below
+// what a botnet/script needs to be useful. Per-user limits leave headroom
+// for power users (photo bursts in chat, prolific posters) without
+// re-opening the abuse surface.
 var DefaultRateLimits = map[string]RateLimitConfig{
 	"default": {
-		MaxRequests: 100,
+		MaxRequests: 200,
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:default:",
 	},
+	// auth: 10/min/IP — 5/min was tripping shared-IP users (NAT, carrier).
+	// Still throttles credential-stuffing scripts well below useful speed.
 	"auth": {
-		MaxRequests: 5,
+		MaxRequests: 10,
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:auth:",
 	},
 	"strict": {
-		MaxRequests: 3,
+		MaxRequests: 5,
 		Window:      5 * time.Minute,
 		KeyPrefix:   "ratelimit:strict:",
 	},
 	"reports": {
-		MaxRequests: 10,
+		MaxRequests: 20,
 		Window:      24 * time.Hour,
 		KeyPrefix:   "ratelimit:reports:",
 	},
-	// password-reset: tighter window for OTP/code verification to slow brute-force on 6-digit codes
+	// password-reset: 5/10min/IP — covers fat-finger OTP entry on shared IPs.
 	"password-reset": {
-		MaxRequests: 3,
+		MaxRequests: 5,
 		Window:      10 * time.Minute,
 		KeyPrefix:   "ratelimit:pwreset:",
 	},
-	// posts-create: per-user cap on POST /posts. Auth alone is not enough — a
-	// compromised account or bot could otherwise flood the feed. Use with LimitByUser.
+	// posts-create: 60/h/user — accommodates prolific posters (community
+	// managers, business owners cross-posting events). Auth-plus-per-user
+	// scope prevents bot floods even at this ceiling.
 	"posts-create": {
-		MaxRequests: 30,
+		MaxRequests: 60,
 		Window:      time.Hour,
 		KeyPrefix:   "ratelimit:posts-create:",
 	},
 	// data-export: GDPR Article 20 dump is expensive (5k posts + 5k comments
-	// + relationship lists). Cap at 1 / 24h per user to prevent abuse.
+	// + relationship lists). 2/24h/user — one retry slot for a broken zip
+	// without re-opening abuse vector.
 	"data-export": {
-		MaxRequests: 1,
+		MaxRequests: 2,
 		Window:      24 * time.Hour,
 		KeyPrefix:   "ratelimit:data-export:",
 	},
 	// ad-tracking: impression/click endpoints are public (no auth) so a
 	// botnet could otherwise flood metric counters and inflate advertiser
-	// charges once monetization couples ad performance to credit balance.
-	// 60/min/IP comfortably covers a normal scrolling user and blocks scripts.
+	// charges. 120/min/IP covers an aggressive scroll-and-click user.
 	"ad-tracking": {
-		MaxRequests: 60,
+		MaxRequests: 120,
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:ad-tracking:",
 	},
-	// chat-send: per-user message-send cap. 30/min/user blocks rapid spam
-	// while leaving plenty of room for normal chatting (a fast typist
-	// emits ~6-10 messages/min). Use with LimitByUser.
+	// chat-send: 60/min/user — covers image-burst sends (a multi-photo
+	// upload posts one message per image) and still blocks programmatic spam.
 	"chat-send": {
-		MaxRequests: 30,
+		MaxRequests: 60,
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:chat-send:",
 	},
