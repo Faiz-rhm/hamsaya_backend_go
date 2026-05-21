@@ -319,3 +319,95 @@ func TestChatService_DeleteMessage(t *testing.T) {
 		msgRepo.AssertExpectations(t)
 	})
 }
+
+// DeleteMessageForMe covers the per-user delete-for-me path: any participant
+// may call it (sender OR recipient); non-participants are rejected.
+//
+// Note: WS frame side-effects on the for-everyone path are not asserted here
+// because ChatService.wsHub is a concrete *ws.Hub (not an interface), and
+// the test service is constructed with a nil hub. The broadcast helper
+// short-circuits on nil so these tests stay focused on the happy path.
+func TestChatService_DeleteMessageForMe(t *testing.T) {
+	t.Run("message not found", func(t *testing.T) {
+		convRepo := &mocks.MockConversationRepository{}
+		msgRepo := &mocks.MockMessageRepository{}
+		userRepo := new(mocks.MockUserRepository)
+
+		msgRepo.On("GetByID", mock.Anything, "msg-bad").Return(nil, errors.New("not found"))
+
+		svc := newTestChatService(convRepo, msgRepo, userRepo)
+		err := svc.DeleteMessageForMe(context.Background(), "user-1", "msg-bad")
+
+		require.Error(t, err)
+	})
+
+	t.Run("non-participant rejected", func(t *testing.T) {
+		convRepo := &mocks.MockConversationRepository{}
+		msgRepo := &mocks.MockMessageRepository{}
+		userRepo := new(mocks.MockUserRepository)
+
+		msg := newTestMessage("msg-1", "conv-1", "sender-1")
+		msgRepo.On("GetByID", mock.Anything, "msg-1").Return(msg, nil)
+		convRepo.On("IsParticipant", mock.Anything, "conv-1", "stranger").Return(false, nil)
+
+		svc := newTestChatService(convRepo, msgRepo, userRepo)
+		err := svc.DeleteMessageForMe(context.Background(), "stranger", "msg-1")
+
+		require.Error(t, err)
+		// Forbidden access — sender check is bypassed; participant is required.
+		convRepo.AssertExpectations(t)
+	})
+
+	t.Run("recipient can delete for themselves", func(t *testing.T) {
+		convRepo := &mocks.MockConversationRepository{}
+		msgRepo := &mocks.MockMessageRepository{}
+		userRepo := new(mocks.MockUserRepository)
+
+		msg := newTestMessage("msg-1", "conv-1", "sender-1")
+		msgRepo.On("GetByID", mock.Anything, "msg-1").Return(msg, nil)
+		convRepo.On("IsParticipant", mock.Anything, "conv-1", "recipient-1").Return(true, nil)
+		msgRepo.On("DeleteForUser", mock.Anything, "msg-1", "recipient-1").Return(nil)
+
+		svc := newTestChatService(convRepo, msgRepo, userRepo)
+		err := svc.DeleteMessageForMe(context.Background(), "recipient-1", "msg-1")
+
+		require.NoError(t, err)
+		msgRepo.AssertExpectations(t)
+		convRepo.AssertExpectations(t)
+	})
+
+	t.Run("sender can also delete for themselves", func(t *testing.T) {
+		convRepo := &mocks.MockConversationRepository{}
+		msgRepo := &mocks.MockMessageRepository{}
+		userRepo := new(mocks.MockUserRepository)
+
+		msg := newTestMessage("msg-1", "conv-1", "sender-1")
+		msgRepo.On("GetByID", mock.Anything, "msg-1").Return(msg, nil)
+		convRepo.On("IsParticipant", mock.Anything, "conv-1", "sender-1").Return(true, nil)
+		msgRepo.On("DeleteForUser", mock.Anything, "msg-1", "sender-1").Return(nil)
+
+		svc := newTestChatService(convRepo, msgRepo, userRepo)
+		err := svc.DeleteMessageForMe(context.Background(), "sender-1", "msg-1")
+
+		require.NoError(t, err)
+		msgRepo.AssertExpectations(t)
+		convRepo.AssertExpectations(t)
+	})
+
+	t.Run("repo failure surfaces as error", func(t *testing.T) {
+		convRepo := &mocks.MockConversationRepository{}
+		msgRepo := &mocks.MockMessageRepository{}
+		userRepo := new(mocks.MockUserRepository)
+
+		msg := newTestMessage("msg-1", "conv-1", "sender-1")
+		msgRepo.On("GetByID", mock.Anything, "msg-1").Return(msg, nil)
+		convRepo.On("IsParticipant", mock.Anything, "conv-1", "sender-1").Return(true, nil)
+		msgRepo.On("DeleteForUser", mock.Anything, "msg-1", "sender-1").
+			Return(errors.New("boom"))
+
+		svc := newTestChatService(convRepo, msgRepo, userRepo)
+		err := svc.DeleteMessageForMe(context.Background(), "sender-1", "msg-1")
+
+		require.Error(t, err)
+	})
+}

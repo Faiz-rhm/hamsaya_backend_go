@@ -49,6 +49,8 @@ func newChatRouter(
 	r.GET("/api/v1/chat/conversations/:conversation_id/messages", authed, h.GetMessages)
 	r.POST("/api/v1/chat/conversations/:conversation_id/read", authed, h.MarkConversationAsRead)
 	r.DELETE("/api/v1/chat/messages/:message_id", authed, h.DeleteMessage)
+	r.POST("/api/v1/chat/messages/:message_id/delete-for-me", authed, h.DeleteMessageForMe)
+	r.POST("/api/v1/noauth/chat/messages/:message_id/delete-for-me", h.DeleteMessageForMe)
 
 	r.POST("/api/v1/noauth/chat/messages", h.SendMessage)
 	return r
@@ -230,5 +232,80 @@ func TestChatHandler_DeleteMessage(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, w.Code)
 		msgRepo.AssertExpectations(t)
+	})
+}
+
+// --- DeleteMessageForMe ---
+
+func TestChatHandler_DeleteMessageForMe(t *testing.T) {
+	t.Run("unauthenticated", func(t *testing.T) {
+		r := newChatRouter(t, &mocks.MockConversationRepository{}, &mocks.MockMessageRepository{})
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			"/api/v1/noauth/chat/messages/"+chatTestMessageID+"/delete-for-me",
+			nil,
+		)
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("message not found", func(t *testing.T) {
+		msgRepo := &mocks.MockMessageRepository{}
+		msgRepo.On("GetByID", mock.Anything, chatTestMessageID).Return(nil, fmt.Errorf("not found"))
+		r := newChatRouter(t, &mocks.MockConversationRepository{}, msgRepo)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			"/api/v1/chat/messages/"+chatTestMessageID+"/delete-for-me",
+			nil,
+		)
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("non-participant rejected", func(t *testing.T) {
+		msgRepo := &mocks.MockMessageRepository{}
+		convRepo := &mocks.MockConversationRepository{}
+		msg := &models.Message{ID: chatTestMessageID, SenderID: "other-user", ConversationID: chatTestConvID}
+		msgRepo.On("GetByID", mock.Anything, chatTestMessageID).Return(msg, nil)
+		convRepo.On("IsParticipant", mock.Anything, chatTestConvID, chatTestUserID).Return(false, nil)
+		r := newChatRouter(t, convRepo, msgRepo)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			"/api/v1/chat/messages/"+chatTestMessageID+"/delete-for-me",
+			nil,
+		)
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("success — recipient hides sender's message", func(t *testing.T) {
+		msgRepo := &mocks.MockMessageRepository{}
+		convRepo := &mocks.MockConversationRepository{}
+		msg := &models.Message{ID: chatTestMessageID, SenderID: "other-user", ConversationID: chatTestConvID}
+		msgRepo.On("GetByID", mock.Anything, chatTestMessageID).Return(msg, nil)
+		convRepo.On("IsParticipant", mock.Anything, chatTestConvID, chatTestUserID).Return(true, nil)
+		msgRepo.On("DeleteForUser", mock.Anything, chatTestMessageID, chatTestUserID).Return(nil)
+		r := newChatRouter(t, convRepo, msgRepo)
+
+		w := httptest.NewRecorder()
+		req, _ := http.NewRequest(
+			http.MethodPost,
+			"/api/v1/chat/messages/"+chatTestMessageID+"/delete-for-me",
+			nil,
+		)
+		r.ServeHTTP(w, req)
+
+		assert.Equal(t, http.StatusOK, w.Code)
+		msgRepo.AssertExpectations(t)
+		convRepo.AssertExpectations(t)
 	})
 }

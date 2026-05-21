@@ -164,3 +164,109 @@ func TestMessageRepository_GetLastMessage_Success(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "msg-last", result.ID)
 }
+
+// --- DeleteForUser (delete-for-me) ---
+
+func TestMessageRepository_DeleteForUser_Success(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newMessageRepo(pool)
+
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return(pgconn.NewCommandTag("UPDATE 1"), nil)
+
+	err := repo.DeleteForUser(context.Background(), "msg-1", "user-1")
+	require.NoError(t, err)
+}
+
+func TestMessageRepository_DeleteForUser_NotFound(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newMessageRepo(pool)
+
+	// 0 rows affected means the row was either already deleted-for-everyone
+	// or never existed — surface as an error so the service can return 404.
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return(pgconn.NewCommandTag("UPDATE 0"), nil)
+
+	err := repo.DeleteForUser(context.Background(), "msg-missing", "user-1")
+	require.Error(t, err)
+}
+
+func TestMessageRepository_DeleteForUser_DBError(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newMessageRepo(pool)
+
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Return(pgconn.NewCommandTag(""), errors.New("db error"))
+
+	err := repo.DeleteForUser(context.Background(), "msg-1", "user-1")
+	require.Error(t, err)
+}
+
+// --- Viewer-filter SQL assertions ---
+// Each viewer-aware query must include the deleted_for_user_ids exclusion
+// clause; a regression that drops it would silently show messages the user
+// chose to hide. Match the exact column name so a rename is also caught.
+
+func TestMessageRepository_List_IncludesViewerFilter(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newMessageRepo(pool)
+
+	var capturedSQL string
+	pool.On("Query", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Run(func(args mock.Arguments) {
+			capturedSQL = args.String(1)
+		}).
+		Return(testutil.NewMockRows([][]any{}), nil)
+
+	_, err := repo.List(context.Background(), &models.GetMessagesFilter{
+		ConversationID: "conv-1",
+		ViewerID:       "user-1",
+		Limit:          10,
+		Offset:         0,
+	})
+	require.NoError(t, err)
+	assert.Contains(t, capturedSQL, "deleted_for_user_ids",
+		"List must exclude rows the viewer has delete-for-me'd")
+}
+
+func TestMessageRepository_GetLastMessage_IncludesViewerFilter(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newMessageRepo(pool)
+
+	var capturedSQL string
+	content := "x"
+	msg := &models.Message{
+		ID: "msg-1", ConversationID: "conv-1", SenderID: "user-1",
+		Content: &content, MessageType: models.MessageTypeText, CreatedAt: time.Now(),
+	}
+	pool.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Run(func(args mock.Arguments) {
+			capturedSQL = args.String(1)
+		}).
+		Return(testutil.NewMockRow(makeMessageScanFn(msg)))
+
+	_, err := repo.GetLastMessage(context.Background(), "conv-1", "user-1")
+	require.NoError(t, err)
+	assert.Contains(t, capturedSQL, "deleted_for_user_ids",
+		"GetLastMessage preview must skip per-user-deleted rows for the viewer")
+}
+
+func TestMessageRepository_GetUnreadCount_IncludesViewerFilter(t *testing.T) {
+	pool := new(testutil.MockPool)
+	repo := newMessageRepo(pool)
+
+	var capturedSQL string
+	pool.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
+		Run(func(args mock.Arguments) {
+			capturedSQL = args.String(1)
+		}).
+		Return(testutil.NewMockRow(func(dest ...any) error {
+			*dest[0].(*int) = 0
+			return nil
+		}))
+
+	_, err := repo.GetUnreadCount(context.Background(), "conv-1", "user-1")
+	require.NoError(t, err)
+	assert.Contains(t, capturedSQL, "deleted_for_user_ids",
+		"GetUnreadCount must skip per-user-deleted rows so badge matches list")
+}
