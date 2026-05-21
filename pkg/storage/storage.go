@@ -276,6 +276,35 @@ func (c *Client) UploadFile(ctx context.Context, reader io.Reader, size int64, c
 	return result, nil
 }
 
+// StreamObject opens the object at the given key and returns a reader.
+// Caller MUST close the reader. Forwards a Range header when supplied so
+// <video> seek works through the admin proxy. ObjectInfo carries
+// Content-Type / Content-Length / ETag for the HTTP response.
+func (c *Client) StreamObject(ctx context.Context, key, rangeHeader string) (io.ReadCloser, minio.ObjectInfo, error) {
+	opts := minio.GetObjectOptions{}
+	if rangeHeader != "" {
+		// minio-go's Set forwards the raw header. No error to check —
+		// it just appends to the request headers map.
+		opts.Set("Range", rangeHeader)
+	}
+	obj, err := c.client.GetObject(ctx, c.bucketName, key, opts)
+	if err != nil {
+		return nil, minio.ObjectInfo{}, fmt.Errorf("get object: %w", err)
+	}
+	info, err := obj.Stat()
+	if err != nil {
+		_ = obj.Close()
+		return nil, minio.ObjectInfo{}, fmt.Errorf("stat object: %w", err)
+	}
+	return obj, info, nil
+}
+
+// BucketName returns the configured bucket name so callers (e.g. the admin
+// stream handler) can strip a leading bucket prefix from a URL-derived key.
+func (c *Client) BucketName() string {
+	return c.bucketName
+}
+
 // Transcode fetches sourceKey, encodes it to format/quality, writes the
 // result at targetKey, and removes the source on success. Satisfies the
 // transcode.Encoder interface (without importing pkg/transcode — keeps

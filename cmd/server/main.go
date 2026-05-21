@@ -387,6 +387,7 @@ func main() {
 	adminCookieCfg := utils.NewCookieConfig(cfg.Server.Env, cfg.Server.AdminCookieDomain)
 	featureFlagRepo := repositories.NewFeatureFlagRepository(db)
 	systemHandler := handlers.NewSystemHandler(db, redisClient, featureFlagRepo, wsHub, storageService.Client(), logger)
+	storageHandler := handlers.NewStorageHandler(storageService.Client(), logger)
 	backupService, err := services.NewBackupService(db, cfg, logger)
 	if err != nil {
 		logger.Fatal("Failed to create backup service", zap.Error(err))
@@ -446,6 +447,12 @@ func main() {
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{
+		// Storage stream proxy — public, no auth (bucket itself is public-read).
+		// Used by the admin panel when it can't reach MinIO directly + as a
+		// stable single-origin media URL for clients. Rate-limited by IP so
+		// the open endpoint can't be abused for bandwidth.
+		v1.GET("/storage/*key", rateLimiter.LimitByType("storage-stream"), storageHandler.Stream)
+
 		// Explicit /users/me/* routes first so they always match (avoid 404 from param route)
 		v1.GET("/users/me/posts", authMiddleware.RequireAuth(), postHandler.GetMyPosts)
 		v1.GET("/users/me/bookmarks", authMiddleware.RequireAuth(), postHandler.GetMyBookmarks)

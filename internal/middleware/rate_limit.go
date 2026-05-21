@@ -111,6 +111,15 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:chat-send:",
 	},
+	// storage-stream: public proxy endpoint serving MinIO objects.
+	// 300/min/IP comfortably covers a feed scroll with many images +
+	// videos pulling Range chunks (one IP can request the same object
+	// in 5+ HTTP requests for a 5MB video). Blocks bandwidth abuse.
+	"storage-stream": {
+		MaxRequests: 300,
+		Window:      time.Minute,
+		KeyPrefix:   "ratelimit:storage:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis
