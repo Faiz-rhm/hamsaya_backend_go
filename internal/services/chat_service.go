@@ -193,6 +193,7 @@ func (s *ChatService) GetMessages(ctx context.Context, userID, conversationID st
 	// Get messages
 	filter := &models.GetMessagesFilter{
 		ConversationID: conversationID,
+		ViewerID:       userID,
 		Limit:          limit,
 		Offset:         offset,
 	}
@@ -252,20 +253,19 @@ func (s *ChatService) MarkConversationAsRead(ctx context.Context, userID, conver
 	return nil
 }
 
-// DeleteMessage soft deletes a message
+// DeleteMessage soft-deletes a message for everyone in the conversation
+// (sender-only). Broadcasts a WS "message_deleted" frame to the other
+// participant so their UI removes the bubble in real time.
 func (s *ChatService) DeleteMessage(ctx context.Context, userID, messageID string) error {
-	// Get message
 	message, err := s.messageRepo.GetByID(ctx, messageID)
 	if err != nil {
 		return utils.NewNotFoundError("Message not found", err)
 	}
 
-	// Check if user is the sender
 	if message.SenderID != userID {
 		return utils.NewForbiddenError("You can only delete your own messages", nil)
 	}
 
-	// Delete message
 	if err := s.messageRepo.Delete(ctx, messageID); err != nil {
 		s.logger.Error("Failed to delete message",
 			zap.Error(err),
@@ -279,7 +279,91 @@ func (s *ChatService) DeleteMessage(ctx context.Context, userID, messageID strin
 		zap.String("user_id", userID),
 	)
 
+	// Broadcast to the other participant so their open chat removes the
+	// bubble without waiting for a refresh. Done in a goroutine so the
+	// HTTP request returns immediately even if the WS hub is slow.
+	if s.wsHub != nil {
+		go s.broadcastMessageDeleted(message)
+	}
+
 	return nil
+}
+
+// DeleteMessageForMe removes the message for the requesting user only.
+// Other participants continue to see it. Any participant (sender OR
+// recipient) may call this on a message they can currently see.
+func (s *ChatService) DeleteMessageForMe(ctx context.Context, userID, messageID string) error {
+	message, err := s.messageRepo.GetByID(ctx, messageID)
+	if err != nil {
+		return utils.NewNotFoundError("Message not found", err)
+	}
+
+	// Authorize: user must be a participant of the conversation. The simplest
+	// path is checking they sent the message OR are the other participant of
+	// the conversation — reuse the existing IsParticipant repo method.
+	isParticipant, perr := s.conversationRepo.IsParticipant(ctx, message.ConversationID, userID)
+	if perr != nil {
+		return utils.NewInternalError("Failed to verify access", perr)
+	}
+	if !isParticipant {
+		return utils.NewForbiddenError("You don't have access to this message", nil)
+	}
+
+	if err := s.messageRepo.DeleteForUser(ctx, messageID, userID); err != nil {
+		s.logger.Error("Failed to delete message for user",
+			zap.Error(err),
+			zap.String("message_id", messageID),
+			zap.String("user_id", userID),
+		)
+		return utils.NewInternalError("Failed to delete message", err)
+	}
+
+	s.logger.Info("Message hidden for user",
+		zap.String("message_id", messageID),
+		zap.String("user_id", userID),
+	)
+	return nil
+}
+
+// broadcastMessageDeleted notifies the other conversation participant that a
+// message was removed-for-everyone. Looks up the conversation so business
+// scope can be stamped on the WS payload (mirrors the new-message frame).
+func (s *ChatService) broadcastMessageDeleted(message *models.Message) {
+	ctx := context.Background()
+	convo, cerr := s.conversationRepo.GetByID(ctx, message.ConversationID)
+	if cerr != nil {
+		s.logger.Debug("delete broadcast: failed to load conversation",
+			zap.Error(cerr),
+			zap.String("conversation_id", message.ConversationID),
+		)
+		return
+	}
+
+	// Find the other participant id (everyone except the sender).
+	other, oerr := s.conversationRepo.GetOtherParticipantID(ctx, convo.ID, message.SenderID)
+	if oerr != nil || other == "" {
+		return
+	}
+
+	var businessID *string
+	if convo.BusinessID != nil && *convo.BusinessID != "" {
+		businessID = convo.BusinessID
+	}
+
+	frame := models.WSMessage{
+		Type: "message_deleted",
+		Payload: models.WSMessageDeletedPayload{
+			ConversationID: message.ConversationID,
+			MessageID:      message.ID,
+			BusinessID:     businessID,
+		},
+	}
+	if err := s.wsHub.SendToUser(other, frame); err != nil {
+		s.logger.Debug("Failed to send WS message_deleted",
+			zap.Error(err),
+			zap.String("recipient_id", other),
+		)
+	}
 }
 
 // enrichConversation enriches a conversation with participant and last message info
@@ -334,8 +418,8 @@ func (s *ChatService) enrichConversation(ctx context.Context, conversation *mode
 		}
 	}
 
-	// Get last message
-	lastMessage, err := s.messageRepo.GetLastMessage(ctx, conversation.ID)
+	// Get last message visible to this viewer (per-user deletes excluded).
+	lastMessage, err := s.messageRepo.GetLastMessage(ctx, conversation.ID, viewerID)
 	if err == nil && lastMessage != nil {
 		response.LastMessage = &models.MessageInfo{
 			ID:          lastMessage.ID,

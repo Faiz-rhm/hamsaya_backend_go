@@ -319,6 +319,30 @@ func (h *ChatHandler) DeleteMessage(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Message deleted successfully", nil)
 }
 
+// DeleteMessageForMe handles POST /api/v1/chat/messages/:message_id/delete-for-me
+// Hides the message for the requesting user only — other participants still
+// see it. Any participant can call this (not just the sender).
+func (h *ChatHandler) DeleteMessageForMe(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	messageID := c.Param("message_id")
+	if messageID == "" {
+		utils.SendError(c, http.StatusBadRequest, "Message ID is required", utils.ErrBadRequest)
+		return
+	}
+
+	if err := h.chatService.DeleteMessageForMe(c.Request.Context(), userID.(string), messageID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Message hidden", nil)
+}
+
 // handleError handles service errors and sends appropriate HTTP responses
 func (h *ChatHandler) handleError(c *gin.Context, err error) {
 	// Check if it's an AppError

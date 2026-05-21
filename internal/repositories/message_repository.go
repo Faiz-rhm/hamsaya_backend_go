@@ -16,17 +16,24 @@ type MessageRepository interface {
 	Create(ctx context.Context, message *models.Message) error
 	GetByID(ctx context.Context, messageID string) (*models.Message, error)
 	List(ctx context.Context, filter *models.GetMessagesFilter) ([]*models.Message, error)
+	// Delete soft-deletes for everyone (sets deleted_at). Sender-only.
 	Delete(ctx context.Context, messageID string) error
+	// DeleteForUser appends the user to deleted_for_user_ids so the message
+	// disappears for that user only; other participants still see it.
+	DeleteForUser(ctx context.Context, messageID, userID string) error
 
 	// Read receipts
 	MarkAsRead(ctx context.Context, messageID string) error
 	MarkConversationAsRead(ctx context.Context, conversationID, userID string) error
 
-	// Unread counts
+	// Unread counts. viewerID is the requesting user — excludes messages
+	// the user has individually delete-for-me'd so the badge matches their
+	// thread view.
 	GetUnreadCount(ctx context.Context, conversationID, userID string) (int, error)
 
-	// Get last message in conversation
-	GetLastMessage(ctx context.Context, conversationID string) (*models.Message, error)
+	// Get last message in conversation. viewerID excludes per-user-deleted
+	// rows so the conversation list preview reflects what the viewer sees.
+	GetLastMessage(ctx context.Context, conversationID, viewerID string) (*models.Message, error)
 }
 
 type messageRepository struct {
@@ -94,17 +101,21 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 	return message, nil
 }
 
-// List retrieves messages in a conversation
+// List retrieves messages in a conversation, excluding messages the viewer
+// has individually delete-for-me'd. Messages deleted-for-everyone are
+// already filtered via `deleted_at IS NULL`.
 func (r *messageRepository) List(ctx context.Context, filter *models.GetMessagesFilter) ([]*models.Message, error) {
 	query := `
 		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
 		FROM messages
-		WHERE conversation_id = $1 AND deleted_at IS NULL
+		WHERE conversation_id = $1
+		  AND deleted_at IS NULL
+		  AND NOT ($2::uuid = ANY(deleted_for_user_ids))
 		ORDER BY created_at DESC
-		LIMIT $2 OFFSET $3
+		LIMIT $3 OFFSET $4
 	`
 
-	rows, err := r.db.Pool.Query(ctx, query, filter.ConversationID, filter.Limit, filter.Offset)
+	rows, err := r.db.Pool.Query(ctx, query, filter.ConversationID, filter.ViewerID, filter.Limit, filter.Offset)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list messages: %w", err)
 	}
@@ -137,7 +148,7 @@ func (r *messageRepository) List(ctx context.Context, filter *models.GetMessages
 	return messages, nil
 }
 
-// Delete soft deletes a message
+// Delete soft deletes a message for everyone (sets deleted_at).
 func (r *messageRepository) Delete(ctx context.Context, messageID string) error {
 	query := `
 		UPDATE messages
@@ -148,6 +159,30 @@ func (r *messageRepository) Delete(ctx context.Context, messageID string) error 
 	result, err := r.db.Pool.Exec(ctx, query, messageID, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to delete message: %w", err)
+	}
+
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("message not found")
+	}
+
+	return nil
+}
+
+// DeleteForUser hides the message for one user only by appending their id to
+// the deleted_for_user_ids array. Idempotent — re-appending the same id is a
+// no-op thanks to array_append-with-distinct-check.
+func (r *messageRepository) DeleteForUser(ctx context.Context, messageID, userID string) error {
+	query := `
+		UPDATE messages
+		SET deleted_for_user_ids = (
+			SELECT ARRAY(SELECT DISTINCT unnest(array_append(deleted_for_user_ids, $2::uuid)))
+		)
+		WHERE id = $1 AND deleted_at IS NULL
+	`
+
+	result, err := r.db.Pool.Exec(ctx, query, messageID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to delete message for user: %w", err)
 	}
 
 	if result.RowsAffected() == 0 {
@@ -201,6 +236,7 @@ func (r *messageRepository) GetUnreadCount(ctx context.Context, conversationID, 
 		  AND sender_id != $2
 		  AND read_at IS NULL
 		  AND deleted_at IS NULL
+		  AND NOT ($2::uuid = ANY(deleted_for_user_ids))
 	`
 
 	var count int
@@ -212,18 +248,21 @@ func (r *messageRepository) GetUnreadCount(ctx context.Context, conversationID, 
 	return count, nil
 }
 
-// GetLastMessage retrieves the last message in a conversation
-func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID string) (*models.Message, error) {
+// GetLastMessage retrieves the last message in a conversation that the
+// viewer can still see (i.e. not in their per-user delete list).
+func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID, viewerID string) (*models.Message, error) {
 	query := `
 		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
 		FROM messages
-		WHERE conversation_id = $1 AND deleted_at IS NULL
+		WHERE conversation_id = $1
+		  AND deleted_at IS NULL
+		  AND NOT ($2::uuid = ANY(deleted_for_user_ids))
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
 
 	message := &models.Message{}
-	err := r.db.Pool.QueryRow(ctx, query, conversationID).Scan(
+	err := r.db.Pool.QueryRow(ctx, query, conversationID, viewerID).Scan(
 		&message.ID,
 		&message.ConversationID,
 		&message.SenderID,

@@ -1753,6 +1753,11 @@ func (m *MockMessageRepository) Delete(ctx context.Context, messageID string) er
 	return args.Error(0)
 }
 
+func (m *MockMessageRepository) DeleteForUser(ctx context.Context, messageID, userID string) error {
+	args := m.Called(ctx, messageID, userID)
+	return args.Error(0)
+}
+
 func (m *MockMessageRepository) MarkAsRead(ctx context.Context, messageID string) error {
 	args := m.Called(ctx, messageID)
 	return args.Error(0)
@@ -1768,8 +1773,8 @@ func (m *MockMessageRepository) GetUnreadCount(ctx context.Context, conversation
 	return args.Int(0), args.Error(1)
 }
 
-func (m *MockMessageRepository) GetLastMessage(ctx context.Context, conversationID string) (*models.Message, error) {
-	args := m.Called(ctx, conversationID)
+func (m *MockMessageRepository) GetLastMessage(ctx context.Context, conversationID, viewerID string) (*models.Message, error) {
+	args := m.Called(ctx, conversationID, viewerID)
 	if args.Get(0) == nil {
 		return nil, args.Error(1)
 	}

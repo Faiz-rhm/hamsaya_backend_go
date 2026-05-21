@@ -103,9 +103,12 @@ type GetConversationsFilter struct {
 	Offset     int
 }
 
-// GetMessagesFilter represents filters for listing messages
+// GetMessagesFilter represents filters for listing messages.
+// ViewerID is set so per-user soft-deleted rows (delete-for-me) are excluded
+// for the requesting user while remaining visible to other participants.
 type GetMessagesFilter struct {
 	ConversationID string
+	ViewerID       string
 	Limit          int
 	Offset         int
 }
@@ -129,6 +132,16 @@ type WSMessagePayload struct {
 	Content        *string     `json:"content"`
 	MessageType    MessageType `json:"message_type"`
 	CreatedAt      time.Time   `json:"created_at"`
+}
+
+// WSMessageDeletedPayload notifies the other participant that a message was
+// deleted-for-everyone so their UI can remove the bubble in real time.
+// Fired only on "delete for everyone" — "delete for me" is local to the
+// initiator and never broadcast.
+type WSMessageDeletedPayload struct {
+	ConversationID string  `json:"conversation_id"`
+	MessageID      string  `json:"message_id"`
+	BusinessID     *string `json:"business_id,omitempty"`
 }
 
 // WSTypingPayload represents the payload for typing indicators

@@ -181,7 +181,7 @@ func TestChatService_GetConversations(t *testing.T) {
 			Return([]*models.Conversation{conv}, nil)
 		convRepo.On("GetOtherParticipantID", mock.Anything, "conv-1", "user-1").Return("other-1", nil)
 		userRepo.On("GetProfileByUserID", mock.Anything, "other-1").Return(&models.Profile{ID: "other-1"}, nil)
-		msgRepo.On("GetLastMessage", mock.Anything, "conv-1").Return(nil, nil)
+		msgRepo.On("GetLastMessage", mock.Anything, "conv-1", "user-1").Return(nil, nil)
 		msgRepo.On("GetUnreadCount", mock.Anything, "conv-1", "user-1").Return(0, nil)
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
