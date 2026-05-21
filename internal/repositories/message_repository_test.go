@@ -160,7 +160,7 @@ func TestMessageRepository_GetLastMessage_Success(t *testing.T) {
 	pool.On("QueryRow", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
 		Return(testutil.NewMockRow(makeMessageScanFn(msg)))
 
-	result, err := repo.GetLastMessage(context.Background(), "conv-1")
+	result, err := repo.GetLastMessage(context.Background(), "conv-1", "user-1")
 	require.NoError(t, err)
 	assert.Equal(t, "msg-last", result.ID)
 }
