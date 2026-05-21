@@ -170,6 +170,53 @@ func (h *AdminHandler) GetBusinessAnalytics(c *gin.Context) {
 // @Failure 403 {object} utils.Response
 // @Failure 500 {object} utils.Response
 // @Router /admin/users [get]
+// GetRevenueSummary godoc
+// @Summary Revenue summary
+// @Description Aggregates the credit ledger over a time window (24h, 7d, 30d, 90d, all).
+// @Tags admin
+// @Produce json
+// @Param period query string false "Time window (default 30d)"
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=models.AdminRevenueSummary}
+// @Router /admin/revenue [get]
+func (h *AdminHandler) GetRevenueSummary(c *gin.Context) {
+	period := c.DefaultQuery("period", "30d")
+	summary, err := h.adminService.GetRevenueSummary(c.Request.Context(), period)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Revenue summary retrieved successfully", summary)
+}
+
+// GetTopContent godoc
+// @Summary Top-engaging posts
+// @Description Lists posts ordered by engagement metric within the time window.
+// @Tags admin
+// @Produce json
+// @Param period query string false "Time window: 24h | 7d | 30d | 90d | all (default 7d)"
+// @Param metric query string false "Ranking metric: likes | comments | shares (default likes)"
+// @Param limit  query int    false "Max rows returned (default 20, max 100)"
+// @Security BearerAuth
+// @Success 200 {object} utils.Response{data=[]models.AdminTopContentItem}
+// @Router /admin/top-content [get]
+func (h *AdminHandler) GetTopContent(c *gin.Context) {
+	period := c.DefaultQuery("period", "7d")
+	metric := c.DefaultQuery("metric", "likes")
+	limit := 20
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil {
+			limit = v
+		}
+	}
+	items, err := h.adminService.GetTopContent(c.Request.Context(), period, metric, limit)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Top content retrieved successfully", items)
+}
+
 // GetUserProvinceStats godoc
 // @Summary List per-province user totals
 // @Description Returns one row per province with the number of users whose

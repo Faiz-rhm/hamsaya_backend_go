@@ -103,6 +103,45 @@ func (s *AdminService) GetUserProvinceStats(ctx context.Context) ([]*models.Admi
 	return stats, nil
 }
 
+// GetRevenueSummary returns the rolled-up monetization ledger snapshot for
+// the admin dashboard. Period is one of: 24h, 7d, 30d, 90d, all (defaults
+// to 30d when blank/unknown).
+func (s *AdminService) GetRevenueSummary(ctx context.Context, period string) (*models.AdminRevenueSummary, error) {
+	if period == "" {
+		period = "30d"
+	}
+	summary, err := s.adminRepo.GetRevenueSummary(ctx, period)
+	if err != nil {
+		s.logger.Error("Failed to get revenue summary",
+			zap.String("period", period),
+			zap.Error(err),
+		)
+		return nil, utils.NewInternalError("Failed to get revenue summary", err)
+	}
+	return summary, nil
+}
+
+// GetTopContent returns the top-engaging posts in the given window. Metric
+// allowlist: likes (default), comments, shares.
+func (s *AdminService) GetTopContent(ctx context.Context, period, metric string, limit int) ([]*models.AdminTopContentItem, error) {
+	if period == "" {
+		period = "7d"
+	}
+	if metric == "" {
+		metric = "likes"
+	}
+	items, err := s.adminRepo.GetTopContent(ctx, period, metric, limit)
+	if err != nil {
+		s.logger.Error("Failed to get top content",
+			zap.String("period", period),
+			zap.String("metric", metric),
+			zap.Error(err),
+		)
+		return nil, utils.NewInternalError("Failed to get top content", err)
+	}
+	return items, nil
+}
+
 func (s *AdminService) ListUsers(ctx context.Context, filter *models.AdminUserFilter) (*models.PaginatedResponse, error) {
 	users, total, err := s.adminRepo.ListUsers(ctx, filter)
 	if err != nil {

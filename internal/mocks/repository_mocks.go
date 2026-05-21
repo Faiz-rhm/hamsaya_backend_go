@@ -1001,6 +1001,22 @@ func (m *MockAdminRepository) GetUserProvinceCounts(ctx context.Context) ([]*mod
 	return args.Get(0).([]*models.AdminProvinceUserCount), args.Error(1)
 }
 
+func (m *MockAdminRepository) GetRevenueSummary(ctx context.Context, period string) (*models.AdminRevenueSummary, error) {
+	args := m.Called(ctx, period)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.AdminRevenueSummary), args.Error(1)
+}
+
+func (m *MockAdminRepository) GetTopContent(ctx context.Context, period, metric string, limit int) ([]*models.AdminTopContentItem, error) {
+	args := m.Called(ctx, period, metric, limit)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.AdminTopContentItem), args.Error(1)
+}
+
 func (m *MockAdminRepository) GetPostAnalytics(ctx context.Context, period string) (*models.PostAnalytics, error) {
 	args := m.Called(ctx, period)
 	if args.Get(0) == nil {

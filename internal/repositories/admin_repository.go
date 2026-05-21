@@ -24,6 +24,14 @@ type AdminRepository interface {
 	// GetUserProvinceCounts returns a per-province breakdown of users with
 	// non-empty province set on their profile, ordered by descending count.
 	GetUserProvinceCounts(ctx context.Context) ([]*models.AdminProvinceUserCount, error)
+	// GetRevenueSummary aggregates the credit_transactions ledger for the
+	// given period (24h, 7d, 30d, 90d, all). All currency math sits here so
+	// the service layer just maps period strings.
+	GetRevenueSummary(ctx context.Context, period string) (*models.AdminRevenueSummary, error)
+	// GetTopContent returns posts ordered by the chosen engagement metric
+	// within the period. Metric: likes | comments | shares. Period mirrors
+	// GetRevenueSummary.
+	GetTopContent(ctx context.Context, period, metric string, limit int) ([]*models.AdminTopContentItem, error)
 	GetUserByID(ctx context.Context, userID string) (*models.AdminUserResponse, error)
 	GetUserBio(ctx context.Context, userID string) (*string, error)
 	GetUserPosts(ctx context.Context, userID string, limit int) ([]*models.AdminPostResponse, error)
@@ -374,6 +382,152 @@ func (r *adminRepository) GetUserProvinceCounts(ctx context.Context) ([]*models.
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("error iterating province counts: %w", err)
+	}
+	return out, nil
+}
+
+// periodToInterval maps the admin period token to a SQL interval clause.
+// Returns empty string for "all" so the caller can omit the time predicate.
+func periodToInterval(period string) string {
+	switch period {
+	case "24h":
+		return "1 day"
+	case "7d":
+		return "7 days"
+	case "30d":
+		return "30 days"
+	case "90d":
+		return "90 days"
+	case "all":
+		return ""
+	default:
+		return "30 days"
+	}
+}
+
+func (r *adminRepository) GetRevenueSummary(ctx context.Context, period string) (*models.AdminRevenueSummary, error) {
+	interval := periodToInterval(period)
+	timeClause := ""
+	if interval != "" {
+		timeClause = fmt.Sprintf("WHERE created_at >= NOW() - INTERVAL '%s'", interval)
+	}
+
+	// Single pass over credit_transactions — bucket each row by type via
+	// FILTER clauses so we only scan the period once.
+	query := fmt.Sprintf(`
+		SELECT
+			COALESCE(SUM(amount) FILTER (WHERE type = 'TOPUP'), 0)         AS topup,
+			COALESCE(SUM(amount) FILTER (WHERE type = 'PURCHASE'), 0)      AS purchase,
+			COALESCE(SUM(-amount) FILTER (WHERE type = 'BOOST_SPEND'), 0)  AS boost,
+			COALESCE(SUM(-amount) FILTER (WHERE type = 'AD_SPEND'), 0)     AS ad,
+			COALESCE(SUM(-amount) FILTER (WHERE type = 'REFUND'), 0)       AS refund,
+			COALESCE(SUM(amount) FILTER (WHERE type = 'PROMO'), 0)         AS promo,
+			COUNT(*)                                                       AS tx_count
+		FROM credit_transactions
+		%s
+	`, timeClause)
+
+	summary := &models.AdminRevenueSummary{Period: period}
+	err := r.db.Pool.QueryRow(ctx, query).Scan(
+		&summary.TopupRevenue,
+		&summary.PurchaseRevenue,
+		&summary.BoostSpend,
+		&summary.AdSpend,
+		&summary.Refunds,
+		&summary.PromoCost,
+		&summary.TransactionCount,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to summarize revenue: %w", err)
+	}
+
+	summary.GrossRevenue = summary.TopupRevenue + summary.PurchaseRevenue
+	summary.NetRevenue = summary.GrossRevenue - summary.Refunds
+
+	// Outstanding credits across all wallets — gauges deferred liability.
+	if err := r.db.Pool.QueryRow(ctx,
+		"SELECT COALESCE(SUM(balance), 0) FROM credit_balances",
+	).Scan(&summary.InCirculation); err != nil {
+		// Soft fail — circulation is a nice-to-have, don't block the report.
+		summary.InCirculation = 0
+	}
+
+	return summary, nil
+}
+
+func (r *adminRepository) GetTopContent(ctx context.Context, period, metric string, limit int) ([]*models.AdminTopContentItem, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+
+	// Whitelist metric so the ORDER BY substitution stays SQL-safe — never
+	// interpolate user input directly into an ORDER BY clause without a
+	// fixed allowlist.
+	var orderCol string
+	switch metric {
+	case "comments":
+		orderCol = "total_comments"
+	case "shares":
+		orderCol = "total_shares"
+	default:
+		orderCol = "total_likes"
+	}
+
+	interval := periodToInterval(period)
+	timeClause := ""
+	if interval != "" {
+		timeClause = fmt.Sprintf("AND p.created_at >= NOW() - INTERVAL '%s'", interval)
+	}
+
+	// posts.status is BOOLEAN — true = visible. CASE-convert to the
+	// canonical "ACTIVE"/"HIDDEN" labels so the JSON response matches the
+	// rest of the admin API.
+	query := fmt.Sprintf(`
+		SELECT
+			p.id, p.type,
+			p.title, p.description,
+			CASE WHEN p.status = true THEN 'ACTIVE' ELSE 'HIDDEN' END,
+			p.user_id,
+			COALESCE(u.email, ''), COALESCE(pr.first_name || ' ' || pr.last_name, ''),
+			p.total_likes, p.total_comments, p.total_shares,
+			0 AS report_count,
+			p.created_at, p.updated_at,
+			p.%s AS score
+		FROM posts p
+		JOIN users u ON u.id = p.user_id
+		LEFT JOIN profiles pr ON pr.id = p.user_id
+		WHERE p.deleted_at IS NULL
+		  AND p.status = true
+		  %s
+		ORDER BY p.%s DESC, p.created_at DESC
+		LIMIT $1
+	`, orderCol, timeClause, orderCol)
+
+	rows, err := r.db.Pool.Query(ctx, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list top content: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]*models.AdminTopContentItem, 0, limit)
+	for rows.Next() {
+		item := &models.AdminTopContentItem{}
+		if err := rows.Scan(
+			&item.ID, &item.Type,
+			&item.Title, &item.Description,
+			&item.Status, &item.AuthorID,
+			&item.AuthorEmail, &item.AuthorName,
+			&item.TotalLikes, &item.TotalComments, &item.TotalShares,
+			&item.ReportCount,
+			&item.CreatedAt, &item.UpdatedAt,
+			&item.Score,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan top content row: %w", err)
+		}
+		out = append(out, item)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating top content: %w", err)
 	}
 	return out, nil
 }

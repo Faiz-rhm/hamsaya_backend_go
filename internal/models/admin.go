@@ -69,6 +69,34 @@ type AdminProvinceUserCount struct {
 	Total    int64  `json:"total"`
 }
 
+// AdminRevenueSummary is the rolled-up monetization snapshot returned by
+// GET /admin/revenue. All values are integer credits; the admin panel
+// formats them as currency using a per-deployment conversion rate. Period
+// labels: 24h, 7d, 30d, 90d, all.
+type AdminRevenueSummary struct {
+	Period           string `json:"period"`
+	TopupRevenue     int64  `json:"topup_revenue"`      // sum(amount) where type='TOPUP' (positive)
+	PurchaseRevenue  int64  `json:"purchase_revenue"`   // sum(amount) where type='PURCHASE' (positive)
+	BoostSpend       int64  `json:"boost_spend"`        // sum(-amount) where type='BOOST_SPEND'
+	AdSpend          int64  `json:"ad_spend"`           // sum(-amount) where type='AD_SPEND'
+	Refunds          int64  `json:"refunds"`            // sum(-amount) where type='REFUND' (negative => positive)
+	PromoCost        int64  `json:"promo_cost"`         // sum(amount) where type='PROMO' (free credits granted)
+	GrossRevenue     int64  `json:"gross_revenue"`      // TopupRevenue + PurchaseRevenue
+	NetRevenue       int64  `json:"net_revenue"`        // Gross - Refunds (Promo is operational cost, not refund)
+	InCirculation    int64  `json:"in_circulation"`     // sum across all credit_balances rows
+	TransactionCount int64  `json:"transaction_count"`
+}
+
+// AdminTopContentItem is a single trending-post row returned by
+// GET /admin/top-content. Reuses the shape of AdminPostResponse plus a
+// derived score so the panel can show the metric that decided the ranking.
+type AdminTopContentItem struct {
+	AdminPostResponse
+	// Score is the metric value that drove the ranking — count of likes,
+	// comments, or shares within the window, depending on the `metric` arg.
+	Score int64 `json:"score"`
+}
+
 // AdminUserFilter contains filters for listing users in admin panel
 type AdminUserFilter struct {
 	Search   string   `form:"search"`

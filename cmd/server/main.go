@@ -725,6 +725,8 @@ func main() {
 			admin.GET("/analytics/posts", adminOnly, adminHandler.GetPostAnalytics)
 			admin.GET("/analytics/engagement", adminOnly, adminHandler.GetEngagementAnalytics)
 			admin.GET("/analytics/businesses", adminOnly, adminHandler.GetBusinessAnalytics)
+			admin.GET("/revenue", adminOnly, adminHandler.GetRevenueSummary)
+			admin.GET("/top-content", adminHandler.GetTopContent)
 
 			// User Management — read for all admins; suspend/unsuspend admin-only;
 			// delete admin-only; role change super_admin-only.
