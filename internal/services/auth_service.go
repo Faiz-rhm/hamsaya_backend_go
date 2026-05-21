@@ -1052,19 +1052,9 @@ func (s *AuthService) ResetPassword(ctx context.Context, req *models.ResetPasswo
 		// Continue anyway
 	}
 
-	// Get profile for personalized email
-	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
-	name := ""
-	if err == nil && profile.FirstName != nil && profile.LastName != nil {
-		name = *profile.FirstName + " " + *profile.LastName
-	}
-
-	// Send password changed notification email
-	if err := s.emailService.SendPasswordChangedEmail(user.Email, name); err != nil {
-		s.logger.Error("Failed to send password changed email", zap.Error(err))
-		// Continue anyway
-	}
-
+	// Operator preference: no confirmation email on successful reset. The
+	// reset flow already required possession of the reset token, so an
+	// extra inbox notification adds noise without raising assurance.
 	s.logger.Info("Password reset successfully", zap.String("user_id", userID))
 	return nil
 }
@@ -1115,23 +1105,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID string, session
 		// Continue anyway
 	}
 
-	// Get profile for personalized email
-	profile, err := s.userRepo.GetProfileByUserID(ctx, userID)
-	name := ""
-	if err == nil && profile.FirstName != nil && profile.LastName != nil {
-		name = *profile.FirstName + " " + *profile.LastName
-	}
-
-	// Send password changed notification email
-	if err := s.emailService.SendPasswordChangedEmail(user.Email, name); err != nil {
-		s.logger.Error("Failed to send password changed email", zap.Error(err))
-		// Continue anyway
-	}
-
-	// In-app / push notification intentionally skipped — operator
-	// preference: password change is confirmed by the email channel
-	// alone, no in-app banner or push delivery.
-
+	// Operator preference: no confirmation email + no in-app/push
+	// notification on successful change. User initiated the action with
+	// their current password; the silent success is the confirmation.
 	s.logger.Info("Password changed successfully", zap.String("user_id", userID))
 	return nil
 }

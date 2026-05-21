@@ -734,8 +734,8 @@ func TestAuthHandler_ChangePassword(t *testing.T) {
 				r.On("GetByID", mock.Anything, authTestUserID).Return(user, nil)
 				r.On("Update", mock.Anything, mock.AnythingOfType("*models.User")).Return(nil)
 				r.On("RevokeAllUserSessionsExcept", mock.Anything, authTestUserID, authTestSessionID).Return(nil)
-				r.On("GetProfileByUserID", mock.Anything, authTestUserID).
-					Return(testutil.CreateTestProfile("prof-1", "Test", "User"), nil)
+				// GetProfileByUserID mock removed: confirmation email path
+				// (the only consumer of the profile name) was dropped.
 			},
 			wantCode:    http.StatusOK,
 			wantSuccess: true,

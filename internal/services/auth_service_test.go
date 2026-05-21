@@ -587,11 +587,12 @@ func TestAuthService_ChangePassword(t *testing.T) {
 			setupMocks: func(userRepo *mocks.MockUserRepository) {
 				user := testutil.CreateTestUser("user-1", "test@example.com")
 				user.PasswordHash = func() *string { s := testPasswordHash; return &s }()
-				profile := testutil.CreateTestProfile("user-1", "Test", "User")
+				// GetProfileByUserID mock removed: confirmation email no
+				// longer fires on successful change, so the name lookup
+				// is gone too.
 				userRepo.On("GetByID", mock.Anything, "user-1").Return(user, nil)
 				userRepo.On("Update", mock.Anything, mock.AnythingOfType("*models.User")).Return(nil)
 				userRepo.On("RevokeAllUserSessionsExcept", mock.Anything, "user-1", "session-1").Return(nil)
-				userRepo.On("GetProfileByUserID", mock.Anything, "user-1").Return(profile, nil)
 			},
 			request: &models.ChangePasswordRequest{
 				CurrentPassword: "password",
@@ -750,12 +751,12 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		require.NoError(t, err)
 
 		user := testutil.CreateTestUser("user-3", "reset@example.com")
-		profile := testutil.CreateTestProfile("user-3", "Reset", "User")
+		// Profile lookup + GetProfileByUserID mock removed: the confirmation
+		// email path no longer runs after a successful reset.
 
 		userRepo.On("GetByID", mock.Anything, "user-3").Return(user, nil)
 		userRepo.On("Update", mock.Anything, mock.AnythingOfType("*models.User")).Return(nil)
 		userRepo.On("RevokeAllUserSessions", mock.Anything, "user-3").Return(nil)
-		userRepo.On("GetProfileByUserID", mock.Anything, "user-3").Return(profile, nil)
 
 		svc := newTestAuthService(userRepo, ts)
 		err = svc.ResetPassword(ctx, &models.ResetPasswordRequest{
