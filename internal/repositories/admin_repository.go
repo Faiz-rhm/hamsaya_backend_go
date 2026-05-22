@@ -495,12 +495,15 @@ func (r *adminRepository) GetTopContent(ctx context.Context, period, metric stri
 			0 AS report_count,
 			p.created_at, p.updated_at,
 			p.%s AS score,
-			att.preview_url
+			att.preview_url,
+			att.preview_mime_type
 		FROM posts p
 		JOIN users u ON u.id = p.user_id
 		LEFT JOIN profiles pr ON pr.id = p.user_id
 		LEFT JOIN LATERAL (
-			SELECT a.photo->>'url' AS preview_url
+			SELECT
+				a.photo->>'url'       AS preview_url,
+				a.photo->>'mime_type' AS preview_mime_type
 			FROM attachments a
 			WHERE a.post_id = p.id AND a.deleted_at IS NULL
 			ORDER BY a.created_at ASC
@@ -532,6 +535,7 @@ func (r *adminRepository) GetTopContent(ctx context.Context, period, metric stri
 			&item.CreatedAt, &item.UpdatedAt,
 			&item.Score,
 			&item.PreviewURL,
+			&item.PreviewMimeType,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan top content row: %w", err)
 		}

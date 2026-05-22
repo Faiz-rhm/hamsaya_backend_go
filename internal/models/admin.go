@@ -99,6 +99,9 @@ type AdminTopContentItem struct {
 	// admin panel to render a thumbnail next to the title — without it
 	// the trending list is a wall of text.
 	PreviewURL *string `json:"preview_url,omitempty"`
+	// PreviewMimeType is the first attachment's MIME type (if recorded). Lets
+	// the panel pick a video icon vs. rendering an image thumb.
+	PreviewMimeType *string `json:"preview_mime_type,omitempty"`
 }
 
 // AdminUserFilter contains filters for listing users in admin panel
