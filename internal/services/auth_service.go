@@ -120,8 +120,8 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		}
 
 		// Create minimal profile — IsComplete is false until the user finishes
-		// the name+location onboarding step (UpdateProfile with is_complete=true),
-		// which then triggers OTP email.
+		// the name+location onboarding step. Once profile.IsComplete=true, the
+		// mobile client must call POST /auth/send-verification-email explicitly.
 		avatarColor := models.RandomAvatarColor()
 		profile := &models.Profile{
 			ID:          userID,
@@ -159,8 +159,8 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		// Welcome notification — best-effort; failures don't break registration.
 		s.sendWelcomeNotification(ctx, userID, req.FirstName)
 
-		// OTP is sent after profile completion (UpdateProfile with is_complete=true),
-		// not at registration, so users verify only after they have a real profile.
+		// OTP is sent on demand via POST /auth/send-verification-email, which the
+		// mobile verify-email screen calls once IsComplete=true.
 
 		// Generate AAL1 token pair
 		return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
@@ -198,12 +198,8 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		zap.String("email", email),
 	)
 
-	// NOTE: OTP send used to fire here too, which combined with
-	// profile_service.UpdateProfile's IsComplete-transition handler
-	// produced two verification emails per registration. profile_service
-	// is now the single source of truth — mobile always calls
-	// `PUT /users/me` with is_complete=true after register, which
-	// triggers the OTP exactly once.
+	// OTP is sent on demand by mobile via POST /auth/send-verification-email
+	// after the verify-email screen opens, not at registration.
 
 	// Generate AAL1 token pair for existing user
 	return s.generateAuthResponse(ctx, existingUser, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)
@@ -501,8 +497,8 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 		)
 		observability.RecordUserCreated(ctx, "email")
 
-		// Verification email is sent by profile_service when is_complete transitions
-		// false → true, so new users verify only after finishing onboarding.
+		// Verification email is sent on demand via POST /auth/send-verification-email
+		// after the mobile client completes onboarding and opens the verify screen.
 
 		// Return auth response for newly created user
 		return s.generateAuthResponse(ctx, user, models.AAL1, req.DeviceInfo, req.IPAddress, req.UserAgent)

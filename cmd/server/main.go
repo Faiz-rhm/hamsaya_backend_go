@@ -301,7 +301,7 @@ func main() {
 		defer transcodeCancel()
 		sugaredLogger.Info("Transcode pool started (4 workers)")
 	}
-	profileService := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, emailService, tokenStorage, jwtService, logger)
+	profileService := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, logger)
 	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger).
 		WithCache(cache.New(redisClient, "notifications", logger))
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
