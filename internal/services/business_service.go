@@ -49,7 +49,7 @@ func NewBusinessService(
 		businessRepo:        businessRepo,
 		userRepo:            userRepo,
 		notificationService: notificationService,
-		logger:               logger,
+		logger:              logger,
 	}
 }
 
