@@ -516,6 +516,12 @@ func (s *BusinessService) UploadAvatar(ctx context.Context, businessID, userID, 
 		return utils.NewInternalError("Failed to update avatar", err)
 	}
 
+	// Drop every cached BusinessResponse for this id so subsequent GETs
+	// reflect the new avatar URL. Without this the Redis cache keeps the
+	// pre-upload record and the mobile profile + dashboard keep rendering
+	// the stale avatar even after refresh.
+	s.invalidateBusinessCache(ctx, businessID)
+
 	s.logger.Info("Business avatar uploaded", zap.String("business_id", businessID))
 	return nil
 }
@@ -541,6 +547,10 @@ func (s *BusinessService) UploadCover(ctx context.Context, businessID, userID, p
 		s.logger.Error("Failed to update business cover", zap.String("business_id", businessID), zap.Error(err))
 		return utils.NewInternalError("Failed to update cover", err)
 	}
+
+	// Same cache-invalidation requirement as UploadAvatar — without this
+	// the next GET serves the cached pre-upload BusinessResponse.
+	s.invalidateBusinessCache(ctx, businessID)
 
 	s.logger.Info("Business cover uploaded", zap.String("business_id", businessID))
 	return nil
