@@ -25,7 +25,12 @@ const (
 	// registered token clobber the others, so users signed into both
 	// platforms only received pushes on whichever device registered last.
 	fcmTokensPrefix = "fcm:tokens:"
-	fcmTokenTTL     = 90 * 24 * time.Hour // 90 days
+	// fcmLegacyTokenPrefix is the pre-set STRING key still present in Redis
+	// from before the multi-device migration. Read-fallback only — once a
+	// device re-registers its token lands in the new SET and the legacy
+	// entry is dropped.
+	fcmLegacyTokenPrefix = "fcm:token:"
+	fcmTokenTTL          = 90 * 24 * time.Hour // 90 days
 
 	// unreadCountTTL keeps the badge counter cached briefly. The mobile
 	// app polls the unread-count endpoint frequently for the bell badge;
@@ -475,6 +480,10 @@ func (s *NotificationService) RegisterFCMToken(ctx context.Context, userID, toke
 			zap.String("user_id", userID),
 		)
 	}
+	// Drop the legacy single-token STRING entry once the device has
+	// re-registered into the new SET. Safe to ignore the error — worst
+	// case the orphan key expires on its existing TTL.
+	_ = s.redisClient.Del(ctx, fcmLegacyTokenPrefix+userID).Err()
 
 	s.logger.Info("FCM token registered", zap.String("user_id", userID))
 	return nil
@@ -526,6 +535,15 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 	if err != nil {
 		s.logger.Warn("Failed to get FCM tokens", zap.Error(err), zap.String("user_id", notification.UserID))
 		return
+	}
+	// Migration fallback: pre-multi-device sessions stored a single token
+	// at the legacy STRING key. Honour it until the device re-registers
+	// (which moves the token into the SET and deletes the legacy entry).
+	if len(tokens) == 0 {
+		legacy, lErr := s.redisClient.Get(ctx, fcmLegacyTokenPrefix+notification.UserID).Result()
+		if lErr == nil && legacy != "" {
+			tokens = []string{legacy}
+		}
 	}
 	if len(tokens) == 0 {
 		s.logger.Debug("No FCM token found for user", zap.String("user_id", notification.UserID))
