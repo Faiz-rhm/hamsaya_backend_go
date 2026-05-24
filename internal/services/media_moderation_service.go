@@ -121,21 +121,47 @@ func (s *MediaModerationService) Counts(ctx context.Context) (map[string]int64, 
 	return out, nil
 }
 
-// Approve marks an item approved. No-op on the underlying attachment;
-// the post + media keep serving as before.
+// Approve marks an item approved. For pending items this is a metadata-
+// only change. For previously rejected items it also restores the
+// soft-deleted attachment so the post starts serving the media again.
 func (s *MediaModerationService) Approve(ctx context.Context, attachmentID, adminID, notes string) error {
-	tag, err := s.db.Pool.Exec(ctx, `
-		UPDATE media_moderation_queue
-		SET status='approved', reviewed_at=NOW(), reviewed_by=$1, review_notes=NULLIF($2,'')
-		WHERE attachment_id=$3 AND status='pending'
-	`, adminID, notes, attachmentID)
+	tx, err := s.db.Pool.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if tag.RowsAffected() == 0 {
-		return fmt.Errorf("no pending row for attachment %s", attachmentID)
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	var prevStatus string
+	if err := tx.QueryRow(ctx,
+		`SELECT status FROM media_moderation_queue WHERE attachment_id=$1 FOR UPDATE`,
+		attachmentID,
+	).Scan(&prevStatus); err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return fmt.Errorf("queue row not found")
+		}
+		return err
 	}
-	return nil
+	if prevStatus == "approved" {
+		return fmt.Errorf("already approved")
+	}
+
+	if _, err := tx.Exec(ctx, `
+		UPDATE media_moderation_queue
+		SET status='approved', reviewed_at=NOW(), reviewed_by=$1, review_notes=NULLIF($2,'')
+		WHERE attachment_id=$3
+	`, adminID, notes, attachmentID); err != nil {
+		return err
+	}
+
+	if prevStatus == "rejected" {
+		if _, err := tx.Exec(ctx,
+			`UPDATE attachments SET deleted_at = NULL WHERE id = $1`,
+			attachmentID,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // Reject marks the item rejected AND soft-deletes the attachment so it
