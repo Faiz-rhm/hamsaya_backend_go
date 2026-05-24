@@ -18,8 +18,14 @@ import (
 )
 
 const (
-	fcmTokenPrefix = "fcm:token:"
-	fcmTokenTTL    = 90 * 24 * time.Hour // 90 days
+	// fcmTokensPrefix keys a Redis SET of every FCM token registered for a
+	// user. One entry per active device (iOS, Android, web). Using a set
+	// instead of a single string fixes the "Android push works, iOS does
+	// not" symptom: the previous string key let the most-recently-
+	// registered token clobber the others, so users signed into both
+	// platforms only received pushes on whichever device registered last.
+	fcmTokensPrefix = "fcm:tokens:"
+	fcmTokenTTL     = 90 * 24 * time.Hour // 90 days
 
 	// unreadCountTTL keeps the badge counter cached briefly. The mobile
 	// app polls the unread-count endpoint frequently for the bell badge;
@@ -446,28 +452,54 @@ func (s *NotificationService) UpdateNotificationSetting(ctx context.Context, pro
 	return nil
 }
 
-// RegisterFCMToken registers an FCM token for a user
+// RegisterFCMToken adds an FCM token to the user's device-token set. Multiple
+// devices (iOS, Android, web) coexist for the same user; previously this was
+// a single STRING key per user, which caused the most-recently-registered
+// device to silently win and pushes to vanish on every other device.
 func (s *NotificationService) RegisterFCMToken(ctx context.Context, userID, token string) error {
-	key := fcmTokenPrefix + userID
+	key := fcmTokensPrefix + userID
 
-	// Store token in Redis with TTL
-	if err := s.redisClient.Set(ctx, key, token, fcmTokenTTL).Err(); err != nil {
+	if _, err := s.redisClient.SAdd(ctx, key, token).Result(); err != nil {
 		s.logger.Error("Failed to register FCM token",
 			zap.Error(err),
 			zap.String("user_id", userID),
 		)
 		return utils.NewInternalError("Failed to register device token", err)
 	}
+	// Refresh the set's TTL on every register so an active user keeps
+	// their tokens alive. Tokens older than 90 days without a re-register
+	// expire alongside the set.
+	if err := s.redisClient.Expire(ctx, key, fcmTokenTTL).Err(); err != nil {
+		s.logger.Warn("Failed to refresh FCM token set TTL",
+			zap.Error(err),
+			zap.String("user_id", userID),
+		)
+	}
 
 	s.logger.Info("FCM token registered", zap.String("user_id", userID))
 	return nil
 }
 
-// UnregisterFCMToken removes an FCM token for a user
-func (s *NotificationService) UnregisterFCMToken(ctx context.Context, userID string) error {
-	key := fcmTokenPrefix + userID
+// UnregisterFCMToken removes a specific FCM token from the user's device set.
+// When `token` is empty (legacy / full sign-out broadcast) the whole set is
+// dropped; otherwise only the calling device's entry is removed so other
+// active devices keep receiving pushes.
+func (s *NotificationService) UnregisterFCMToken(ctx context.Context, userID, token string) error {
+	key := fcmTokensPrefix + userID
 
-	if err := s.redisClient.Del(ctx, key).Err(); err != nil {
+	if token == "" {
+		if err := s.redisClient.Del(ctx, key).Err(); err != nil {
+			s.logger.Error("Failed to unregister FCM tokens",
+				zap.Error(err),
+				zap.String("user_id", userID),
+			)
+			return utils.NewInternalError("Failed to unregister device tokens", err)
+		}
+		s.logger.Info("All FCM tokens unregistered", zap.String("user_id", userID))
+		return nil
+	}
+
+	if err := s.redisClient.SRem(ctx, key, token).Err(); err != nil {
 		s.logger.Error("Failed to unregister FCM token",
 			zap.Error(err),
 			zap.String("user_id", userID),
@@ -479,21 +511,24 @@ func (s *NotificationService) UnregisterFCMToken(ctx context.Context, userID str
 	return nil
 }
 
-// sendPushNotification sends a push notification via FCM
+// sendPushNotification sends a push notification via FCM to every device the
+// user has registered. Each token is sent individually so failures are
+// scoped to a single device — a stale iOS token doesn't suppress an active
+// Android device, and vice versa.
 func (s *NotificationService) sendPushNotification(ctx context.Context, notification *models.Notification) {
 	if s.fcmClient == nil {
 		return
 	}
 
-	// Get FCM token for user
-	key := fcmTokenPrefix + notification.UserID
-	token, err := s.redisClient.Get(ctx, key).Result()
+	// Get every FCM token for the user (one per active device).
+	key := fcmTokensPrefix + notification.UserID
+	tokens, err := s.redisClient.SMembers(ctx, key).Result()
 	if err != nil {
-		if err == redis.Nil {
-			s.logger.Debug("No FCM token found for user", zap.String("user_id", notification.UserID))
-		} else {
-			s.logger.Warn("Failed to get FCM token", zap.Error(err), zap.String("user_id", notification.UserID))
-		}
+		s.logger.Warn("Failed to get FCM tokens", zap.Error(err), zap.String("user_id", notification.UserID))
+		return
+	}
+	if len(tokens) == 0 {
+		s.logger.Debug("No FCM token found for user", zap.String("user_id", notification.UserID))
 		return
 	}
 
@@ -526,27 +561,27 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 		ChannelID: channelForType(notification.Type),
 	}
 
-	// Send notification. On stale-token errors, prune the Redis entry so we
-	// don't keep retrying a dead device on every subsequent notification.
-	if err := s.fcmClient.SendNotification(ctx, token, payload); err != nil {
-		if errors.Is(err, fcmclient.ErrTokenInvalid) {
-			s.logger.Info("FCM token invalid, pruning",
-				zap.String("user_id", notification.UserID),
-			)
-			if delErr := s.redisClient.Del(ctx, key).Err(); delErr != nil {
-				s.logger.Warn("Failed to prune stale FCM token",
-					zap.Error(delErr),
+	for _, token := range tokens {
+		if err := s.fcmClient.SendNotification(ctx, token, payload); err != nil {
+			if errors.Is(err, fcmclient.ErrTokenInvalid) {
+				s.logger.Info("FCM token invalid, pruning",
 					zap.String("user_id", notification.UserID),
 				)
+				if delErr := s.redisClient.SRem(ctx, key, token).Err(); delErr != nil {
+					s.logger.Warn("Failed to prune stale FCM token",
+						zap.Error(delErr),
+						zap.String("user_id", notification.UserID),
+					)
+				}
+				continue
 			}
-			return
+			s.logger.Error("Failed to send push notification",
+				zap.Error(err),
+				zap.String("user_id", notification.UserID),
+				zap.String("notification_id", notification.ID),
+			)
+			continue
 		}
-		s.logger.Error("Failed to send push notification",
-			zap.Error(err),
-			zap.String("user_id", notification.UserID),
-			zap.String("notification_id", notification.ID),
-		)
-	} else {
 		s.logger.Info("Push notification sent successfully",
 			zap.String("user_id", notification.UserID),
 			zap.String("notification_id", notification.ID),

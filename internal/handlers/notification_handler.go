@@ -253,6 +253,11 @@ func (h *NotificationHandler) RegisterFCMToken(c *gin.Context) {
 }
 
 // UnregisterFCMToken handles DELETE /api/v1/notifications/fcm-token
+//
+// Accepts an optional `token` in the JSON body. When present, only that
+// device's token is removed from the user's device set; other devices keep
+// receiving pushes. Empty / missing body wipes every device-token for the
+// user (full sign-out semantics).
 func (h *NotificationHandler) UnregisterFCMToken(c *gin.Context) {
 	// Get authenticated user ID
 	userID, exists := c.Get("user_id")
@@ -261,8 +266,12 @@ func (h *NotificationHandler) UnregisterFCMToken(c *gin.Context) {
 		return
 	}
 
+	// Body is optional — old clients send DELETE with no body.
+	var req models.FCMTokenRequest
+	_ = c.ShouldBindJSON(&req)
+
 	// Unregister FCM token
-	if err := h.notificationService.UnregisterFCMToken(c.Request.Context(), userID.(string)); err != nil {
+	if err := h.notificationService.UnregisterFCMToken(c.Request.Context(), userID.(string), req.Token); err != nil {
 		h.handleError(c, err)
 		return
 	}
