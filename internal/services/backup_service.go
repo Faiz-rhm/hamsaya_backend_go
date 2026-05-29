@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -249,8 +250,20 @@ func (s *BackupService) execute(ctx context.Context, id uuid.UUID, tier string, 
 	return objectKey, localPath, size, nil
 }
 
-// ensureBucket creates the backup bucket on first run. Idempotent.
+// ensureBucket creates the backup bucket on first run. Idempotent on MinIO.
+//
+// On Cloudflare R2 the typical "Object Read & Write" API token lacks the
+// HeadBucket and CreateBucket permissions, so BucketExists + MakeBucket both
+// return AccessDenied even when the bucket already exists. To avoid blocking
+// uploads on a permission gap that operators can't fix without re-issuing
+// the token, we skip the existence probe entirely against R2 endpoints and
+// trust the operator to create the bucket via the Cloudflare dashboard. If
+// the bucket really is missing the subsequent FPutObject call will surface
+// the error and the caller already retains the local copy as a fallback.
 func (s *BackupService) ensureBucket(ctx context.Context) error {
+	if strings.Contains(s.cfg.Storage.Endpoint, "r2.cloudflarestorage.com") {
+		return nil
+	}
 	exists, err := s.minio.BucketExists(ctx, s.cfg.Backup.Bucket)
 	if err != nil {
 		return err
