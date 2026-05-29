@@ -444,6 +444,14 @@ func main() {
 	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	sugaredLogger.Info("Swagger UI available at /swagger/index.html")
 
+	// Brand icon served to email recipients. Public, no auth — referenced as
+	// `<img src>` from transactional email templates. Long Cache-Control because
+	// the asset is embedded in the binary and immutable per deploy.
+	router.GET("/email-icon.jpg", func(c *gin.Context) {
+		c.Header("Cache-Control", "public, max-age=86400")
+		c.Data(http.StatusOK, "image/jpeg", services.EmailIconBytes())
+	})
+
 	// API v1 routes
 	v1 := router.Group("/api/v1")
 	{

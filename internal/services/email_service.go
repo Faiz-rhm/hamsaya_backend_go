@@ -3,7 +3,6 @@ package services
 import (
 	"bytes"
 	_ "embed"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
@@ -11,6 +10,7 @@ import (
 	"net/http"
 	"net/smtp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/disintegration/imaging"
@@ -21,37 +21,45 @@ import (
 //go:embed assets/icon.jpg
 var emailIconJPG []byte
 
-// emailIconDataURI is the app icon resized to 128x128 and base64-encoded as a
-// data URI. Inlined into every transactional email so recipients see the brand
-// mark without an external image fetch (avoids broken images when clients
-// block remote content). Computed once at package init.
-var emailIconDataURI = buildIconDataURI()
+// EmailIconBytes returns the resized JPEG payload for the brand icon used in
+// transactional emails. Resized to 128x128 once at package init so the HTTP
+// static handler can serve it without re-encoding per request.
+//
+// Hosted via a public URL (not a data URI) because Gmail and other major
+// webmail clients strip `data:` image sources for security. Recipients only
+// see the brand mark when the icon is reachable over plain HTTP/S.
+var emailIconBytes = buildIconBytes()
 
-func buildIconDataURI() string {
+func buildIconBytes() []byte {
 	img, err := jpeg.Decode(bytes.NewReader(emailIconJPG))
 	if err != nil {
-		return ""
+		return emailIconJPG
 	}
 	resized := imaging.Resize(img, 128, 128, imaging.Lanczos)
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, resized, &jpeg.Options{Quality: 82}); err != nil {
-		return ""
+		return emailIconJPG
 	}
-	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+	return buf.Bytes()
 }
+
+// EmailIconBytes exposes the resized icon for the HTTP static handler.
+func EmailIconBytes() []byte { return emailIconBytes }
 
 // EmailService handles sending emails
 type EmailService struct {
 	cfg        *config.EmailConfig
 	logger     *zap.Logger
 	httpClient *http.Client
+	iconURL    string
 }
 
 // NewEmailService creates a new email service
 func NewEmailService(cfg *config.EmailConfig, logger *zap.Logger) *EmailService {
 	return &EmailService{
-		cfg:    cfg,
-		logger: logger,
+		cfg:     cfg,
+		logger:  logger,
+		iconURL: deriveIconURL(cfg.EmailVerifyBaseURL),
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -61,6 +69,17 @@ func NewEmailService(cfg *config.EmailConfig, logger *zap.Logger) *EmailService 
 			},
 		},
 	}
+}
+
+// deriveIconURL builds the absolute URL where the email icon is served. Empty
+// string disables the icon (template skips the <img>) — preferable to
+// rendering a broken image when no public base URL is configured.
+func deriveIconURL(baseURL string) string {
+	base := strings.TrimRight(baseURL, "/")
+	if base == "" {
+		return ""
+	}
+	return base + "/email-icon.jpg"
 }
 
 // EmailData represents data for email templates
@@ -76,7 +95,7 @@ type EmailData struct {
 	AppURL         string
 	SupportEmail   string
 	Year           string // e.g. "2025" for footer
-	IconDataURI    template.URL
+	IconURL        template.URL
 }
 
 // SendVerificationEmail sends an email with a verification code (user enters code in the app)
@@ -96,7 +115,7 @@ func (s *EmailService) SendVerificationEmail(email, name, verificationCode strin
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
-		IconDataURI:    template.URL(emailIconDataURI),
+		IconURL:        template.URL(s.iconURL),
 	}
 
 	htmlBody, err := s.renderTemplate(verificationEmailTemplate, data)
@@ -124,7 +143,7 @@ func (s *EmailService) SendPasswordResetEmail(email, name, resetCode string) err
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
-		IconDataURI:    template.URL(emailIconDataURI),
+		IconURL:        template.URL(s.iconURL),
 	}
 
 	htmlBody, err := s.renderTemplate(passwordResetEmailTemplate, data)
@@ -146,7 +165,7 @@ func (s *EmailService) SendWelcomeEmail(email, name string) error {
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
-		IconDataURI:    template.URL(emailIconDataURI),
+		IconURL:        template.URL(s.iconURL),
 	}
 
 	htmlBody, err := s.renderTemplate(welcomeEmailTemplate, data)
@@ -168,7 +187,7 @@ func (s *EmailService) SendPasswordChangedEmail(email, name string) error {
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
-		IconDataURI:    template.URL(emailIconDataURI),
+		IconURL:        template.URL(s.iconURL),
 	}
 
 	htmlBody, err := s.renderTemplate(passwordChangedEmailTemplate, data)
@@ -316,7 +335,7 @@ const verificationEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="content">
-                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="64" height="64">{{end}}
+                {{if .IconURL}}<img class="brand-icon" src="{{.IconURL}}" alt="{{.AppName}}" width="64" height="64">{{end}}
                 <p class="logo">{{.AppName}}</p>
                 <p class="tagline">Your neighborhood, connected.</p>
                 <h2>Hi {{.RecipientName}},</h2>
@@ -367,7 +386,7 @@ const passwordResetEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="content">
-                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="64" height="64">{{end}}
+                {{if .IconURL}}<img class="brand-icon" src="{{.IconURL}}" alt="{{.AppName}}" width="64" height="64">{{end}}
                 <p class="logo">{{.AppName}}</p>
                 <p class="tagline">Your neighborhood, connected.</p>
                 <h2>Hi {{if .RecipientName}}{{.RecipientName}}{{else}}there{{end}},</h2>
@@ -417,7 +436,7 @@ const welcomeEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="hero">
-                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="72" height="72">{{end}}
+                {{if .IconURL}}<img class="brand-icon" src="{{.IconURL}}" alt="{{.AppName}}" width="72" height="72">{{end}}
                 <h1>Welcome to <span class="brand">{{.AppName}}</span></h1>
                 <p style="font-size: 15px; color: #6b7280; margin: 0;">Your neighborhood, connected.</p>
             </div>
@@ -473,7 +492,7 @@ const passwordChangedEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="content">
-                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="64" height="64">{{end}}
+                {{if .IconURL}}<img class="brand-icon" src="{{.IconURL}}" alt="{{.AppName}}" width="64" height="64">{{end}}
                 <p class="logo">{{.AppName}}</p>
                 <h2>Hi {{.RecipientName}},</h2>
                 <div class="success"><strong>Password changed successfully.</strong><br>Your {{.AppName}} account password was updated. If you made this change, you're all set.</div>
