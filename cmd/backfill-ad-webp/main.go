@@ -54,6 +54,7 @@ func main() {
 		UseSSL:     cfg.Storage.UseSSL,
 		Region:     cfg.Storage.Region,
 		CDNURL:     cfg.Storage.CDNURL,
+		PathStyle:  cfg.Storage.PathStyle,
 	}
 	if storageCfg.Endpoint == "" {
 		fmt.Fprintln(os.Stderr, "storage not configured (STORAGE_ENDPOINT empty)")

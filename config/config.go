@@ -173,6 +173,10 @@ type StorageConfig struct {
 	UseSSL     bool
 	Region     string
 	CDNURL     string
+	// PathStyle: true → public URLs include bucket (MinIO style).
+	// false → CDN_URL is bucket-scoped already (R2 r2.dev / bound domain).
+	// Default true (legacy). Set STORAGE_PATH_STYLE=false for R2.
+	PathStyle bool
 }
 
 // FirebaseConfig holds Firebase configuration
@@ -293,6 +297,9 @@ func Load() (*Config, error) {
 			UseSSL:     viper.GetBool("STORAGE_USE_SSL"),
 			Region:     viper.GetString("STORAGE_REGION"),
 			CDNURL:     viper.GetString("CDN_URL"),
+			// Default true to preserve MinIO behavior when unset; R2 deploys
+			// must explicitly set STORAGE_PATH_STYLE=false in the env.
+			PathStyle: !viper.IsSet("STORAGE_PATH_STYLE") || viper.GetBool("STORAGE_PATH_STYLE"),
 		},
 		Firebase: FirebaseConfig{
 			ProjectID:       viper.GetString("FIREBASE_PROJECT_ID"),

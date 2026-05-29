@@ -75,37 +75,8 @@ services:
           cpus: '0.25'
           memory: 256M
 
-  # MinIO Object Storage
-  minio:
-    image: minio/minio:latest
-    container_name: hamsaya-minio-prod
-    restart: unless-stopped
-    environment:
-      MINIO_ROOT_USER: ${STORAGE_ACCESS_KEY:?MinIO access key required}
-      MINIO_ROOT_PASSWORD: ${STORAGE_SECRET_KEY:?MinIO secret key required}
-      MINIO_BROWSER_REDIRECT_URL: ${MINIO_BROWSER_URL:-http://minio.localhost}
-    command: server /data --console-address ":9001"
-    volumes:
-      - minio_data:/data
-    ports:
-      - "9000:9000" # API - Only expose to localhost
-      - "9001:9001" # Console - Only expose to localhost
-    networks:
-      - hamsaya_network
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:9000/minio/health/live" ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.25'
-          memory: 256M
+  # MinIO service removed — object storage now on Cloudflare R2.
+  # STORAGE_* env vars point at R2 endpoint (see .env / Dokploy panel).
 
   # Hamsaya Backend API
   api:
@@ -145,14 +116,14 @@ services:
       JWT_ACCESS_TOKEN_DURATION: "15m"
       JWT_REFRESH_TOKEN_DURATION: "720h"
 
-      # Storage
-      STORAGE_ENDPOINT: "minio:9000"
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
-      STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME:-hamsaya}
-      STORAGE_USE_SSL: "false"
-      STORAGE_REGION: "us-east-1"
-      CDN_URL: ${CDN_URL:-}
+      # Storage (Cloudflare R2 — S3-compatible)
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?STORAGE_ENDPOINT required (R2: <ACCOUNT_ID>.r2.cloudflarestorage.com)}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY required}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY required}
+      STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME:-hamsaya-media}
+      STORAGE_USE_SSL: ${STORAGE_USE_SSL:-true}
+      STORAGE_REGION: ${STORAGE_REGION:-auto}
+      CDN_URL: ${CDN_URL:?CDN_URL required (R2 public URL)}
 
       # Firebase
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
@@ -225,8 +196,6 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      minio:
-        condition: service_healthy
     healthcheck:
       test: [ "CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health/live" ]
       interval: 30s
@@ -264,8 +233,6 @@ volumes:
   postgres_data:
     driver: local
   redis_data:
-    driver: local
-  minio_data:
     driver: local
   backup_data:
     driver: local

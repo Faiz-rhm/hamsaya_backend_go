@@ -22,25 +22,33 @@ import (
 	_ "golang.org/x/image/webp"
 )
 
-// Client represents a storage client for S3/MinIO
+// Client represents a storage client for S3/MinIO/R2
 type Client struct {
 	client     *minio.Client
 	bucketName string
 	cdnURL     string
 	useSSL     bool
 	endpoint   string
+	pathStyle  bool
 	logger     *zap.Logger
 }
 
 // Config holds storage configuration
 type Config struct {
-	Endpoint        string
-	AccessKey       string
-	SecretKey       string
-	BucketName      string
-	UseSSL          bool
-	Region          string
-	CDNURL          string
+	Endpoint   string
+	AccessKey  string
+	SecretKey  string
+	BucketName string
+	UseSSL     bool
+	Region     string
+	CDNURL     string
+	// PathStyle controls public URL construction.
+	//   true  → "{CDN_URL}/{bucket}/{key}" — MinIO host-as-base style
+	//   false → "{CDN_URL}/{key}"          — bucket-scoped CDN (r2.dev, custom
+	//                                        domain bound to a bucket)
+	// Default in callers should be true for MinIO back-compat; set false for
+	// Cloudflare R2 with a r2.dev or bound-domain CDN_URL.
+	PathStyle bool
 }
 
 // UploadResult represents the result of an upload operation
@@ -73,6 +81,7 @@ func NewClient(cfg *Config, logger *zap.Logger) (*Client, error) {
 		cdnURL:     normalizeCDNURL(cfg.CDNURL),
 		useSSL:     cfg.UseSSL,
 		endpoint:   cfg.Endpoint,
+		pathStyle:  cfg.PathStyle,
 		logger:     logger,
 	}
 
@@ -122,11 +131,12 @@ func (c *Client) Stat(ctx context.Context) Stats {
 	return out
 }
 
-// ensureBucket ensures the bucket exists AND that its policy is set to
-// public-read for s3:GetObject. The policy step is idempotent and runs
-// on every boot — operators who recreate the bucket out-of-band (or
-// inherit a private bucket from a prior deploy) don't have to wipe
-// MinIO state to restore image visibility.
+// ensureBucket ensures the bucket exists and (for MinIO only) that its policy
+// is set to public-read for s3:GetObject. Skips the policy step entirely for
+// Cloudflare R2 — R2 doesn't implement the S3 PutBucketPolicy API and the
+// call returns "NotImplemented". Public-read on R2 is enabled at the bucket
+// level via the Cloudflare dashboard (r2.dev subdomain or bound custom
+// domain), not via the S3 API.
 func (c *Client) ensureBucket(ctx context.Context) error {
 	exists, err := c.client.BucketExists(ctx, c.bucketName)
 	if err != nil {
@@ -138,6 +148,13 @@ func (c *Client) ensureBucket(ctx context.Context) error {
 			return fmt.Errorf("failed to create bucket: %w", err)
 		}
 		c.logger.Info("Created storage bucket", zap.String("bucket", c.bucketName))
+	}
+
+	// Detect R2 by endpoint hostname; skip bucket policy on R2.
+	if strings.Contains(c.endpoint, "r2.cloudflarestorage.com") {
+		c.logger.Info("Skipping SetBucketPolicy on Cloudflare R2; enable public access via dashboard",
+			zap.String("bucket", c.bucketName))
+		return nil
 	}
 
 	policy := fmt.Sprintf(`{
@@ -426,19 +443,29 @@ func normalizeCDNURL(raw string) string {
 }
 
 // getPublicURL constructs the public URL for an object.
-// MinIO path-style URLs require the bucket in the path: /bucket/key.
+//
+// Two layout modes:
+//   - pathStyle=true:  "{base}/{bucket}/{key}" — MinIO-style.
+//   - pathStyle=false: "{base}/{key}"          — bucket-scoped CDN (R2 r2.dev,
+//                                                or a custom domain that
+//                                                Cloudflare bound to one
+//                                                bucket).
+//
+// When CDN_URL is empty (dev fallback), we always use path-style against the
+// raw endpoint — the bucket-scoped CDN concept doesn't apply without a CDN.
 func (c *Client) getPublicURL(key string) string {
-	base := ""
 	if c.cdnURL != "" {
-		base = strings.TrimRight(c.cdnURL, "/")
-	} else {
-		scheme := "http"
-		if c.useSSL {
-			scheme = "https"
+		base := strings.TrimRight(c.cdnURL, "/")
+		if c.pathStyle {
+			return fmt.Sprintf("%s/%s/%s", base, c.bucketName, key)
 		}
-		base = fmt.Sprintf("%s://%s", scheme, c.endpoint)
+		return fmt.Sprintf("%s/%s", base, key)
 	}
-	// Always include bucket name so MinIO resolves bucket/key correctly
+	scheme := "http"
+	if c.useSSL {
+		scheme = "https"
+	}
+	base := fmt.Sprintf("%s://%s", scheme, c.endpoint)
 	return fmt.Sprintf("%s/%s/%s", base, c.bucketName, key)
 }
 
@@ -457,9 +484,12 @@ func (c *Client) PublicURL(key string) string {
 }
 
 // extractKeyFromURL extracts the object key from a full URL.
-// URL format is base/bucketName/key (e.g. http://localhost:9000/hamsaya-uploads/post/xxx.webp).
+//
+// Accepts both layout modes (so historical URLs from a prior MinIO path-style
+// deploy still resolve after switching to bucket-scoped R2 CDN):
+//   - "{base}/{bucket}/{key}" → strips both base and bucket prefix
+//   - "{base}/{key}"          → strips only base
 func (c *Client) extractKeyFromURL(url string) string {
-	// Strip scheme and host to get path: bucketName/key
 	path := ""
 	if c.cdnURL != "" && strings.HasPrefix(url, c.cdnURL) {
 		path = strings.TrimPrefix(strings.TrimPrefix(url, c.cdnURL), "/")
@@ -472,7 +502,6 @@ func (c *Client) extractKeyFromURL(url string) string {
 	if path == "" {
 		return ""
 	}
-	// Path is bucketName/key; key is everything after first segment
 	prefix := c.bucketName + "/"
 	if strings.HasPrefix(path, prefix) {
 		return strings.TrimPrefix(path, prefix)

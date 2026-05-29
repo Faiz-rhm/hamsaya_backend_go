@@ -61,6 +61,7 @@ func NewStorageService(cfg *config.Config, logger *zap.Logger) *StorageService {
 			UseSSL:     cfg.Storage.UseSSL,
 			Region:     cfg.Storage.Region,
 			CDNURL:     cfg.Storage.CDNURL,
+			PathStyle:  cfg.Storage.PathStyle,
 		}
 
 		var err error
