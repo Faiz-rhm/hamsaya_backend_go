@@ -2,17 +2,43 @@ package services
 
 import (
 	"bytes"
+	_ "embed"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"image/jpeg"
 	"net/http"
 	"net/smtp"
 	"strconv"
 	"time"
 
+	"github.com/disintegration/imaging"
 	"github.com/hamsaya/backend/config"
 	"go.uber.org/zap"
 )
+
+//go:embed assets/icon.jpg
+var emailIconJPG []byte
+
+// emailIconDataURI is the app icon resized to 128x128 and base64-encoded as a
+// data URI. Inlined into every transactional email so recipients see the brand
+// mark without an external image fetch (avoids broken images when clients
+// block remote content). Computed once at package init.
+var emailIconDataURI = buildIconDataURI()
+
+func buildIconDataURI() string {
+	img, err := jpeg.Decode(bytes.NewReader(emailIconJPG))
+	if err != nil {
+		return ""
+	}
+	resized := imaging.Resize(img, 128, 128, imaging.Lanczos)
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, resized, &jpeg.Options{Quality: 82}); err != nil {
+		return ""
+	}
+	return "data:image/jpeg;base64," + base64.StdEncoding.EncodeToString(buf.Bytes())
+}
 
 // EmailService handles sending emails
 type EmailService struct {
@@ -50,6 +76,7 @@ type EmailData struct {
 	AppURL         string
 	SupportEmail   string
 	Year           string // e.g. "2025" for footer
+	IconDataURI    template.URL
 }
 
 // SendVerificationEmail sends an email with a verification code (user enters code in the app)
@@ -69,6 +96,7 @@ func (s *EmailService) SendVerificationEmail(email, name, verificationCode strin
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
+		IconDataURI:    template.URL(emailIconDataURI),
 	}
 
 	htmlBody, err := s.renderTemplate(verificationEmailTemplate, data)
@@ -96,6 +124,7 @@ func (s *EmailService) SendPasswordResetEmail(email, name, resetCode string) err
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
+		IconDataURI:    template.URL(emailIconDataURI),
 	}
 
 	htmlBody, err := s.renderTemplate(passwordResetEmailTemplate, data)
@@ -117,6 +146,7 @@ func (s *EmailService) SendWelcomeEmail(email, name string) error {
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
+		IconDataURI:    template.URL(emailIconDataURI),
 	}
 
 	htmlBody, err := s.renderTemplate(welcomeEmailTemplate, data)
@@ -138,6 +168,7 @@ func (s *EmailService) SendPasswordChangedEmail(email, name string) error {
 		AppURL:         "https://hamsaya.com",
 		SupportEmail:   "support@hamsaya.com",
 		Year:           strconv.Itoa(time.Now().Year()),
+		IconDataURI:    template.URL(emailIconDataURI),
 	}
 
 	htmlBody, err := s.renderTemplate(passwordChangedEmailTemplate, data)
@@ -267,6 +298,7 @@ const verificationEmailTemplate = `
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
         .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
         .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .brand-icon { display: block; width: 64px; height: 64px; margin: 0 0 12px 0; border-radius: 14px; }
         .logo { font-size: 24px; font-weight: 700; color: #fc7b58; margin: 0 0 8px 0; letter-spacing: -0.5px; }
         .tagline { font-size: 14px; color: #6b7280; margin: 0 0 28px 0; }
         .content { margin-bottom: 28px; }
@@ -284,6 +316,7 @@ const verificationEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="content">
+                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="64" height="64">{{end}}
                 <p class="logo">{{.AppName}}</p>
                 <p class="tagline">Your neighborhood, connected.</p>
                 <h2>Hi {{.RecipientName}},</h2>
@@ -315,6 +348,7 @@ const passwordResetEmailTemplate = `
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
         .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
         .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .brand-icon { display: block; width: 64px; height: 64px; margin: 0 0 12px 0; border-radius: 14px; }
         .logo { font-size: 24px; font-weight: 700; color: #fc7b58; margin: 0 0 8px 0; }
         .tagline { font-size: 14px; color: #6b7280; margin: 0 0 28px 0; }
         .content { margin-bottom: 28px; }
@@ -333,6 +367,7 @@ const passwordResetEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="content">
+                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="64" height="64">{{end}}
                 <p class="logo">{{.AppName}}</p>
                 <p class="tagline">Your neighborhood, connected.</p>
                 <h2>Hi {{if .RecipientName}}{{.RecipientName}}{{else}}there{{end}},</h2>
@@ -364,6 +399,7 @@ const welcomeEmailTemplate = `
         .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
         .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
         .hero { text-align: center; margin-bottom: 28px; }
+        .brand-icon { display: inline-block; width: 72px; height: 72px; margin: 0 auto 14px auto; border-radius: 16px; }
         .hero h1 { font-size: 26px; font-weight: 700; color: #111827; margin: 0 0 8px 0; }
         .hero .brand { color: #fc7b58; }
         .content { margin-bottom: 28px; }
@@ -381,6 +417,7 @@ const welcomeEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="hero">
+                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="72" height="72">{{end}}
                 <h1>Welcome to <span class="brand">{{.AppName}}</span></h1>
                 <p style="font-size: 15px; color: #6b7280; margin: 0;">Your neighborhood, connected.</p>
             </div>
@@ -420,6 +457,7 @@ const passwordChangedEmailTemplate = `
         body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #1f2937; background: #f3f4f6; }
         .wrapper { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
         .card { background: #ffffff; border-radius: 16px; padding: 40px 32px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); }
+        .brand-icon { display: block; width: 64px; height: 64px; margin: 0 0 12px 0; border-radius: 14px; }
         .logo { font-size: 24px; font-weight: 700; color: #fc7b58; margin: 0 0 28px 0; }
         .content { margin-bottom: 28px; }
         .content h2 { font-size: 18px; font-weight: 600; color: #111827; margin: 0 0 16px 0; }
@@ -435,6 +473,7 @@ const passwordChangedEmailTemplate = `
     <div class="wrapper">
         <div class="card">
             <div class="content">
+                {{if .IconDataURI}}<img class="brand-icon" src="{{.IconDataURI}}" alt="{{.AppName}}" width="64" height="64">{{end}}
                 <p class="logo">{{.AppName}}</p>
                 <h2>Hi {{.RecipientName}},</h2>
                 <div class="success"><strong>Password changed successfully.</strong><br>Your {{.AppName}} account password was updated. If you made this change, you're all set.</div>
