@@ -65,6 +65,37 @@ type AdCreateRequest struct {
 	AutoApprove bool `form:"auto_approve"`
 }
 
+// AdUpdateRequest is the admin payload for editing an existing ad's content
+// fields. Mirrors AdCreateRequest except for fields that don't make sense to
+// change post-create:
+//   - AdvertiserID is fixed at creation (re-attributing an ad would orphan
+//     its credit ledger and boost relationships)
+//   - AutoApprove only applies to the create flow (status changes go through
+//     Approve/Reject)
+//   - Status is not editable here; the dedicated approve/reject endpoints
+//     keep the audit trail (ReviewedBy + ReviewedAt + ReviewNote) consistent
+//
+// The image stays as-is unless a new file is supplied under the "image"
+// multipart field — handlers replace ImageURL only when a fresh upload
+// arrives, so an admin editing copy doesn't have to re-pick the photo.
+type AdUpdateRequest struct {
+	Title              string     `form:"title"              validate:"required,min=2,max=120"`
+	Body               *string    `form:"body"               validate:"omitempty,max=2000"`
+	TargetURL          string     `form:"target_url"         validate:"required,url"`
+	PhoneNumber        *string    `form:"phone_number"       validate:"omitempty,min=4,max=40"`
+	WhatsAppNumber     *string    `form:"whatsapp_number"    validate:"omitempty,min=4,max=40"`
+	Weight             *int       `form:"weight"`
+	DailyImpressionCap *int       `form:"daily_impression_cap"`
+	TargetProvinces    []string   `form:"target_provinces"   validate:"omitempty,dive,max=80"`
+	TargetLanguages    []string   `form:"target_languages"   validate:"omitempty,dive,max=8"`
+	StartAt            *time.Time `form:"start_at"`
+	EndAt              *time.Time `form:"end_at"`
+	// ClearImage forces the existing image to NULL when set true. Useful when
+	// an admin wants to switch back to a text-only placement. Ignored when a
+	// new image file is uploaded in the same request.
+	ClearImage bool `form:"clear_image"`
+}
+
 // AdReviewRequest is the admin payload for approving / rejecting an ad.
 // `note` is optional and surfaced back to the advertiser. Status transitions:
 //   - PENDING → APPROVED + start/end window may be set, status flips to ACTIVE

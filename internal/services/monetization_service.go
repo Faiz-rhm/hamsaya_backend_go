@@ -117,6 +117,68 @@ func (s *MonetizationService) CreateAd(
 		weight, req.DailyImpressionCap, provinces, languages)
 }
 
+// UpdateAd rewrites editable fields on an existing placement.
+//
+// `newImageURL` semantics:
+//   - nil       → leave the existing image_url untouched
+//   - &""       → caller asked to clear the image (req.ClearImage = true)
+//   - &"https…" → swap to a freshly uploaded photo
+//
+// Status / approval audit fields are NOT touched — Approve/Reject own those.
+func (s *MonetizationService) UpdateAd(
+	ctx context.Context,
+	id string,
+	req *models.AdUpdateRequest,
+	newImageURL *string,
+) (*models.Ad, error) {
+	if err := ValidateTargetURL(req.TargetURL); err != nil {
+		return nil, err
+	}
+	current, err := s.repo.GetAd(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if current == nil {
+		return nil, ErrAdNotFound
+	}
+	body := ""
+	if req.Body != nil {
+		body = *req.Body
+	}
+	phone := ""
+	if req.PhoneNumber != nil {
+		phone = *req.PhoneNumber
+	}
+	whatsapp := ""
+	if req.WhatsAppNumber != nil {
+		whatsapp = *req.WhatsAppNumber
+	}
+	weight := 1
+	if req.Weight != nil {
+		weight = *req.Weight
+	}
+	if weight < 1 {
+		weight = 1
+	}
+	if weight > 100 {
+		weight = 100
+	}
+	if req.DailyImpressionCap != nil && *req.DailyImpressionCap < 1 {
+		req.DailyImpressionCap = nil
+	}
+	provinces := req.TargetProvinces
+	if provinces == nil {
+		provinces = []string{}
+	}
+	languages := req.TargetLanguages
+	if languages == nil {
+		languages = []string{}
+	}
+	return s.repo.UpdateAd(ctx, id, req.Title, body, req.TargetURL, phone, whatsapp,
+		weight, req.DailyImpressionCap, provinces, languages,
+		req.StartAt, req.EndAt, newImageURL)
+}
+
 func (s *MonetizationService) GetAd(ctx context.Context, id string) (*models.Ad, error) {
 	ad, err := s.repo.GetAd(ctx, id)
 	if err != nil {

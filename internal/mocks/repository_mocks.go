@@ -2096,6 +2096,14 @@ func (m *MockMonetizationRepository) UpdateAdStatus(ctx context.Context, id, sta
 	return args.Get(0).(*models.Ad), args.Error(1)
 }
 
+func (m *MockMonetizationRepository) UpdateAd(ctx context.Context, id, title, body, targetURL, phoneNumber, whatsappNumber string, weight int, dailyImpressionCap *int, targetProvinces, targetLanguages []string, startAt, endAt *time.Time, imageURL *string) (*models.Ad, error) {
+	args := m.Called(ctx, id, title, body, targetURL, phoneNumber, whatsappNumber, weight, dailyImpressionCap, targetProvinces, targetLanguages, startAt, endAt, imageURL)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Ad), args.Error(1)
+}
+
 func (m *MockMonetizationRepository) DeleteAd(ctx context.Context, id string) error {
 	return m.Called(ctx, id).Error(0)
 }

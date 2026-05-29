@@ -24,6 +24,7 @@ type MonetizationRepository interface {
 	GetAd(ctx context.Context, id string) (*models.Ad, error)
 	CreateAd(ctx context.Context, advertiserID, title, body, imageURL, targetURL, phoneNumber, whatsappNumber, status string, startAt, endAt *time.Time, weight int, dailyImpressionCap *int, targetProvinces, targetLanguages []string) (*models.Ad, error)
 	UpdateAdStatus(ctx context.Context, id, status, reviewedBy string, req *models.AdReviewRequest) (*models.Ad, error)
+	UpdateAd(ctx context.Context, id, title, body, targetURL, phoneNumber, whatsappNumber string, weight int, dailyImpressionCap *int, targetProvinces, targetLanguages []string, startAt, endAt *time.Time, imageURL *string) (*models.Ad, error)
 	DeleteAd(ctx context.Context, id string) error
 	IncrementAdImpression(ctx context.Context, id string) error
 	IncrementAdClick(ctx context.Context, id string) error
@@ -315,6 +316,68 @@ func (r *monetizationRepository) UpdateAdStatus(
 	}
 	if tag.RowsAffected() == 0 {
 		return nil, nil
+	}
+	return r.GetAd(ctx, id)
+}
+
+// UpdateAd rewrites the editable content fields on an existing placement.
+// Pass imageURL = nil to leave the current image untouched (admin only edited
+// copy / targeting), &"" to clear the image (text-only ad), or &"<url>" to
+// swap in a freshly uploaded photo. Status + audit fields stay untouched —
+// state transitions go through UpdateAdStatus so ReviewedBy and ReviewedAt
+// remain authoritative.
+func (r *monetizationRepository) UpdateAd(
+	ctx context.Context,
+	id, title, body, targetURL, phoneNumber, whatsappNumber string,
+	weight int,
+	dailyImpressionCap *int,
+	targetProvinces, targetLanguages []string,
+	startAt, endAt *time.Time,
+	imageURL *string,
+) (*models.Ad, error) {
+	if weight <= 0 {
+		weight = 1
+	}
+	if targetProvinces == nil {
+		targetProvinces = []string{}
+	}
+	if targetLanguages == nil {
+		targetLanguages = []string{}
+	}
+	// COALESCE($N::text, image_url) lets a nil $imageURL leave the column
+	// alone, while an explicit empty string clears it via NULLIF.
+	const q = `
+		UPDATE ads SET
+			title                = $2,
+			body                 = NULLIF($3, ''),
+			target_url           = $4,
+			phone_number         = NULLIF($5, ''),
+			whatsapp_number      = NULLIF($6, ''),
+			weight               = $7,
+			daily_impression_cap = $8,
+			target_provinces     = $9,
+			target_languages     = $10,
+			start_at             = $11,
+			end_at               = $12,
+			image_url            = CASE WHEN $14::boolean THEN NULLIF($13, '') ELSE image_url END,
+			updated_at           = NOW()
+		WHERE id = $1
+	`
+	imageProvided := imageURL != nil
+	imageValue := ""
+	if imageProvided {
+		imageValue = *imageURL
+	}
+	tag, err := r.db.Pool.Exec(ctx, q,
+		id, title, body, targetURL, phoneNumber, whatsappNumber,
+		weight, dailyImpressionCap, targetProvinces, targetLanguages,
+		startAt, endAt, imageValue, imageProvided,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("ad update: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return nil, pgx.ErrNoRows
 	}
 	return r.GetAd(ctx, id)
 }

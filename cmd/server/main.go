@@ -854,6 +854,7 @@ func main() {
 			admin.GET("/ads", adminOnly, monetizationHandler.ListAds)
 			admin.POST("/ads", adminOnly, monetizationHandler.CreateAd)
 			admin.GET("/ads/:ad_id", adminOnly, monetizationHandler.GetAd)
+			admin.PUT("/ads/:ad_id", adminOnly, monetizationHandler.UpdateAd)
 			admin.PUT("/ads/:ad_id/approve", adminOnly, monetizationHandler.ApproveAd)
 			admin.PUT("/ads/:ad_id/reject", adminOnly, monetizationHandler.RejectAd)
 			admin.DELETE("/ads/:ad_id", adminOnly, monetizationHandler.DeleteAd)

@@ -176,6 +176,67 @@ func (h *MonetizationHandler) CreateAd(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusCreated, "Ad created", ad)
 }
 
+// UpdateAd accepts a multipart form with the same fields as CreateAd minus
+// advertiser_id / auto_approve. Optional `image` file replaces the existing
+// photo; optional `clear_image=true` form field drops the image entirely.
+// Status + approval audit fields stay untouched — use ApproveAd / RejectAd
+// for state transitions.
+//
+// @Router /admin/ads/{ad_id} [put]
+func (h *MonetizationHandler) UpdateAd(c *gin.Context) {
+	id := c.Param("ad_id")
+	if id == "" {
+		utils.SendError(c, http.StatusBadRequest, "ad_id required", utils.ErrValidation)
+		return
+	}
+
+	var req models.AdUpdateRequest
+	if err := c.ShouldBind(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid form data", err)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	// Image handling has three states:
+	//   - new file uploaded  → newImageURL = &uploadedURL
+	//   - clear_image=true   → newImageURL = &""  (repo CASE clears column)
+	//   - neither            → newImageURL = nil  (repo leaves column alone)
+	// A new upload always wins over clear_image to avoid wasting a fresh
+	// upload when both flags are set by accident.
+	var newImageURL *string
+	if file, header, err := c.Request.FormFile("image"); err == nil {
+		defer func() { _ = file.Close() }()
+		if !utils.EnforceUploadSize(c, header.Size, utils.MaxImageUploadBytes) {
+			return
+		}
+		photo, uErr := h.storage.UploadImage(c.Request.Context(), file, header, services.ImageTypeAd)
+		if uErr != nil {
+			h.logger.Error("ad image upload", zap.Error(uErr))
+			utils.SendError(c, http.StatusInternalServerError, "Failed to upload image", uErr)
+			return
+		}
+		url := photo.URL
+		newImageURL = &url
+	} else if req.ClearImage {
+		empty := ""
+		newImageURL = &empty
+	}
+
+	ad, err := h.service.UpdateAd(c.Request.Context(), id, &req, newImageURL)
+	if err != nil {
+		if errors.Is(err, services.ErrAdNotFound) {
+			utils.SendError(c, http.StatusNotFound, "Ad not found", err)
+			return
+		}
+		utils.SendError(c, http.StatusBadRequest, err.Error(), err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Ad updated", ad)
+}
+
 // ListAds godoc
 // @Router /admin/ads [get]
 func (h *MonetizationHandler) ListAds(c *gin.Context) {
