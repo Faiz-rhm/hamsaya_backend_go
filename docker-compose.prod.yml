@@ -116,14 +116,19 @@ services:
       JWT_ACCESS_TOKEN_DURATION: "15m"
       JWT_REFRESH_TOKEN_DURATION: "720h"
 
-      # Storage (Cloudflare R2 — S3-compatible)
-      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT:?STORAGE_ENDPOINT required (R2: <ACCOUNT_ID>.r2.cloudflarestorage.com)}
-      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY:?STORAGE_ACCESS_KEY required}
-      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY:?STORAGE_SECRET_KEY required}
+      # Storage (Cloudflare R2 — S3-compatible).
+      # Required-checks intentionally relaxed to plain ${VAR}: hard `:?` aborts
+      # the compose interpolation in <2s with no log, masking the real cause
+      # in Dokploy. Go config validation in cmd/server/main.go will fail loud
+      # at boot if these are missing — surfaces in container logs instead.
+      STORAGE_ENDPOINT: ${STORAGE_ENDPOINT}
+      STORAGE_ACCESS_KEY: ${STORAGE_ACCESS_KEY}
+      STORAGE_SECRET_KEY: ${STORAGE_SECRET_KEY}
       STORAGE_BUCKET_NAME: ${STORAGE_BUCKET_NAME:-hamsaya-media}
       STORAGE_USE_SSL: ${STORAGE_USE_SSL:-true}
       STORAGE_REGION: ${STORAGE_REGION:-auto}
-      CDN_URL: ${CDN_URL:?CDN_URL required (R2 public URL)}
+      STORAGE_PATH_STYLE: ${STORAGE_PATH_STYLE:-false}
+      CDN_URL: ${CDN_URL}
 
       # Firebase
       FIREBASE_PROJECT_ID: ${FIREBASE_PROJECT_ID:-}
