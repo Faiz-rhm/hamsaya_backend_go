@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"time"
 
@@ -1482,9 +1483,13 @@ func (s *AuthService) LoginWithDevice(ctx context.Context, req *models.DeviceLog
 // recognise. Sessions minted from this credential continue until they expire
 // naturally — call LogoutAll to also invalidate active sessions.
 func (s *AuthService) RevokeDevice(ctx context.Context, userID, credentialID string) error {
-	// Authorisation: only the owner can revoke their own credential. Look up
-	// the credential id and assert user ownership before mutating.
-	if err := s.userRepo.RevokeDeviceCredential(ctx, credentialID); err != nil {
+	// Authorisation enforced in the query: the UPDATE is scoped by user_id, so
+	// a caller can only revoke a credential they own. A non-owned/unknown id
+	// returns ErrDeviceCredentialNotFound -> 404 (never touches another user's row).
+	if err := s.userRepo.RevokeDeviceCredential(ctx, userID, credentialID); err != nil {
+		if errors.Is(err, repositories.ErrDeviceCredentialNotFound) {
+			return utils.NewNotFoundError("Device not found", nil)
+		}
 		s.logger.Error("Failed to revoke device credential", zap.Error(err))
 		return utils.NewInternalError("Failed to revoke device", err)
 	}

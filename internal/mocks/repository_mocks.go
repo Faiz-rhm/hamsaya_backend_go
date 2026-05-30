@@ -184,8 +184,8 @@ func (m *MockUserRepository) TouchDeviceCredential(ctx context.Context, credenti
 	return args.Error(0)
 }
 
-func (m *MockUserRepository) RevokeDeviceCredential(ctx context.Context, credentialID string) error {
-	args := m.Called(ctx, credentialID)
+func (m *MockUserRepository) RevokeDeviceCredential(ctx context.Context, userID, credentialID string) error {
+	args := m.Called(ctx, userID, credentialID)
 	return args.Error(0)
 }
 

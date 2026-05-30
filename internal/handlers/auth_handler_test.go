@@ -952,7 +952,8 @@ func TestAuthHandler_VerifyMFAWithBackupCode(t *testing.T) {
 		mfaRepo := &mocks.MockMFARepository{}
 		user := testutil.CreateTestUser(authTestUserID, "test@test.com")
 		userRepo.On("GetByID", mock.Anything, authTestUserID).Return(user, nil)
-		mfaRepo.On("GetBackupCode", mock.Anything, authTestUserID, "WRONGCODE").Return(nil, fmt.Errorf("not found"))
+		// Code is hashed before lookup now, so match any (hashed) value.
+		mfaRepo.On("GetBackupCode", mock.Anything, authTestUserID, mock.Anything).Return(nil, fmt.Errorf("not found"))
 
 		require.NoError(t, mr.Set("mfa:challenge:ch-valid", authTestUserID))
 
@@ -1055,7 +1056,7 @@ func TestAuthHandler_DeviceLogin_RejectsBogus(t *testing.T) {
 
 func TestAuthHandler_RevokeDevice(t *testing.T) {
 	userRepo := new(mocks.MockUserRepository)
-	userRepo.On("RevokeDeviceCredential", mock.Anything, "cred-1").Return(nil)
+	userRepo.On("RevokeDeviceCredential", mock.Anything, mock.Anything, "cred-1").Return(nil)
 
 	r := newDeviceTestRouter(t, userRepo)
 
