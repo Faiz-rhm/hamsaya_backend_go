@@ -39,15 +39,17 @@ type CookieConfig struct {
 }
 
 // NewCookieConfig returns sane defaults given a deployment env string
-// ("development" / "staging" / "production"). Cookies emit Secure=false
-// by default so they survive the http:// deployments Dokploy hands out
-// before a TLS-capable domain is wired up (browsers silently drop
-// Secure cookies on http:// origins, producing 'login works but page
-// stays on /login'). Once the panel is reachable over HTTPS, set
-// COOKIE_SECURE=true in the env panel to flip Secure back on. The old
-// COOKIE_INSECURE=true escape hatch is still honoured for clarity.
+// ("development" / "staging" / "production"). Secure defaults to TRUE in
+// production (fail-safe: the HttpOnly admin JWT must not be transmittable over
+// plaintext HTTP) and false otherwise. The behavior is overridable both ways:
+//   - COOKIE_SECURE=true  forces Secure on  (e.g. staging behind TLS)
+//   - COOKIE_INSECURE=true forces Secure off (the http:// Dokploy bootstrap
+//     escape hatch — browsers drop Secure cookies on http:// origins, which
+//     otherwise produces 'login works but page stays on /login').
+// Previously this defaulted to false even in production, so forgetting
+// COOKIE_SECURE silently shipped a sniffable session cookie.
 func NewCookieConfig(env, domain string) CookieConfig {
-	secure := false
+	secure := env == "production"
 	if v := os.Getenv("COOKIE_SECURE"); v == "true" || v == "1" {
 		secure = true
 	}
