@@ -89,6 +89,12 @@ type ServerConfig struct {
 	// ".hamsaya.af" only when the admin panel and API live on different
 	// subdomains under a shared parent.
 	AdminCookieDomain string
+	// TrustedProxies is the set of CIDRs/IPs Gin will trust for
+	// X-Forwarded-For parsing. Behind a reverse proxy (Traefik/Dokploy) this
+	// must be the proxy's network so c.ClientIP() returns the real client and
+	// can't be spoofed by an arbitrary XFF header. Defaults to private docker
+	// ranges; override with TRUSTED_PROXIES (comma-separated).
+	TrustedProxies []string
 }
 
 // DatabaseConfig holds database configuration
@@ -243,6 +249,7 @@ func Load() (*Config, error) {
 			Env:               viper.GetString("ENV"),
 			LogLevel:          viper.GetString("LOG_LEVEL"),
 			AdminCookieDomain: viper.GetString("ADMIN_COOKIE_DOMAIN"),
+			TrustedProxies:    parseTrustedProxies(viper.GetString("TRUSTED_PROXIES")),
 		},
 		Database: DatabaseConfig{
 			Host:            viper.GetString("DB_HOST"),
@@ -490,4 +497,22 @@ func (c *DatabaseConfig) GetReplicaDSN() string {
 // GetRedisAddr returns Redis address
 func (c *RedisConfig) GetAddr() string {
 	return c.Host + ":" + c.Port
+}
+
+// parseTrustedProxies parses a comma-separated TRUSTED_PROXIES value into a
+// slice of CIDRs/IPs for gin's SetTrustedProxies. When unset it defaults to
+// the private ranges a containerized reverse proxy (Traefik/Dokploy) lives in,
+// so X-Forwarded-For is honored from the proxy but not from arbitrary clients.
+func parseTrustedProxies(raw string) []string {
+	if strings.TrimSpace(raw) == "" {
+		return []string{"10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"}
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if v := strings.TrimSpace(p); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
 }
