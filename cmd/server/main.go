@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -345,11 +346,30 @@ func main() {
 	// Create router
 	router := gin.New()
 
+	// Trust only the configured reverse-proxy network for X-Forwarded-For.
+	// Without this Gin trusts ALL proxies, letting any client spoof XFF and
+	// bypass IP bans / rate limits. Defaults to private docker ranges.
+	if err := router.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
+		sugaredLogger.Warnw("failed to set trusted proxies; falling back to gin default", "error", err)
+	}
+
 	// Set max multipart memory (10 MB for file uploads)
 	router.MaxMultipartMemory = 10 << 20
 
-	// Global middleware
-	router.Use(gin.Recovery())
+	// Global middleware. Custom recovery captures panics durably (structured
+	// log with request id + stack via zap -> DB log sink) instead of the stock
+	// recovery which only prints to stdout — the app is otherwise blind to
+	// crashes (no Sentry wired). Returns a generic 500 to the client.
+	router.Use(gin.CustomRecovery(func(c *gin.Context, recovered any) {
+		sugaredLogger.Errorw("panic recovered",
+			"error", fmt.Sprintf("%v", recovered),
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"request_id", c.GetString("request_id"),
+			"stack", string(debug.Stack()),
+		)
+		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
+	}))
 	router.Use(middleware.Logger(sugaredLogger))
 	router.Use(middleware.CORS(cfg.CORS))
 	router.Use(middleware.RequestID())
@@ -431,18 +451,41 @@ func main() {
 	router.GET("/health/live", healthHandler.Live)
 	router.GET("/health/ready", healthHandler.Ready)
 	router.GET("/health/startup", healthHandler.Startup)
-	router.GET("/health/db-stats", healthHandler.DBStats)
-	router.GET("/health/redis-stats", healthHandler.RedisStats)
 	router.GET("/health/version", healthHandler.Version)
 	router.GET("/health/metrics", healthHandler.Metrics)
 
-	// Prometheus metrics endpoint for scraping
-	router.GET("/metrics", gin.WrapH(promhttp.Handler()))
-	sugaredLogger.Info("Prometheus metrics available at /metrics")
+	// Infra-internal diagnostics leak pool/connection internals — only exposed
+	// outside production. In prod use /metrics + Grafana instead.
+	if cfg.Server.Env != "production" {
+		router.GET("/health/db-stats", healthHandler.DBStats)
+		router.GET("/health/redis-stats", healthHandler.RedisStats)
+	}
 
-	// Swagger API documentation
-	router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-	sugaredLogger.Info("Swagger UI available at /swagger/index.html")
+	// Prometheus metrics endpoint for scraping. Optionally token-gated: when
+	// METRICS_TOKEN is set, callers must send `Authorization: Bearer <token>`
+	// (configure prometheus.yml with a matching bearer_token). Left open when
+	// unset for backward compatibility — set it in production, where the host
+	// is reachable through Traefik.
+	metricsHandler := gin.WrapH(promhttp.Handler())
+	metricsToken := os.Getenv("METRICS_TOKEN")
+	router.GET("/metrics", func(c *gin.Context) {
+		if metricsToken != "" && c.GetHeader("Authorization") != "Bearer "+metricsToken {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return
+		}
+		metricsHandler(c)
+	})
+	if metricsToken == "" && cfg.Server.Env == "production" {
+		sugaredLogger.Warn("METRICS_TOKEN not set — /metrics is unauthenticated; set it to require a bearer token")
+	}
+
+	// Swagger API documentation — non-production only (publishes full API surface).
+	if cfg.Server.Env != "production" {
+		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
+		sugaredLogger.Info("Swagger UI available at /swagger/index.html")
+	} else {
+		sugaredLogger.Info("Swagger UI disabled in production")
+	}
 
 	// Brand icon served to email recipients. Public, no auth — referenced as
 	// `<img src>` from transactional email templates. Long Cache-Control because
@@ -699,12 +742,14 @@ func main() {
 			notifications.DELETE("/fcm-token", authMiddleware.RequireAuth(), notificationHandler.UnregisterFCMToken)
 		}
 
-		// Search and discovery routes (require auth)
-		v1.GET("/search", authMiddleware.RequireAuth(), searchHandler.Search)
-		v1.GET("/search/posts", authMiddleware.RequireAuth(), searchHandler.SearchPosts)
-		v1.GET("/search/users", authMiddleware.RequireAuth(), searchHandler.SearchUsers)
-		v1.GET("/search/businesses", authMiddleware.RequireAuth(), searchHandler.SearchBusinesses)
-		v1.GET("/discover", authMiddleware.RequireAuth(), searchHandler.Discover)
+		// Search and discovery routes (require auth + rate limit — full-text +
+		// geospatial queries are the most expensive read path).
+		searchRL := rateLimiter.LimitByType("search")
+		v1.GET("/search", authMiddleware.RequireAuth(), searchRL, searchHandler.Search)
+		v1.GET("/search/posts", authMiddleware.RequireAuth(), searchRL, searchHandler.SearchPosts)
+		v1.GET("/search/users", authMiddleware.RequireAuth(), searchRL, searchHandler.SearchUsers)
+		v1.GET("/search/businesses", authMiddleware.RequireAuth(), searchRL, searchHandler.SearchBusinesses)
+		v1.GET("/discover", authMiddleware.RequireAuth(), searchRL, searchHandler.Discover)
 
 		// Feedback routes (require verified email to submit)
 		feedback := v1.Group("/feedback")

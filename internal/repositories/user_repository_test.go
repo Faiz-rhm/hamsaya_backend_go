@@ -293,7 +293,10 @@ func TestUserRepository_DeviceCredential_CreateAndRevoke(t *testing.T) {
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything,
 		mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(pgconn.NewCommandTag("INSERT 1"), nil).Maybe()
-	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything, mock.Anything).
+	// Owner revoke affects 1 row -> nil. (The non-owner 0-row path returning
+	// ErrDeviceCredentialNotFound is exercised against a real DB; the unit
+	// mock here just confirms the user_id-scoped query is wired through.)
+	pool.On("Exec", mock.Anything, mock.AnythingOfType("string"), mock.Anything).
 		Return(pgconn.NewCommandTag("UPDATE 1"), nil)
 
 	cred := &models.DeviceCredential{
@@ -304,6 +307,6 @@ func TestUserRepository_DeviceCredential_CreateAndRevoke(t *testing.T) {
 		UpdatedAt:      time.Now(),
 	}
 	require.NoError(t, repo.CreateDeviceCredential(context.Background(), cred))
-	require.NoError(t, repo.RevokeDeviceCredential(context.Background(), "cred-1"))
+	require.NoError(t, repo.RevokeDeviceCredential(context.Background(), "u-1", "cred-1"))
 }
 

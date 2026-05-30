@@ -64,7 +64,7 @@ type UserRepository interface {
 	CreateDeviceCredential(ctx context.Context, cred *models.DeviceCredential) error
 	GetDeviceCredentialByHash(ctx context.Context, credentialHash string) (*models.DeviceCredential, error)
 	TouchDeviceCredential(ctx context.Context, credentialID string) error
-	RevokeDeviceCredential(ctx context.Context, credentialID string) error
+	RevokeDeviceCredential(ctx context.Context, userID, credentialID string) error
 	RevokeAllUserDeviceCredentials(ctx context.Context, userID string) error
 }
 
@@ -916,13 +916,28 @@ func (r *userRepository) TouchDeviceCredential(ctx context.Context, credentialID
 	return err
 }
 
+// ErrDeviceCredentialNotFound is returned when a revoke targets a credential
+// that doesn't exist or isn't owned by the caller.
+var ErrDeviceCredentialNotFound = errors.New("device credential not found")
+
 // RevokeDeviceCredential marks a single credential dead. Existing sessions
 // minted from it remain valid until their natural expiry.
-func (r *userRepository) RevokeDeviceCredential(ctx context.Context, credentialID string) error {
-	_, err := r.db.Pool.Exec(ctx,
-		`UPDATE device_credentials SET revoked = true, revoked_at = $2, updated_at = $2 WHERE id = $1`,
-		credentialID, time.Now())
-	return err
+//
+// Scoped by user_id: a caller can only revoke a credential they own. Returns
+// ErrDeviceCredentialNotFound when no row matches (wrong owner or unknown id)
+// so the service layer can answer 404 instead of silently succeeding — this
+// is the guard against the IDOR where any user could revoke any credential.
+func (r *userRepository) RevokeDeviceCredential(ctx context.Context, userID, credentialID string) error {
+	tag, err := r.db.Pool.Exec(ctx,
+		`UPDATE device_credentials SET revoked = true, revoked_at = $3, updated_at = $3 WHERE id = $1 AND user_id = $2`,
+		credentialID, userID, time.Now())
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrDeviceCredentialNotFound
+	}
+	return nil
 }
 
 // RevokeAllUserDeviceCredentials revokes every device credential for a user.

@@ -31,12 +31,13 @@ import (
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
 	"github.com/hamsaya/backend/pkg/database"
+	"go.uber.org/zap"
 )
 
-const (
-	adminEmail    = "admin@hamsaya.af"
-	adminPassword = "Admin123!"
-)
+// adminEmailDefault is used only when ADMIN_EMAIL is unset. The admin
+// password is NEVER hardcoded — it must come from ADMIN_PASSWORD, and is
+// only ever applied when creating a brand-new admin (never on re-seed).
+const adminEmailDefault = "admin@hamsaya.af"
 
 // starterRolesSQL keeps the two default custom roles in sync with what
 // migration 20260429000001_create_custom_roles.up.sql ships. Idempotent
@@ -81,7 +82,13 @@ func main() {
 
 	logger.Info("[seed-master] applying production seed data")
 
-	if err := seedAdmin(ctx, db); err != nil {
+	adminEmail := os.Getenv("ADMIN_EMAIL")
+	if adminEmail == "" {
+		adminEmail = adminEmailDefault
+	}
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+
+	if err := seedAdmin(ctx, db, logger, adminEmail, adminPassword); err != nil {
 		fmt.Fprintf(os.Stderr, "seed-master: admin user: %v\n", err)
 		os.Exit(1)
 	}
@@ -115,32 +122,42 @@ func main() {
 	fmt.Println("seed-master complete: admin + sell_categories + business_categories + daily_post_limits + custom_roles")
 }
 
-func seedAdmin(ctx context.Context, db *database.DB) error {
+// seedAdmin ensures a super-admin account exists.
+//
+// Idempotency contract (important): on an EXISTING account it only promotes
+// the role to super-admin and restores a soft-deleted row. It NEVER rewrites
+// the password or email-verified flag — a re-deploy must not undo an
+// operator-rotated credential. The password is applied ONLY when creating a
+// brand-new admin, and only from ADMIN_PASSWORD (no hardcoded fallback). If
+// the admin is missing and ADMIN_PASSWORD is unset, creation is skipped with
+// a loud warning rather than minting a well-known credential.
+func seedAdmin(ctx context.Context, db *database.DB, logger *zap.SugaredLogger, email, password string) error {
 	userRepo := repositories.NewUserRepository(db)
 	passwordService := services.NewPasswordService()
 
-	hashed, err := passwordService.Hash(adminPassword)
-	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
-	}
-
-	existing, _ := userRepo.GetByEmail(ctx, adminEmail)
+	existing, _ := userRepo.GetByEmail(ctx, email)
 	if existing == nil {
-		existing, _ = userRepo.GetByEmailIncludingDeleted(ctx, adminEmail)
+		existing, _ = userRepo.GetByEmailIncludingDeleted(ctx, email)
 	}
 
 	if existing != nil {
-		existing.Role = models.RoleSuperAdmin
-		existing.PasswordHash = &hashed
-		existing.EmailVerified = true
+		// Promote + restore only. Do NOT touch PasswordHash / EmailVerified.
+		needsUpdate := false
+		if existing.Role != models.RoleSuperAdmin {
+			existing.Role = models.RoleSuperAdmin
+			needsUpdate = true
+		}
 		if existing.DeletedAt != nil {
 			existing.DeletedAt = nil
 			if err := userRepo.Restore(ctx, existing.ID); err != nil {
 				return fmt.Errorf("restore admin: %w", err)
 			}
+			needsUpdate = true
 		}
-		if err := userRepo.Update(ctx, existing); err != nil {
-			return fmt.Errorf("update admin: %w", err)
+		if needsUpdate {
+			if err := userRepo.Update(ctx, existing); err != nil {
+				return fmt.Errorf("update admin: %w", err)
+			}
 		}
 		profile, _ := userRepo.GetProfileByUserID(ctx, existing.ID)
 		if profile == nil {
@@ -153,10 +170,23 @@ func seedAdmin(ctx context.Context, db *database.DB) error {
 		return nil
 	}
 
+	// No admin exists yet. Refuse to mint one without an explicit password.
+	if password == "" {
+		logger.Warn("[seed-master] no admin user found and ADMIN_PASSWORD is unset — skipping admin creation. "+
+			"Set ADMIN_PASSWORD (and optionally ADMIN_EMAIL) and re-deploy to bootstrap the super-admin.",
+			"email", email)
+		return nil
+	}
+
+	hashed, err := passwordService.Hash(password)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
 	now := time.Now()
 	user := &models.User{
 		ID:            uuid.New().String(),
-		Email:         adminEmail,
+		Email:         email,
 		PasswordHash:  &hashed,
 		EmailVerified: true,
 		Role:          models.RoleSuperAdmin,
@@ -174,5 +204,6 @@ func seedAdmin(ctx context.Context, db *database.DB) error {
 	}); err != nil {
 		return fmt.Errorf("create admin profile: %w", err)
 	}
+	logger.Info("[seed-master] created new super-admin from ADMIN_PASSWORD", "email", email)
 	return nil
 }

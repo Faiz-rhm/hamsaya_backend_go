@@ -57,14 +57,11 @@ func (m *BanMiddleware) Enforce() gin.HandlerFunc {
 	}
 }
 
-// realIP extracts the client IP, respecting X-Forwarded-For from trusted proxies.
+// realIP returns the client IP via gin's ClientIP, which honors
+// X-Forwarded-For ONLY from the trusted-proxy set configured at boot
+// (router.SetTrustedProxies). Previously this blindly took the first XFF
+// entry, letting any client spoof their IP to dodge IP bans or frame another
+// address — fixed by deferring to gin's trusted-proxy-aware resolution.
 func realIP(c *gin.Context) string {
-	if xff := c.GetHeader("X-Forwarded-For"); xff != "" {
-		// First entry is the originating client.
-		parts := strings.SplitN(xff, ",", 2)
-		if ip := strings.TrimSpace(parts[0]); ip != "" {
-			return ip
-		}
-	}
 	return c.ClientIP()
 }

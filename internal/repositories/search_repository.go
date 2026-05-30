@@ -314,13 +314,23 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 			ST_X(bp.address_location::geometry) as longitude
 	`
 
-	// Add distance calculation if location provided
-	if filter.Latitude != nil && filter.Longitude != nil {
+	args := []interface{}{}
+	argCount := 1
+	hasLocation := filter.Latitude != nil && filter.Longitude != nil
+
+	// Add distance calculation if location provided. The placeholders use the
+	// running argCount and the lng/lat args are appended HERE — previously the
+	// indices were computed from len(filter.Query) and the args were never
+	// appended at this point, so the $N numbers never matched and any location
+	// business search 500'd (pgx "placeholder out of range"). Mirrors SearchPosts.
+	if hasLocation {
 		query += fmt.Sprintf(`,
 			ST_Distance(
 				bp.address_location::geography,
 				ST_SetSRID(ST_MakePoint($%d, $%d), 4326)::geography
-			) / 1000 as distance`, len(filter.Query)+3, len(filter.Query)+4)
+			) / 1000 as distance`, argCount, argCount+1)
+		args = append(args, *filter.Longitude, *filter.Latitude)
+		argCount += 2
 	}
 
 	query += `
@@ -328,9 +338,6 @@ func (r *searchRepository) SearchBusinesses(ctx context.Context, filter *models.
 		WHERE bp.deleted_at IS NULL
 			AND bp.status = true
 	`
-
-	args := []interface{}{}
-	argCount := 1
 
 	// Full-text search using tsvector/tsquery (GIN indexed) for performance at scale.
 	if filter.Query != "" {

@@ -260,7 +260,7 @@ func TestMFAService_VerifyBackupCode(t *testing.T) {
 		{
 			name: "code not found returns false",
 			setupMocks: func(mfaRepo *mocks.MockMFARepository) {
-				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", "ABCD1234").
+				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", hashBackupCode("ABCD1234")).
 					Return(nil, errors.New("not found"))
 			},
 			code:          "ABCD1234",
@@ -270,7 +270,7 @@ func TestMFAService_VerifyBackupCode(t *testing.T) {
 			name: "already used",
 			setupMocks: func(mfaRepo *mocks.MockMFARepository) {
 				bc := &models.BackupCode{ID: "bc-1", UserID: "user-1", Code: "ABCD1234", Used: true}
-				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", "ABCD1234").Return(bc, nil)
+				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", hashBackupCode("ABCD1234")).Return(bc, nil)
 			},
 			code:          "ABCD1234",
 			expectedError: "already been used",
@@ -279,7 +279,7 @@ func TestMFAService_VerifyBackupCode(t *testing.T) {
 			name: "success",
 			setupMocks: func(mfaRepo *mocks.MockMFARepository) {
 				bc := &models.BackupCode{ID: "bc-2", UserID: "user-1", Code: "EFGH5678", Used: false}
-				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", "EFGH5678").Return(bc, nil)
+				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", hashBackupCode("EFGH5678")).Return(bc, nil)
 				mfaRepo.On("MarkBackupCodeAsUsed", mock.Anything, "bc-2").Return(nil)
 			},
 			code:          "EFGH5678",
@@ -289,7 +289,7 @@ func TestMFAService_VerifyBackupCode(t *testing.T) {
 			name: "normalizes lowercase input",
 			setupMocks: func(mfaRepo *mocks.MockMFARepository) {
 				bc := &models.BackupCode{ID: "bc-3", UserID: "user-1", Code: "ABCDEFGH", Used: false}
-				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", "ABCDEFGH").Return(bc, nil)
+				mfaRepo.On("GetBackupCode", mock.Anything, "user-1", hashBackupCode("ABCDEFGH")).Return(bc, nil)
 				mfaRepo.On("MarkBackupCodeAsUsed", mock.Anything, "bc-3").Return(nil)
 			},
 			code:          "abcdefgh",

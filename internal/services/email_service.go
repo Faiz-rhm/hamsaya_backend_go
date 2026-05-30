@@ -98,12 +98,24 @@ type EmailData struct {
 	IconURL        template.URL
 }
 
+// transportConfigured reports whether a real email transport (Resend or SMTP)
+// is wired. When false, codes are logged as a dev fallback; when true (prod),
+// codes are NEVER logged — they're delivered by email only.
+func (s *EmailService) transportConfigured() bool {
+	return s.cfg.ResendAPIKey != "" || (s.cfg.SMTPHost != "" && s.cfg.SMTPPort != "")
+}
+
 // SendVerificationEmail sends an email with a verification code (user enters code in the app)
 func (s *EmailService) SendVerificationEmail(email, name, verificationCode string) error {
-	s.logger.Info("Verification code generated (check server logs if email not configured)",
-		zap.String("email", email),
-		zap.String("code", verificationCode),
-	)
+	if !s.transportConfigured() {
+		// Dev fallback only — no email transport configured, so surface the
+		// code in logs. In production (Resend/SMTP set) this never runs, so
+		// verification codes are not leaked to the log pipeline.
+		s.logger.Warn("Email transport not configured — verification code in logs (dev only)",
+			zap.String("email", email),
+			zap.String("code", verificationCode),
+		)
+	}
 	data := EmailData{
 		RecipientName:  name,
 		RecipientEmail: email,
@@ -129,10 +141,12 @@ func (s *EmailService) SendVerificationEmail(email, name, verificationCode strin
 
 // SendPasswordResetEmail sends a password reset code (user enters it in the app)
 func (s *EmailService) SendPasswordResetEmail(email, name, resetCode string) error {
-	s.logger.Info("Password reset code generated (check server logs if email not configured)",
-		zap.String("email", email),
-		zap.String("code", resetCode),
-	)
+	if !s.transportConfigured() {
+		s.logger.Warn("Email transport not configured — password reset code in logs (dev only)",
+			zap.String("email", email),
+			zap.String("code", resetCode),
+		)
+	}
 	data := EmailData{
 		RecipientName:  name,
 		RecipientEmail: email,

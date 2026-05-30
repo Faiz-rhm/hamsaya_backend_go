@@ -1087,7 +1087,7 @@ func TestAuthService_DeviceCredential(t *testing.T) {
 
 	t.Run("RevokeDevice marks credential dead", func(t *testing.T) {
 		userRepo := new(mocks.MockUserRepository)
-		userRepo.On("RevokeDeviceCredential", mock.Anything, "cred-1").Return(nil)
+		userRepo.On("RevokeDeviceCredential", mock.Anything, "user-1", "cred-1").Return(nil)
 
 		ts, _ := newTestTokenStorage(t)
 		svc := newTestAuthService(userRepo, ts)

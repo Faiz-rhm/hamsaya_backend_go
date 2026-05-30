@@ -120,6 +120,14 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:storage:",
 	},
+	// search: full-text + geospatial queries are the most expensive read
+	// path. 60/min/IP is generous for interactive use (type-ahead, paging)
+	// while blocking a single client from hammering the DB.
+	"search": {
+		MaxRequests: 60,
+		Window:      time.Minute,
+		KeyPrefix:   "ratelimit:search:",
+	},
 }
 
 // RateLimiter handles rate limiting using Redis

@@ -53,23 +53,19 @@ if [ "${RESET_DB_ON_BOOT}" = "true" ]; then
   reset_db
 fi
 
-# Run migrations. If the run fails because the schema is half-populated
-# (the classic corrupted-initdb signature), reset the database in place
-# and retry once. Any other failure is real and exits non-zero.
+# Run migrations. Any failure aborts the boot — we NEVER auto-drop the
+# database on error. A prior version reset the DB in place whenever migrate
+# output contained "already exists"; that condition can occur on a perfectly
+# healthy production database (e.g. a botched migration creating an object
+# that partially exists), so the auto-reset was a total-data-loss footgun.
+# To recover a genuinely corrupt fresh DB, an operator sets RESET_DB_ON_BOOT=true
+# explicitly (handled above) for a single boot.
 echo "[entrypoint] Running database migrations..."
-migrate_log=$(mktemp)
-if ! ./migrate up 2>&1 | tee "${migrate_log}"; then
-  if grep -q "already exists" "${migrate_log}"; then
-    echo "[entrypoint] Migrations failed with 'already exists' — corrupt initdb state detected. Resetting and retrying..."
-    reset_db
-    ./migrate up
-  else
-    echo "[entrypoint] Migration failed for a non-recoverable reason. Aborting."
-    rm -f "${migrate_log}"
-    exit 1
-  fi
+if ! ./migrate up; then
+  echo "[entrypoint] Migration failed. Aborting boot (database left untouched)."
+  echo "[entrypoint] If and only if this is a known-corrupt FRESH DB, re-deploy once with RESET_DB_ON_BOOT=true."
+  exit 1
 fi
-rm -f "${migrate_log}"
 
 # Apply the master seed (production-essential, idempotent): super-admin
 # user, sell_categories, business_categories, daily_post_limits,

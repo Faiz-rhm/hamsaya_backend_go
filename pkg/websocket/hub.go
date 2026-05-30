@@ -163,8 +163,15 @@ func (s *hubShard) run() {
 					s.logger.Warn("Client send buffer full, closing connection",
 						zap.String("user_id", broadcast.UserID),
 					)
-					// Re-enqueue unregister on the same shard.
-					s.unregister <- client
+					// Remove inline. We must NOT send to s.unregister from
+					// within the shard loop: this goroutine is the only reader
+					// of s.unregister, so sending on the unbuffered channel here
+					// deadlocks the shard permanently (and every user hashed to
+					// it). Delete under the write lock and close directly.
+					s.mu.Lock()
+					delete(s.clients, broadcast.UserID)
+					s.mu.Unlock()
+					client.close()
 				}
 			} else {
 				s.logger.Debug("User not connected, message not sent",
@@ -182,16 +189,27 @@ func (h *Hub) Shutdown() {
 	}
 }
 
-// Register adds a client to its shard.
+// Register adds a client to its shard. Selects on done so a registration
+// arriving during/after Shutdown doesn't block forever on a shard whose
+// run() loop has already returned (no reader left on the channel).
 func (h *Hub) Register(client *Client) {
-	h.shardFor(client.ID).register <- client
-	observability.WebSocketConnected(context.Background())
+	s := h.shardFor(client.ID)
+	select {
+	case s.register <- client:
+		observability.WebSocketConnected(context.Background())
+	case <-s.done:
+		client.close()
+	}
 }
 
-// Unregister removes a client from its shard.
+// Unregister removes a client from its shard. Shutdown-safe (see Register).
 func (h *Hub) Unregister(client *Client) {
-	h.shardFor(client.ID).unregister <- client
-	observability.WebSocketDisconnected(context.Background())
+	s := h.shardFor(client.ID)
+	select {
+	case s.unregister <- client:
+		observability.WebSocketDisconnected(context.Background())
+	case <-s.done:
+	}
 }
 
 // SendToUser sends a message to a specific user via the user's shard.
@@ -208,9 +226,13 @@ func (h *Hub) SendToUser(userID string, message interface{}) error {
 		return err
 	}
 
-	h.shardFor(userID).broadcast <- &BroadcastMessage{
-		UserID:  userID,
-		Message: messageBytes,
+	// Shutdown-safe: if this shard's run() has already returned, there is no
+	// reader on broadcast — selecting on done prevents the caller goroutine
+	// (notification/chat fanout) from blocking forever during drain.
+	s := h.shardFor(userID)
+	select {
+	case s.broadcast <- &BroadcastMessage{UserID: userID, Message: messageBytes}:
+	case <-s.done:
 	}
 
 	// Fanout to peer pods. We always publish (rather than gating on
