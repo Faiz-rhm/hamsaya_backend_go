@@ -63,7 +63,7 @@ func (s *TokenStorageService) GetUserIDFromVerificationToken(ctx context.Context
 	}
 	if err != nil {
 		s.logger.Error("Failed to get verification token",
-			zap.String("token", token),
+			zap.String("token_key", hashToken(token)),
 			zap.Error(err),
 		)
 		return "", fmt.Errorf("failed to get verification token: %w", err)
@@ -78,7 +78,7 @@ func (s *TokenStorageService) DeleteVerificationToken(ctx context.Context, token
 	err := s.redis.Del(ctx, key).Err()
 	if err != nil {
 		s.logger.Error("Failed to delete verification token",
-			zap.String("token", token),
+			zap.String("token_key", hashToken(token)),
 			zap.Error(err),
 		)
 		return fmt.Errorf("failed to delete verification token: %w", err)
@@ -115,7 +115,7 @@ func (s *TokenStorageService) GetUserIDFromPasswordResetToken(ctx context.Contex
 	}
 	if err != nil {
 		s.logger.Error("Failed to get password reset token",
-			zap.String("token", token),
+			zap.String("token_key", hashToken(token)),
 			zap.Error(err),
 		)
 		return "", fmt.Errorf("failed to get password reset token: %w", err)
@@ -130,7 +130,7 @@ func (s *TokenStorageService) DeletePasswordResetToken(ctx context.Context, toke
 	err := s.redis.Del(ctx, key).Err()
 	if err != nil {
 		s.logger.Error("Failed to delete password reset token",
-			zap.String("token", token),
+			zap.String("token_key", hashToken(token)),
 			zap.Error(err),
 		)
 		return fmt.Errorf("failed to delete password reset token: %w", err)
