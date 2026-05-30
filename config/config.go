@@ -232,6 +232,9 @@ type MonitoringConfig struct {
 	ObservabilityEnabled bool
 	OTLPEndpoint         string
 	TraceSamplingRate    float64
+	// AlertWebhookURL receives best-effort incident notifications (panics).
+	// Slack/Discord/any JSON webhook. Empty disables alerting.
+	AlertWebhookURL string
 }
 
 // Load loads configuration from environment variables
@@ -275,10 +278,10 @@ func Load() (*Config, error) {
 		},
 		JWT: JWTConfig{
 			Secret:                   viper.GetString("JWT_SECRET"),
-			AccessTokenDuration:      viper.GetDuration("JWT_ACCESS_TOKEN_DURATION"),
-			RefreshTokenDuration:     viper.GetDuration("JWT_REFRESH_TOKEN_DURATION"),
-			RefreshGrace:             viper.GetDuration("JWT_REFRESH_GRACE"),
-			DeviceCredentialDuration: viper.GetDuration("DEVICE_CREDENTIAL_DURATION"),
+			AccessTokenDuration:      durationOrDefault("JWT_ACCESS_TOKEN_DURATION", 15*time.Minute),
+			RefreshTokenDuration:     durationOrDefault("JWT_REFRESH_TOKEN_DURATION", 720*time.Hour),
+			RefreshGrace:             durationOrDefault("JWT_REFRESH_GRACE", 60*time.Second),
+			DeviceCredentialDuration: durationOrDefault("DEVICE_CREDENTIAL_DURATION", 4320*time.Hour),
 		},
 		OAuth: OAuthConfig{
 			Google: GoogleOAuthConfig{
@@ -344,6 +347,7 @@ func Load() (*Config, error) {
 			ObservabilityEnabled: viper.GetBool("OBSERVABILITY_ENABLED"),
 			OTLPEndpoint:         viper.GetString("OTLP_ENDPOINT"),
 			TraceSamplingRate:    viper.GetFloat64("TRACE_SAMPLING_RATE"),
+			AlertWebhookURL:      viper.GetString("ALERT_WEBHOOK_URL"),
 		},
 		Crypto: CryptoConfig{
 			MFASecretKey: viper.GetString("MFA_SECRET_ENCRYPTION_KEY"),
@@ -515,4 +519,15 @@ func parseTrustedProxies(raw string) []string {
 		}
 	}
 	return out
+}
+
+// durationOrDefault reads a duration env key and falls back to def when unset
+// or non-positive. Guards the instant-expiry footgun: viper.GetDuration returns
+// 0 for a missing/typo'd value, which would make access tokens expire
+// immediately (total auth outage). 0/negative is never a valid TTL here.
+func durationOrDefault(key string, def time.Duration) time.Duration {
+	if v := viper.GetDuration(key); v > 0 {
+		return v
+	}
+	return def
 }
