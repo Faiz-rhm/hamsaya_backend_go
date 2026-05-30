@@ -18,7 +18,13 @@ services:
       # postgres initdb would run both directions on first boot. The api
       # container runs `migrate up` against an empty DB at startup instead.
     ports:
-      - "5432:5432" # Only expose to localhost
+      # Published on all host interfaces (NOT loopback) because postgres-exporter
+      # in the observability stack reaches it via host.docker.internal:5432, which
+      # resolves to the docker bridge gateway — a 127.0.0.1 bind would be
+      # unreachable from that container. PUBLIC ACCESS MUST BE BLOCKED AT THE
+      # HETZNER EDGE FIREWALL (deny inbound 5432). Do not rely on host-level ufw —
+      # Docker's iptables rules bypass it.
+      - "5432:5432"
     networks:
       - hamsaya_network
     healthcheck:
@@ -85,7 +91,10 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379" # Only expose to localhost
+      # Loopback-bound: the API reaches redis as redis:6379 over the docker
+      # network, so no host interface needs it. Keeps host 6379 off the internet
+      # regardless of firewall state.
+      - "127.0.0.1:6379:6379"
     networks:
       - hamsaya_network
     healthcheck:
@@ -225,7 +234,13 @@ services:
     volumes:
       - backup_data:/var/lib/hamsaya/backups
     ports:
-      - "8080:8080" # Loopback only; Dokploy Traefik routes to api:8080 over docker network
+      # Published on all host interfaces (NOT loopback): Prometheus in the
+      # observability stack scrapes /metrics via host.docker.internal:8080
+      # (the docker bridge gateway), which a 127.0.0.1 bind would reject.
+      # Dokploy Traefik routes user traffic to api:8080 over the docker network.
+      # PUBLIC ACCESS TO 8080 SHOULD BE BLOCKED AT THE HETZNER EDGE FIREWALL —
+      # Traefik (80/443) is the only intended public entrypoint.
+      - "8080:8080"
     networks:
       - hamsaya_network
     depends_on:
