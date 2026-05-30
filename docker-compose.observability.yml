@@ -50,6 +50,60 @@ services:
     networks:
       - observability
 
+  # Host metrics: CPU (incl. %st STEAL — the shared-vCPU noisy-neighbor signal),
+  # RAM, disk I/O, network. node_cpu_seconds_total{mode="steal"} is the metric
+  # that tells you whether a dedicated-vCPU (CCX) upgrade is justified.
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: hamsaya-node-exporter
+    command:
+      - --path.rootfs=/host
+      - --collector.processes
+    pid: host
+    volumes:
+      - /:/host:ro,rslave
+    ports:
+      - "127.0.0.1:9100:9100"   # loopback only — scraped by prometheus over host network
+    restart: unless-stopped
+    networks:
+      - observability
+
+  # Per-container CPU / memory / I/O. This is where "Postgres CPU %" comes from
+  # (container_cpu_usage_seconds_total{name="hamsaya-postgres-prod"}), separate
+  # from the host total node-exporter reports.
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: hamsaya-cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "127.0.0.1:8081:8080"
+    restart: unless-stopped
+    networks:
+      - observability
+
+  # Postgres internals: numbackends (active connections vs the 100 max),
+  # pg_stat_activity waiting clients, cache hit ratio, DB size, locks.
+  # Connects over the host loopback to the port postgres publishes (5432).
+  # Requires DB_PASSWORD in the environment / .env when starting this stack.
+  postgres-exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter:latest
+    container_name: hamsaya-postgres-exporter
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD required to scrape postgres}@host.docker.internal:5432/${DB_NAME:-hamsaya}?sslmode=disable"
+    ports:
+      - "127.0.0.1:9187:9187"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    networks:
+      - observability
+
   grafana:
     image: grafana/grafana:latest
     container_name: hamsaya-grafana

@@ -31,14 +31,46 @@ services:
       resources:
         limits:
           cpus: '2'
-          memory: 2G
+          # Raised 2G -> 3G. The box has 8G; budget is redis 1G + api 2G + pg 3G
+          # = 6G of limits, leaving ~2G for the OS, Dokploy/Traefik, and the
+          # observability exporters. Limits are caps, not reservations, so this
+          # does not pre-claim RAM.
+          memory: 3G
         reservations:
           cpus: '0.5'
-          memory: 512M
-    # Removed custom tuning args (shared_buffers / effective_cache_size / wal sizes).
-    # They assumed bare-metal sizing and exceeded conservative Dokploy memory caps,
-    # causing postgres to crash before becoming healthy. Stock defaults are fine
-    # for current load; revisit once steady-state metrics are available.
+          memory: 768M
+    # Conservative tuning, re-added after the earlier crash. That crash was an
+    # OOM: the previous args assumed bare-metal sizing (shared_buffers far above
+    # the 2G cap). Here every allocation is sized to stay under the 3G cap:
+    #   shared_buffers 768M (allocated up-front) + work_mem 8M * ~100 worst-case
+    #   sorts (~800M) + maintenance/overhead still leaves headroom inside 3G.
+    # effective_cache_size is a planner hint only (no allocation). SSD costs
+    # (random_page_cost / effective_io_concurrency) match Hetzner NVMe.
+    # Re-check against cadvisor container_memory_working_set_bytes before raising.
+    command:
+      - postgres
+      - -c
+      - shared_buffers=768MB
+      - -c
+      - effective_cache_size=2GB
+      - -c
+      - maintenance_work_mem=192MB
+      - -c
+      - work_mem=8MB
+      - -c
+      - wal_buffers=16MB
+      - -c
+      - min_wal_size=512MB
+      - -c
+      - max_wal_size=2GB
+      - -c
+      - checkpoint_completion_target=0.9
+      - -c
+      - random_page_cost=1.1
+      - -c
+      - effective_io_concurrency=200
+      - -c
+      - max_connections=100
 
     # Redis Cache
   redis:
@@ -168,7 +200,7 @@ services:
 
       # Monitoring
       SENTRY_DSN: ${SENTRY_DSN:-}
-      PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-false}
+      PROMETHEUS_ENABLED: ${PROMETHEUS_ENABLED:-true}
       OBSERVABILITY_ENABLED: ${OBSERVABILITY_ENABLED:-true}
 
       # JWT extras

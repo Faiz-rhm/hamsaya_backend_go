@@ -9,5 +9,25 @@ scrape_configs:
       # The backend is running on the host machine (not inside the
       # observability compose network). host.docker.internal works on
       # Mac, Windows, and Linux when `extra_hosts` is set.
+      # Gives HTTP p95 latency (request-duration histogram, OTel).
       - targets:
           - host.docker.internal:8080
+
+  # Host CPU incl. %st STEAL, RAM, disk I/O, network.
+  - job_name: node
+    static_configs:
+      - targets:
+          - node-exporter:9100
+
+  # Per-container CPU / mem / I/O — "Postgres CPU %" lives here under
+  # container_cpu_usage_seconds_total{name="hamsaya-postgres-prod"}.
+  - job_name: cadvisor
+    static_configs:
+      - targets:
+          - cadvisor:8080
+
+  # Postgres internals: numbackends, waiting clients, cache hit ratio, locks.
+  - job_name: postgres
+    static_configs:
+      - targets:
+          - postgres-exporter:9187
