@@ -543,10 +543,14 @@ func (r *monetizationRepository) AdjustCredits(
 			INSERT INTO credit_balances (user_id, balance)
 			VALUES ($1, GREATEST(0, $2))
 			ON CONFLICT (user_id) DO UPDATE
-			SET balance    = credit_balances.balance + EXCLUDED.balance,
+			SET balance    = credit_balances.balance + $2,
 			    updated_at = NOW()
 		`, userID, req.Amount); err != nil {
-			// Likely a CHECK violation when balance would go negative.
+			// On an existing row apply the raw $2 delta so ADJUST_REMOVE (negative
+			// amount) actually decrements; the table CHECK rejects going below
+			// zero. GREATEST(0,$2) only guards the brand-new-row insert.
+			// Previously this added EXCLUDED.balance (= GREATEST(0,$2)), so
+			// removals silently no-op'd against existing wallets.
 			return fmt.Errorf("credits balance update: %w", err)
 		}
 
