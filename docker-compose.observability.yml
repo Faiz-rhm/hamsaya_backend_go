@@ -1,23 +1,26 @@
-# Optional observability stack: Jaeger (traces) + Prometheus (metrics scrape)
-# + Grafana (dashboards).
+# Optional observability stack: Prometheus (metrics) + Grafana (dashboards)
+# + exporters + Jaeger (traces).
 #
-# Start:
-#   docker compose -f docker-compose.observability.yml up -d
+# IMPORTANT — production wiring (Dokploy):
+#   The app's api/postgres/redis publish their host ports on 127.0.0.1 only
+#   (see docker-compose.prod.yml), so this stack CANNOT scrape them via
+#   host.docker.internal. Instead it JOINS the app's docker network and scrapes
+#   by service name (api:8080, postgres:5432).
 #
-# Wiring:
-#   .env: OBSERVABILITY_ENABLED=true
-#         OTLP_ENDPOINT=localhost:4317
-#         OBSERVABILITY_SAMPLING_RATE=1.0   # full traces in dev
+#   Set APP_NETWORK to the app's real (Dokploy-prefixed) network name. Find it:
+#     docker network ls | grep hamsaya
+#   Default below matches the current Dokploy compose project (hamsaya-api-mz4nfa).
+#   Also export DB_USER / DB_PASSWORD / DB_NAME (the prod values) before starting.
 #
-# Then run the backend (e.g. `go run cmd/server/main.go`) and visit:
-#   - Grafana:    http://localhost:3001  (admin / admin — change on first login)
-#   - Prometheus: http://localhost:9090
-#   - Jaeger:     http://localhost:16686
+# Start (on the server):
+#   APP_NETWORK=hamsaya-api-mz4nfa_hamsaya_network \
+#   DB_PASSWORD=... docker compose -f docker-compose.observability.yml up -d
 #
-# Prometheus scrapes the backend at host.docker.internal:8080/metrics
-# (the OTel Prometheus exporter wired in pkg/observability/otel.go).
-# The starter dashboard `observability/grafana/dashboards/backend.json`
-# is auto-provisioned in Grafana on first start.
+# Dashboards bind to 127.0.0.1 (no public exposure — there is no edge firewall).
+# Reach them via SSH tunnel from your laptop:
+#   ssh -N -L 3001:127.0.0.1:3001 -L 9090:127.0.0.1:9090 -L 16686:127.0.0.1:16686 root@SERVER
+#   Grafana http://localhost:3001 (admin/admin — change on first login)
+#   Prometheus http://localhost:9090 · Jaeger http://localhost:16686
 
 services:
   jaeger:
@@ -26,29 +29,30 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     ports:
-      - "16686:16686"  # Jaeger UI
-      - "4317:4317"    # OTLP gRPC
-      - "4318:4318"    # OTLP HTTP
+      - "127.0.0.1:16686:16686"  # Jaeger UI — loopback only
+      - "4317:4317"              # OTLP gRPC (app sends traces here if OTLP_ENDPOINT set)
+      - "4318:4318"              # OTLP HTTP
+    restart: unless-stopped
     networks:
       - observability
+      - app_network
 
   prometheus:
     image: prom/prometheus:latest
     container_name: hamsaya-prometheus
     command:
       - --config.file=/etc/prometheus/prometheus.yml
-      - --storage.tsdb.retention.time=7d
+      - --storage.tsdb.retention.time=15d
       - --web.enable-lifecycle
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus-data:/prometheus
     ports:
-      - "9090:9090"
-    extra_hosts:
-      # Lets prometheus reach the API running on the host machine.
-      - "host.docker.internal:host-gateway"
+      - "127.0.0.1:9090:9090"   # loopback only
+    restart: unless-stopped
     networks:
-      - observability
+      - observability   # reaches node-exporter / cadvisor / postgres-exporter
+      - app_network     # reaches api:8080/metrics
 
   # Host metrics: CPU (incl. %st STEAL — the shared-vCPU noisy-neighbor signal),
   # RAM, disk I/O, network. node_cpu_seconds_total{mode="steal"} is the metric
@@ -62,8 +66,6 @@ services:
     pid: host
     volumes:
       - /:/host:ro,rslave
-    ports:
-      - "127.0.0.1:9100:9100"   # loopback only — scraped by prometheus over host network
     restart: unless-stopped
     networks:
       - observability
@@ -81,28 +83,23 @@ services:
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
       - /dev/disk/:/dev/disk:ro
-    ports:
-      - "127.0.0.1:8081:8080"
     restart: unless-stopped
     networks:
       - observability
 
   # Postgres internals: numbackends (active connections vs the 100 max),
   # pg_stat_activity waiting clients, cache hit ratio, DB size, locks.
-  # Connects over the host loopback to the port postgres publishes (5432).
+  # Connects to postgres BY SERVICE NAME over the shared app network.
   # Requires DB_PASSWORD in the environment / .env when starting this stack.
   postgres-exporter:
     image: quay.io/prometheuscommunity/postgres-exporter:latest
     container_name: hamsaya-postgres-exporter
     environment:
-      DATA_SOURCE_NAME: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD required to scrape postgres}@host.docker.internal:5432/${DB_NAME:-hamsaya}?sslmode=disable"
-    ports:
-      - "127.0.0.1:9187:9187"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      DATA_SOURCE_NAME: "postgresql://${DB_USER:-postgres}:${DB_PASSWORD:?DB_PASSWORD required to scrape postgres}@postgres:5432/${DB_NAME:-hamsaya}?sslmode=disable"
     restart: unless-stopped
     networks:
       - observability
+      - app_network   # resolves "postgres" service name
 
   grafana:
     image: grafana/grafana:latest
@@ -117,9 +114,10 @@ services:
       - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
       - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"   # loopback only
     depends_on:
       - prometheus
+    restart: unless-stopped
     networks:
       - observability
 
@@ -130,3 +128,9 @@ volumes:
 networks:
   observability:
     driver: bridge
+  # The app's existing Dokploy network — joined so exporters/prometheus can
+  # resolve api/postgres/redis by name. Must already exist (created by the app
+  # compose). Override the name with APP_NETWORK if your project prefix differs.
+  app_network:
+    external: true
+    name: ${APP_NETWORK:-hamsaya-api-mz4nfa_hamsaya_network}

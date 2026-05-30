@@ -6,12 +6,14 @@ scrape_configs:
   - job_name: hamsaya-backend
     metrics_path: /metrics
     static_configs:
-      # The backend is running on the host machine (not inside the
-      # observability compose network). host.docker.internal works on
-      # Mac, Windows, and Linux when `extra_hosts` is set.
+      # Scraped by service name over the shared app network (prometheus joins
+      # the app's docker network). Works with the API's 127.0.0.1 host bind
+      # because this is container-to-container, not via the host port.
       # Gives HTTP p95 latency (request-duration histogram, OTel).
+      # For local dev (backend on host, not in the network), swap to
+      # host.docker.internal:8080 with an extra_hosts entry.
       - targets:
-          - host.docker.internal:8080
+          - api:8080
 
   # Host CPU incl. %st STEAL, RAM, disk I/O, network.
   - job_name: node
