@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"fmt"
 	"image/png"
 	"strings"
@@ -248,11 +250,12 @@ func (s *MFAService) VerifyTOTP(ctx context.Context, userID, code string) (bool,
 
 // VerifyBackupCode verifies a backup code
 func (s *MFAService) VerifyBackupCode(ctx context.Context, userID, code string) (bool, error) {
-	// Normalize code (remove spaces, uppercase)
+	// Normalize code (remove spaces, uppercase), then hash — codes are stored
+	// hashed at rest so a DB leak can't yield working MFA-bypass credentials.
 	normalizedCode := strings.ToUpper(strings.ReplaceAll(code, " ", ""))
 
-	// Get backup code
-	backupCode, err := s.mfaRepo.GetBackupCode(ctx, userID, normalizedCode)
+	// Get backup code (looked up by hash, never plaintext)
+	backupCode, err := s.mfaRepo.GetBackupCode(ctx, userID, hashBackupCode(normalizedCode))
 	if err != nil {
 		s.logger.Warn("Backup code not found",
 			zap.String("user_id", userID),
@@ -408,11 +411,11 @@ func (s *MFAService) generateBackupCodes(ctx context.Context, userID string) ([]
 			return nil, err
 		}
 
-		codes[i] = code
+		codes[i] = code // plaintext returned to the user once
 		backupCodes[i] = &models.BackupCode{
 			ID:        uuid.New().String(),
 			UserID:    userID,
-			Code:      code,
+			Code:      hashBackupCode(code), // stored hashed at rest
 			Used:      false,
 			CreatedAt: time.Now(),
 		}
@@ -424,6 +427,14 @@ func (s *MFAService) generateBackupCodes(ctx context.Context, userID string) ([]
 	}
 
 	return codes, nil
+}
+
+// hashBackupCode returns the hex SHA-256 of a normalized backup code. Codes
+// are high-entropy (8 chars over a 36-char alphabet), so a fast hash is
+// sufficient and avoids storing reusable second-factor credentials in plaintext.
+func hashBackupCode(code string) string {
+	sum := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(sum[:])
 }
 
 // generateSecureCode generates a cryptographically secure random code
