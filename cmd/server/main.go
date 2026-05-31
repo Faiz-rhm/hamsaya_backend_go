@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"runtime/debug"
 	"syscall"
 	"time"
 
@@ -20,7 +19,6 @@ import (
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/services"
 	"github.com/hamsaya/backend/internal/utils"
-	"github.com/hamsaya/backend/pkg/alert"
 	"github.com/hamsaya/backend/pkg/bgtasks"
 	"github.com/hamsaya/backend/pkg/cache"
 	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
@@ -357,33 +355,8 @@ func main() {
 	// Set max multipart memory (10 MB for file uploads)
 	router.MaxMultipartMemory = 10 << 20
 
-	// Out-of-band incident alerting (best-effort webhook). Pushes panics to a
-	// channel a human watches so the app isn't blind to crashes between log
-	// reviews. No-op when ALERT_WEBHOOK_URL is unset.
-	alerter := alert.New(cfg.Monitoring.AlertWebhookURL, logger)
-	if alerter.Enabled() {
-		sugaredLogger.Info("Incident alerting enabled (ALERT_WEBHOOK_URL set)")
-	}
-
-	// Global middleware. Custom recovery captures panics durably (structured
-	// log with request id + stack via zap -> DB log sink) instead of the stock
-	// recovery which only prints to stdout. Also fires a webhook alert so a
-	// human is notified, not just the logs. Returns a generic 500 to the client.
-	router.Use(gin.CustomRecovery(func(c *gin.Context, recovered any) {
-		reqID := c.GetString("request_id")
-		sugaredLogger.Errorw("panic recovered",
-			"error", fmt.Sprintf("%v", recovered),
-			"method", c.Request.Method,
-			"path", c.Request.URL.Path,
-			"request_id", reqID,
-			"stack", string(debug.Stack()),
-		)
-		alerter.Alert(c.Request.Context(),
-			"🔴 API panic recovered",
-			fmt.Sprintf("%s %s\nrequest_id=%s\nerror=%v", c.Request.Method, c.Request.URL.Path, reqID, recovered),
-		)
-		c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{"error": "Internal server error"})
-	}))
+	// Global middleware.
+	router.Use(gin.Recovery())
 	router.Use(middleware.Logger(sugaredLogger))
 	router.Use(middleware.CORS(cfg.CORS))
 	router.Use(middleware.RequestID())

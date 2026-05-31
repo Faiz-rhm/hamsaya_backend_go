@@ -232,9 +232,6 @@ type MonitoringConfig struct {
 	ObservabilityEnabled bool
 	OTLPEndpoint         string
 	TraceSamplingRate    float64
-	// AlertWebhookURL receives best-effort incident notifications (panics).
-	// Slack/Discord/any JSON webhook. Empty disables alerting.
-	AlertWebhookURL string
 }
 
 // Load loads configuration from environment variables
@@ -347,7 +344,6 @@ func Load() (*Config, error) {
 			ObservabilityEnabled: viper.GetBool("OBSERVABILITY_ENABLED"),
 			OTLPEndpoint:         viper.GetString("OTLP_ENDPOINT"),
 			TraceSamplingRate:    viper.GetFloat64("TRACE_SAMPLING_RATE"),
-			AlertWebhookURL:      viper.GetString("ALERT_WEBHOOK_URL"),
 		},
 		Crypto: CryptoConfig{
 			MFASecretKey: viper.GetString("MFA_SECRET_ENCRYPTION_KEY"),
