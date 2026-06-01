@@ -954,12 +954,14 @@ func (s *AuthService) SendVerificationEmailForUser(ctx context.Context, userID s
 func (s *AuthService) ForgotPassword(ctx context.Context, req *models.ForgotPasswordRequest) (err error) {
 	email := strings.ToLower(strings.TrimSpace(req.Email))
 
-	// Get user by email — always return nil to prevent account enumeration via status codes.
-	// If the account does not exist, we silently succeed (no error, no email sent).
+	// Return an explicit error when the account does not exist. NOTE: this
+	// trades away anti-enumeration — a caller can now detect which emails are
+	// registered by watching for this 404 vs a 200. Product decision: surface
+	// "no account for this email" to the user on the reset screen.
 	user, err := s.userRepo.GetByEmail(ctx, email)
 	if err != nil {
-		s.logger.Info("Password reset requested for unknown email (no-op)", zap.String("email", email))
-		return nil
+		s.logger.Info("Password reset requested for unknown email", zap.String("email", email))
+		return utils.NewNotFoundError("No account found for this email", nil)
 	}
 
 	// Generate 6-digit reset code (entered in app; same pattern as email verification)

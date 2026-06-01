@@ -685,7 +685,7 @@ func TestAuthService_VerifyEmail(t *testing.T) {
 }
 
 func TestAuthService_ForgotPassword(t *testing.T) {
-	t.Run("user not found", func(t *testing.T) {
+	t.Run("user not found returns error", func(t *testing.T) {
 		userRepo := new(mocks.MockUserRepository)
 		userRepo.On("GetByEmail", mock.Anything, "unknown@example.com").Return(nil, errors.New("not found"))
 
@@ -694,7 +694,7 @@ func TestAuthService_ForgotPassword(t *testing.T) {
 
 		err := svc.ForgotPassword(context.Background(), &models.ForgotPasswordRequest{Email: "unknown@example.com"})
 
-		require.NoError(t, err)
+		require.Error(t, err)
 		userRepo.AssertExpectations(t)
 	})
 }

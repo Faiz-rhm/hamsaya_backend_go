@@ -524,14 +524,15 @@ func TestAuthHandler_ForgotPassword(t *testing.T) {
 			wantCode:   http.StatusBadRequest,
 		},
 		{
-			// Always returns 200 — avoids leaking whether email is registered
-			name: "user not found — still 200",
+			// Unknown email now returns 404 (anti-enumeration intentionally
+			// traded away — product wants to tell the user no account exists).
+			name: "user not found — 404",
 			body: map[string]interface{}{"email": "nobody@example.com"},
 			setupMocks: func(r *mocks.MockUserRepository) {
 				r.On("GetByEmail", mock.Anything, "nobody@example.com").
 					Return(nil, fmt.Errorf("not found"))
 			},
-			wantCode: http.StatusOK,
+			wantCode: http.StatusNotFound,
 		},
 	}
 
