@@ -80,6 +80,7 @@ type OAuthUserInfo struct {
 	ProviderUserID string
 	Email          string
 	EmailVerified  bool
+	IsPrivateEmail bool
 	FirstName      string
 	LastName       string
 	Picture        string
@@ -215,7 +216,8 @@ func (s *OAuthService) VerifyAppleToken(ctx context.Context, idToken string) (*O
 		return nil, utils.NewUnauthorizedError("Apple token missing sub claim", nil)
 	}
 	email, _ := claims["email"].(string)
-	// `email_verified` is sometimes a bool, sometimes the string "true"/"false".
+	// `email_verified` and `is_private_email` are sometimes a bool, sometimes the
+	// string "true"/"false" depending on Apple's response.
 	emailVerified := false
 	switch v := claims["email_verified"].(type) {
 	case bool:
@@ -223,16 +225,25 @@ func (s *OAuthService) VerifyAppleToken(ctx context.Context, idToken string) (*O
 	case string:
 		emailVerified = v == "true"
 	}
+	isPrivateEmail := false
+	switch v := claims["is_private_email"].(type) {
+	case bool:
+		isPrivateEmail = v
+	case string:
+		isPrivateEmail = v == "true"
+	}
 
 	s.logger.Info("Apple token verified",
 		zap.String("sub", sub),
 		zap.String("email", email),
+		zap.Bool("is_private_email", isPrivateEmail),
 	)
 
 	return &OAuthUserInfo{
 		ProviderUserID: sub,
 		Email:          email,
 		EmailVerified:  emailVerified,
+		IsPrivateEmail: isPrivateEmail,
 		Provider:       "apple",
 	}, nil
 }
@@ -365,7 +376,31 @@ func (s *OAuthService) AuthenticateWithOAuth(ctx context.Context, oauthInfo *OAu
 	// Normalize email
 	email := strings.ToLower(strings.TrimSpace(oauthInfo.Email))
 
+	// Apple omits the email claim on logins after the first one (and the user
+	// may have chosen "Hide My Email"). When email is absent, recover the
+	// returning user by provider + provider-user-id instead of failing. We never
+	// re-ask the user for email — Apple already authenticated them.
 	if email == "" {
+		if oauthInfo.ProviderUserID != "" {
+			existingByProvider, lookupErr := s.userRepo.GetByOAuthProviderID(ctx, oauthInfo.Provider, oauthInfo.ProviderUserID)
+			if lookupErr == nil && existingByProvider != nil {
+				if err := s.userRepo.UpdateLastLogin(ctx, existingByProvider.ID); err != nil {
+					s.logger.Error("Failed to update last login", zap.Error(err))
+				}
+				profile, profErr := s.userRepo.GetProfileByUserID(ctx, existingByProvider.ID)
+				if profErr != nil {
+					s.logger.Error("Failed to get profile", zap.Error(profErr))
+					return nil, nil, false, utils.NewInternalError("Failed to get profile", profErr)
+				}
+				s.logger.Info("OAuth returning user recovered by provider id (no email claim)",
+					zap.String("user_id", existingByProvider.ID),
+					zap.String("provider", oauthInfo.Provider),
+				)
+				return existingByProvider, profile, false, nil
+			}
+		}
+		// No email and no known provider account — can't create a new user
+		// without an email (it is the account's unique identifier).
 		return nil, nil, false, utils.NewBadRequestError("Email is required from OAuth provider", nil)
 	}
 

@@ -38,14 +38,35 @@ func TestOAuthService_AuthenticateWithOAuth(t *testing.T) {
 		isNewUser     bool
 	}{
 		{
-			name:       "empty email",
-			setupMocks: func(_ *mocks.MockUserRepository) {},
+			name: "empty email and no known provider account",
+			setupMocks: func(userRepo *mocks.MockUserRepository) {
+				userRepo.On("GetByOAuthProviderID", mock.Anything, "google", "google-123").
+					Return(nil, errors.New("not found"))
+			},
 			oauthInfo: &OAuthUserInfo{
 				ProviderUserID: "google-123",
 				Email:          "",
 				Provider:       "google",
 			},
 			expectedError: "email is required",
+		},
+		{
+			name: "empty email recovers returning user by provider id",
+			setupMocks: func(userRepo *mocks.MockUserRepository) {
+				provider := "apple"
+				user := testutil.CreateTestUser("user-1", "relay@privaterelay.appleid.com")
+				user.OAuthProvider = &provider
+				profile := testutil.CreateTestProfile("user-1", "Test", "User")
+				userRepo.On("GetByOAuthProviderID", mock.Anything, "apple", "apple-sub-1").Return(user, nil)
+				userRepo.On("UpdateLastLogin", mock.Anything, "user-1").Return(nil)
+				userRepo.On("GetProfileByUserID", mock.Anything, "user-1").Return(profile, nil)
+			},
+			oauthInfo: &OAuthUserInfo{
+				ProviderUserID: "apple-sub-1",
+				Email:          "",
+				Provider:       "apple",
+			},
+			isNewUser: false,
 		},
 		{
 			name: "existing user same provider login",

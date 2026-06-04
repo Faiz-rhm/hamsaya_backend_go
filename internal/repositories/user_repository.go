@@ -22,6 +22,10 @@ type UserRepository interface {
 	GetByIDIncludingDeleted(ctx context.Context, id string) (*models.User, error)
 	GetByEmail(ctx context.Context, email string) (*models.User, error)
 	GetByEmailIncludingDeleted(ctx context.Context, email string) (*models.User, error)
+	// GetByOAuthProviderID retrieves a user by OAuth provider + provider user id.
+	// Used to recover returning OAuth users (notably Apple) when the provider
+	// omits the email claim on subsequent logins or the user hid their email.
+	GetByOAuthProviderID(ctx context.Context, provider, providerUserID string) (*models.User, error)
 	Update(ctx context.Context, user *models.User) error
 	UpdateLoginAttempts(ctx context.Context, userID string, attempts int, lockedUntil *time.Time) error
 	UpdateLastLogin(ctx context.Context, userID string) error
@@ -230,6 +234,47 @@ func (r *userRepository) GetByEmail(ctx context.Context, email string) (*models.
 			return nil, fmt.Errorf("user not found")
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return user, nil
+}
+
+// GetByOAuthProviderID retrieves a user by OAuth provider + provider user id.
+func (r *userRepository) GetByOAuthProviderID(ctx context.Context, provider, providerUserID string) (*models.User, error) {
+	query := `
+		SELECT id, email, phone, phone_country_code, password_hash, email_verified, phone_verified, mfa_enabled, role,
+			oauth_provider, oauth_provider_id, last_login_at, failed_login_attempts,
+			locked_until, created_at, updated_at, deleted_at
+		FROM users
+		WHERE oauth_provider = $1 AND oauth_provider_id = $2 AND deleted_at IS NULL
+	`
+
+	user := &models.User{}
+	err := r.db.Pool.QueryRow(ctx, query, provider, providerUserID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.Phone,
+		&user.PhoneCountryCode,
+		&user.PasswordHash,
+		&user.EmailVerified,
+		&user.PhoneVerified,
+		&user.MFAEnabled,
+		&user.Role,
+		&user.OAuthProvider,
+		&user.OAuthProviderID,
+		&user.LastLoginAt,
+		&user.FailedLoginAttempts,
+		&user.LockedUntil,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&user.DeletedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user by oauth provider id: %w", err)
 	}
 
 	return user, nil

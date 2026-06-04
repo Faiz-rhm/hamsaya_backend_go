@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/internal/models"
@@ -45,9 +46,16 @@ type FacebookOAuthRequest struct {
 	DeviceInfo  *string `json:"device_info,omitempty"`
 }
 
-// AppleOAuthRequest represents an Apple OAuth request
+// AppleOAuthRequest represents an Apple OAuth request.
+//
+// Apple's identity token JWT never carries the user's name — the name is only
+// returned in the native credential, and only on the FIRST authorization. The
+// client must capture it then and forward it here so we can persist it. On
+// later logins these are absent and we keep the name we already stored.
 type AppleOAuthRequest struct {
 	IDToken    string  `json:"id_token" validate:"required"`
+	FirstName  *string `json:"first_name,omitempty"`
+	LastName   *string `json:"last_name,omitempty"`
 	DeviceInfo *string `json:"device_info,omitempty"`
 }
 
@@ -273,6 +281,16 @@ func (h *OAuthHandler) AppleOAuth(c *gin.Context) {
 	if err != nil {
 		h.handleError(c, err)
 		return
+	}
+
+	// Apple sends the name only in the native credential on first sign-in, never
+	// in the JWT. Merge the client-forwarded name so new accounts get it and the
+	// app never has to ask the user to type it.
+	if req.FirstName != nil && strings.TrimSpace(*req.FirstName) != "" {
+		oauthInfo.FirstName = strings.TrimSpace(*req.FirstName)
+	}
+	if req.LastName != nil && strings.TrimSpace(*req.LastName) != "" {
+		oauthInfo.LastName = strings.TrimSpace(*req.LastName)
 	}
 
 	// Authenticate or create user
