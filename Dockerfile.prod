@@ -30,6 +30,14 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o /app/bin/migrate \
     cmd/migrate/main.go
 
+# Build scheduled re-engagement job (event reminders + dormant win-back).
+# Run on a schedule (hourly) via the host/orchestrator cron.
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -a -installsuffix cgo \
+    -ldflags="-w -s" \
+    -o /app/bin/scheduled-engagement \
+    cmd/scheduled-engagement/main.go
+
 # Production stage
 FROM alpine:latest
 
@@ -52,6 +60,7 @@ RUN addgroup -g 1000 appgroup && \
 # Copy binaries from builder
 COPY --from=builder --chown=appuser:appgroup /app/bin/server /app/server
 COPY --from=builder --chown=appuser:appgroup /app/bin/migrate /app/migrate
+COPY --from=builder --chown=appuser:appgroup /app/bin/scheduled-engagement /app/scheduled-engagement
 
 # Copy migrations
 COPY --chown=appuser:appgroup migrations /app/migrations

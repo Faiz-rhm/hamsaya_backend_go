@@ -504,3 +504,45 @@ func TestNotificationService_CreateNotification(t *testing.T) {
 		notifRepo.AssertExpectations(t)
 	})
 }
+
+func TestIsUrgentPush(t *testing.T) {
+	urgent := []models.NotificationType{
+		models.NotificationTypeMessage,
+		models.NotificationTypeEventReminder,
+		models.NotificationTypeWelcome,
+		models.NotificationTypeAccountSuspended,
+		models.NotificationTypePostDeletedByAdmin,
+	}
+	for _, ty := range urgent {
+		assert.True(t, isUrgentPush(ty), "expected %s to be urgent", ty)
+	}
+
+	deferrable := []models.NotificationType{
+		models.NotificationTypeLike,
+		models.NotificationTypeComment,
+		models.NotificationTypeFollow,
+		models.NotificationTypeWinback,
+		models.NotificationTypeEventInterest,
+		models.NotificationTypeSellInterested,
+	}
+	for _, ty := range deferrable {
+		assert.False(t, isUrgentPush(ty), "expected %s to be deferrable", ty)
+	}
+}
+
+func TestInQuietHours(t *testing.T) {
+	loc, err := time.LoadLocation("Asia/Kabul")
+	if err != nil {
+		loc = time.FixedZone("AFT", 4*3600+1800)
+	}
+	day := time.Date(2026, 6, 5, 0, 0, 0, 0, loc)
+
+	// Inside quiet window (22:00–07:00).
+	assert.True(t, inQuietHours(day.Add(23*time.Hour)))           // 23:00
+	assert.True(t, inQuietHours(day.Add(2*time.Hour)))            // 02:00
+	assert.True(t, inQuietHours(day.Add(22*time.Hour)))           // 22:00 (start, inclusive)
+	// Outside quiet window.
+	assert.False(t, inQuietHours(day.Add(7*time.Hour)))           // 07:00 (end, exclusive)
+	assert.False(t, inQuietHours(day.Add(12*time.Hour)))          // 12:00
+	assert.False(t, inQuietHours(day.Add(21*time.Hour+59*time.Minute))) // 21:59
+}

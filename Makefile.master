@@ -10,6 +10,7 @@
 .PHONY: help \
         migrate-up migrate-status \
         seed-master seed-admin seed-business-categories \
+        scheduled-engagement \
         shell \
         db-reset seed-demo migrate-down backfill-notifications
 
@@ -21,6 +22,7 @@ help:
 	@echo "  seed-master              Admin + sell + business categories + daily limits + custom roles"
 	@echo "  seed-admin               Just the super-admin user (subset of seed-master)"
 	@echo "  seed-business-categories Re-seed business_categories only (truncates first)"
+	@echo "  scheduled-engagement     Send event reminders + dormant win-back pushes (run hourly via cron)"
 	@echo "  shell                    Drop into bash inside the container"
 	@echo ""
 	@echo "Destructive / demo targets live in Makefile.demo. Invoke them with:"
@@ -40,6 +42,11 @@ seed-admin:
 
 seed-business-categories:
 	SEED_BUSINESS_CATEGORIES_ONLY=1 ./db-reset
+
+# Proactive re-engagement pushes (event reminders T-24h/T-1h + dormant win-back).
+# Idempotent + deduped; safe to run hourly via cron: 0 * * * * cd /app && make -f Makefile scheduled-engagement
+scheduled-engagement:
+	./scheduled-engagement
 
 shell:
 	@bash

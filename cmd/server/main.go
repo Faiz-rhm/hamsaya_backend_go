@@ -23,11 +23,11 @@ import (
 	"github.com/hamsaya/backend/pkg/cache"
 	pkgcrypto "github.com/hamsaya/backend/pkg/crypto"
 	"github.com/hamsaya/backend/pkg/database"
-	"github.com/hamsaya/backend/pkg/secrets"
-	"github.com/hamsaya/backend/pkg/transcode"
 	"github.com/hamsaya/backend/pkg/notification"
 	"github.com/hamsaya/backend/pkg/observability"
 	"github.com/hamsaya/backend/pkg/redislock"
+	"github.com/hamsaya/backend/pkg/secrets"
+	"github.com/hamsaya/backend/pkg/transcode"
 	"github.com/hamsaya/backend/pkg/websocket"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
@@ -328,6 +328,9 @@ func main() {
 	adminService := services.NewAdminService(adminRepo, db, fcmClient, notificationService, logger)
 	helpChatService := services.NewHelpChatService(helpChatRepo, logger)
 	helpChatService.SetNotificationService(notificationService)
+	// Proactive re-engagement jobs (event reminders, dormant win-back, sell
+	// expiring-soon). Scheduled hourly + leader-elected below.
+	engagementService := services.NewEngagementService(db, notificationService, logger)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")
@@ -1084,6 +1087,26 @@ func main() {
 			select {
 			case <-ticker.C:
 				runIfLeader("sell-expiry", "lock:job:sell-expiry", 30*time.Minute, expireSellPosts)
+			case <-quit:
+				return
+			}
+		}
+	}()
+
+	// Background job: proactive re-engagement pushes (event reminders, dormant
+	// win-back, sell expiring-soon). Runs hourly, leader-elected so only one
+	// instance sends per tick. Idempotent + deduped against the notifications
+	// table; quiet hours + per-user frequency cap apply in the push path.
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+
+		runIfLeader("engagement", "lock:job:engagement", 30*time.Minute, engagementService.RunHourly)
+
+		for {
+			select {
+			case <-ticker.C:
+				runIfLeader("engagement", "lock:job:engagement", 30*time.Minute, engagementService.RunHourly)
 			case <-quit:
 				return
 			}

@@ -1,4 +1,4 @@
-.PHONY: help build run test clean docker-up docker-down migrate-up migrate-down lint build-prod docker-prod
+.PHONY: help build run test clean docker-up docker-down migrate-up migrate-down lint build-prod docker-prod scheduled-engagement
 
 # Default target
 help:
@@ -210,6 +210,12 @@ backfill-notifications:
 	@echo "Backfilling notifications from existing likes and comments..."
 	go run cmd/backfill-notifications/main.go
 	@echo "Backfill complete"
+
+# Proactive re-engagement pushes: event reminders (T-24h/T-1h) + dormant win-back.
+# Idempotent + deduped — safe to run on a schedule (recommended hourly).
+scheduled-engagement:
+	@echo "Sending event reminders + dormant win-back pushes..."
+	go run cmd/scheduled-engagement/main.go
 
 # Seed sell_categories only (no data wipe). Use when categories are empty.
 seed-sell-categories:

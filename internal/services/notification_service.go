@@ -105,7 +105,8 @@ func channelForType(t models.NotificationType) string {
 	switch t {
 	case models.NotificationTypeMessage:
 		return "messages"
-	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing:
+	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing,
+		models.NotificationTypeEventReminder:
 		return "events"
 	case models.NotificationTypeWelcome,
 		models.NotificationTypePasswordChanged,
@@ -118,7 +119,8 @@ func channelForType(t models.NotificationType) string {
 		return "account"
 	case models.NotificationTypeSellExpired,
 		models.NotificationTypeSellInterested,
-		models.NotificationTypeSellSold:
+		models.NotificationTypeSellSold,
+		models.NotificationTypeSellExpiring:
 		return "sales"
 	default:
 		return "general"
@@ -136,14 +138,18 @@ func typeToCategory(t models.NotificationType) models.NotificationCategory {
 		return models.NotificationCategoryPosts
 	case models.NotificationTypeMessage:
 		return models.NotificationCategoryMessages
-	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing:
+	case models.NotificationTypeEventInterest, models.NotificationTypeEventGoing,
+		models.NotificationTypeEventReminder:
 		return models.NotificationCategoryEvents
+	case models.NotificationTypeWinback:
+		return models.NotificationCategoryPosts
 	case models.NotificationTypeBusinessFollow,
 		models.NotificationTypeBusinessDeletedByAdmin:
 		return models.NotificationCategoryBusiness
 	case models.NotificationTypeSellExpired,
 		models.NotificationTypeSellInterested,
-		models.NotificationTypeSellSold:
+		models.NotificationTypeSellSold,
+		models.NotificationTypeSellExpiring:
 		return models.NotificationCategorySales
 	case models.NotificationTypeWelcome,
 		models.NotificationTypePasswordChanged,
@@ -205,9 +211,9 @@ func (s *NotificationService) CreateNotification(ctx context.Context, req *model
 			ctxWS := context.WithoutCancel(ctx)
 			unread, _ := s.notificationRepo.GetUnreadCount(ctxWS, req.UserID, nil)
 			wsPayload := map[string]interface{}{
-				"type":          "notification",
-				"payload":       notification.ToNotificationResponse(),
-				"unread_count":  unread,
+				"type":         "notification",
+				"payload":      notification.ToNotificationResponse(),
+				"unread_count": unread,
 			}
 			if err := s.wsHub.SendToUser(req.UserID, wsPayload); err != nil {
 				s.logger.Debug("Failed to send WebSocket notification",
@@ -520,12 +526,105 @@ func (s *NotificationService) UnregisterFCMToken(ctx context.Context, userID, to
 	return nil
 }
 
+// Push fatigue controls. Non-urgent pushes are suppressed during quiet hours
+// and once a user exceeds these rolling caps. Tuned for a single-region
+// (Afghanistan) audience; revisit if the app expands across time zones.
+const (
+	maxPushPerHour  = 6
+	maxPushPerDay   = 15
+	quietHourStart  = 22 // 22:00 Asia/Kabul
+	quietHourEnd    = 7  // 07:00 Asia/Kabul
+	pushRateHourKey = "push:rate:h:"
+	pushRateDayKey  = "push:rate:d:"
+)
+
+// isUrgentPush returns true for notification types that must always be
+// delivered immediately, bypassing quiet hours and the frequency cap.
+func isUrgentPush(t models.NotificationType) bool {
+	switch t {
+	case models.NotificationTypeMessage,
+		models.NotificationTypeEventReminder, // time-sensitive (T-1h)
+		models.NotificationTypeWelcome,
+		models.NotificationTypePasswordChanged,
+		models.NotificationTypeEmailVerified,
+		models.NotificationTypeAccountSuspended,
+		models.NotificationTypeAccountUnsuspended,
+		models.NotificationTypePostDeletedByAdmin,
+		models.NotificationTypeCommentDeletedByAdmin,
+		models.NotificationTypeBusinessDeletedByAdmin:
+		return true
+	default:
+		return false
+	}
+}
+
+// inQuietHours reports whether the given instant falls inside the Asia/Kabul
+// quiet window (22:00–07:00). Falls back to a fixed +04:30 offset if the tz
+// database is unavailable (e.g. minimal container without tzdata).
+func inQuietHours(now time.Time) bool {
+	loc, err := time.LoadLocation("Asia/Kabul")
+	if err != nil {
+		loc = time.FixedZone("AFT", 4*3600+1800) // UTC+04:30
+	}
+	h := now.In(loc).Hour()
+	return h >= quietHourStart || h < quietHourEnd
+}
+
+// shouldSendPush decides whether a push may go out now. Urgent types always
+// pass; everything else respects quiet hours and the per-user frequency cap.
+func (s *NotificationService) shouldSendPush(ctx context.Context, n *models.Notification) bool {
+	if isUrgentPush(n.Type) {
+		return true
+	}
+	if inQuietHours(time.Now()) {
+		s.logger.Debug("push suppressed: quiet hours",
+			zap.String("user_id", n.UserID), zap.String("type", string(n.Type)))
+		return false
+	}
+	if s.redisClient == nil {
+		return true
+	}
+	// Rolling hourly cap.
+	hCount, err := s.redisClient.Incr(ctx, pushRateHourKey+n.UserID).Result()
+	if err == nil {
+		if hCount == 1 {
+			_ = s.redisClient.Expire(ctx, pushRateHourKey+n.UserID, time.Hour).Err()
+		}
+		if hCount > maxPushPerHour {
+			s.logger.Debug("push suppressed: hourly cap",
+				zap.String("user_id", n.UserID), zap.Int64("count", hCount))
+			return false
+		}
+	}
+	// Rolling daily cap.
+	dCount, err := s.redisClient.Incr(ctx, pushRateDayKey+n.UserID).Result()
+	if err == nil {
+		if dCount == 1 {
+			_ = s.redisClient.Expire(ctx, pushRateDayKey+n.UserID, 24*time.Hour).Err()
+		}
+		if dCount > maxPushPerDay {
+			s.logger.Debug("push suppressed: daily cap",
+				zap.String("user_id", n.UserID), zap.Int64("count", dCount))
+			return false
+		}
+	}
+	return true
+}
+
 // sendPushNotification sends a push notification via FCM to every device the
 // user has registered. Each token is sent individually so failures are
 // scoped to a single device — a stale iOS token doesn't suppress an active
 // Android device, and vice versa.
 func (s *NotificationService) sendPushNotification(ctx context.Context, notification *models.Notification) {
 	if s.fcmClient == nil {
+		return
+	}
+
+	// Fatigue guard: hold non-urgent pushes during quiet hours and above a
+	// per-user frequency cap. The in-app notification is already persisted, so
+	// nothing is lost — only the noisy push is suppressed. Urgent types
+	// (messages, security, time-sensitive reminders) always deliver.
+	if !s.shouldSendPush(ctx, notification) {
 		return
 	}
 

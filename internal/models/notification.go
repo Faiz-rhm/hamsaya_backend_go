@@ -6,33 +6,38 @@ import "time"
 type NotificationType string
 
 const (
-	NotificationTypeLike            NotificationType = "LIKE"
-	NotificationTypeComment         NotificationType = "COMMENT"
-	NotificationTypeCommentReply    NotificationType = "COMMENT_REPLY"
-	NotificationTypeCommentLike     NotificationType = "COMMENT_LIKE"
-	NotificationTypeFollow          NotificationType = "FOLLOW"
-	NotificationTypeMessage         NotificationType = "MESSAGE"
-	NotificationTypeMention         NotificationType = "MENTION"
-	NotificationTypeEventInterest   NotificationType = "EVENT_INTEREST"
-	NotificationTypeEventGoing      NotificationType = "EVENT_GOING"
-	NotificationTypeBusinessFollow  NotificationType = "BUSINESS_FOLLOW"
-	NotificationTypeBusinessReview  NotificationType = "BUSINESS_REVIEW"
-	NotificationTypePostShare       NotificationType = "POST_SHARE"
-	NotificationTypePollVote        NotificationType = "POLL_VOTE"
-	NotificationTypeNewPost         NotificationType = "NEW_POST"
-	NotificationTypeAdmin           NotificationType = "ADMIN"
-	NotificationTypeSellExpired     NotificationType = "SELL_EXPIRED"
+	NotificationTypeLike           NotificationType = "LIKE"
+	NotificationTypeComment        NotificationType = "COMMENT"
+	NotificationTypeCommentReply   NotificationType = "COMMENT_REPLY"
+	NotificationTypeCommentLike    NotificationType = "COMMENT_LIKE"
+	NotificationTypeFollow         NotificationType = "FOLLOW"
+	NotificationTypeMessage        NotificationType = "MESSAGE"
+	NotificationTypeMention        NotificationType = "MENTION"
+	NotificationTypeEventInterest  NotificationType = "EVENT_INTEREST"
+	NotificationTypeEventGoing     NotificationType = "EVENT_GOING"
+	NotificationTypeBusinessFollow NotificationType = "BUSINESS_FOLLOW"
+	NotificationTypeBusinessReview NotificationType = "BUSINESS_REVIEW"
+	NotificationTypePostShare      NotificationType = "POST_SHARE"
+	NotificationTypePollVote       NotificationType = "POLL_VOTE"
+	NotificationTypeNewPost        NotificationType = "NEW_POST"
+	NotificationTypeAdmin          NotificationType = "ADMIN"
+	NotificationTypeSellExpired    NotificationType = "SELL_EXPIRED"
+
+	// Re-engagement (scheduled, proactive)
+	NotificationTypeEventReminder NotificationType = "EVENT_REMINDER" // T-24h / T-1h before an RSVP'd event
+	NotificationTypeWinback       NotificationType = "WINBACK"        // dormant-user bring-back
 
 	// Account / security
-	NotificationTypeWelcome             NotificationType = "WELCOME"
-	NotificationTypePasswordChanged     NotificationType = "PASSWORD_CHANGED"
-	NotificationTypeEmailVerified       NotificationType = "EMAIL_VERIFIED"
-	NotificationTypeAccountSuspended    NotificationType = "ACCOUNT_SUSPENDED"
-	NotificationTypeAccountUnsuspended  NotificationType = "ACCOUNT_UNSUSPENDED"
+	NotificationTypeWelcome            NotificationType = "WELCOME"
+	NotificationTypePasswordChanged    NotificationType = "PASSWORD_CHANGED"
+	NotificationTypeEmailVerified      NotificationType = "EMAIL_VERIFIED"
+	NotificationTypeAccountSuspended   NotificationType = "ACCOUNT_SUSPENDED"
+	NotificationTypeAccountUnsuspended NotificationType = "ACCOUNT_UNSUSPENDED"
 
 	// Sales / shopping
 	NotificationTypeSellInterested NotificationType = "SELL_INTERESTED" // someone bookmarked your sell
 	NotificationTypeSellSold       NotificationType = "SELL_SOLD"       // seller marked as sold (for bookmarkers)
+	NotificationTypeSellExpiring   NotificationType = "SELL_EXPIRING"   // owner nudge ~48h before a listing expires
 
 	// Moderation
 	NotificationTypePostDeletedByAdmin     NotificationType = "POST_DELETED_BY_ADMIN"
@@ -66,12 +71,12 @@ type Notification struct {
 
 // NotificationSetting represents user notification preferences
 type NotificationSetting struct {
-	ID         string               `json:"id"`
-	ProfileID  string               `json:"profile_id"`
-	Category   NotificationCategory `json:"category"`
-	PushPref   bool                 `json:"push_pref"`
-	CreatedAt  time.Time            `json:"created_at"`
-	UpdatedAt  time.Time            `json:"updated_at"`
+	ID        string               `json:"id"`
+	ProfileID string               `json:"profile_id"`
+	Category  NotificationCategory `json:"category"`
+	PushPref  bool                 `json:"push_pref"`
+	CreatedAt time.Time            `json:"created_at"`
+	UpdatedAt time.Time            `json:"updated_at"`
 }
 
 // NotificationResponse is the API response for a notification
@@ -102,12 +107,12 @@ type UpdateNotificationSettingsRequest struct {
 
 // GetNotificationsFilter represents filters for listing notifications
 type GetNotificationsFilter struct {
-	UserID      string
-	Type        *NotificationType
-	UnreadOnly  bool
-	BusinessID  *string // when set, only notifications whose data.business_id matches (e.g. BUSINESS_FOLLOW)
-	Limit       int
-	Offset      int
+	UserID     string
+	Type       *NotificationType
+	UnreadOnly bool
+	BusinessID *string // when set, only notifications whose data.business_id matches (e.g. BUSINESS_FOLLOW)
+	Limit      int
+	Offset     int
 }
 
 // FCMTokenRequest represents a request to register/update FCM token
@@ -118,13 +123,13 @@ type FCMTokenRequest struct {
 
 // PushNotificationPayload represents the payload for push notifications
 type PushNotificationPayload struct {
-	Title        string                 `json:"title"`
-	Body         string                 `json:"body"`
-	Data         map[string]interface{} `json:"data,omitempty"`
-	ClickAction  string                 `json:"click_action,omitempty"`
-	Sound        string                 `json:"sound,omitempty"`
-	Badge        int                    `json:"badge,omitempty"`
-	ImageURL     string                 `json:"image_url,omitempty"`
+	Title       string                 `json:"title"`
+	Body        string                 `json:"body"`
+	Data        map[string]interface{} `json:"data,omitempty"`
+	ClickAction string                 `json:"click_action,omitempty"`
+	Sound       string                 `json:"sound,omitempty"`
+	Badge       int                    `json:"badge,omitempty"`
+	ImageURL    string                 `json:"image_url,omitempty"`
 }
 
 // ToNotificationResponse converts a Notification to NotificationResponse
