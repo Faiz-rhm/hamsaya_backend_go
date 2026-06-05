@@ -371,6 +371,27 @@ func (s *OAuthService) VerifyFacebookToken(ctx context.Context, accessToken stri
 	}, nil
 }
 
+// syntheticOAuthEmail builds a stable, non-deliverable placeholder email for an
+// OAuth account whose provider returned no email (notably Apple after the first
+// sign-in, or when the user chose "Hide My Email"). It is deterministic for a
+// given provider + provider-user-id, so the same identity always maps to the
+// same address and can be found again by GetByEmail as well as by provider id.
+func syntheticOAuthEmail(provider, providerUserID string) string {
+	sanitize := func(s string) string {
+		return strings.Map(func(r rune) rune {
+			switch {
+			case r >= 'a' && r <= 'z', r >= '0' && r <= '9', r == '.', r == '-', r == '_':
+				return r
+			case r >= 'A' && r <= 'Z':
+				return r + ('a' - 'A')
+			default:
+				return '-'
+			}
+		}, s)
+	}
+	return fmt.Sprintf("%s_%s@no-email.hamsaya.af", sanitize(provider), sanitize(providerUserID))
+}
+
 // AuthenticateWithOAuth authenticates or registers a user with OAuth
 func (s *OAuthService) AuthenticateWithOAuth(ctx context.Context, oauthInfo *OAuthUserInfo) (*models.User, *models.Profile, bool, error) {
 	// Normalize email
@@ -399,9 +420,25 @@ func (s *OAuthService) AuthenticateWithOAuth(ctx context.Context, oauthInfo *OAu
 				return existingByProvider, profile, false, nil
 			}
 		}
-		// No email and no known provider account — can't create a new user
-		// without an email (it is the account's unique identifier).
-		return nil, nil, false, utils.NewBadRequestError("Email is required from OAuth provider", nil)
+
+		// Brand-new user and the provider gave us no email (Apple omits it after
+		// the first authorization and when the user hides it). Apple still
+		// authenticated the identity via the verified `sub`, so synthesize a
+		// stable, non-deliverable placeholder email from it and create the
+		// account. The user is never asked for an email (App Store 4.0); they
+		// may add a real one later from profile settings.
+		if oauthInfo.ProviderUserID != "" {
+			email = syntheticOAuthEmail(oauthInfo.Provider, oauthInfo.ProviderUserID)
+			// Identity is provider-verified; the placeholder can't receive mail,
+			// so mark it verified to avoid bouncing the user to email-verification.
+			oauthInfo.EmailVerified = true
+			s.logger.Info("OAuth provider gave no email; using synthetic placeholder",
+				zap.String("provider", oauthInfo.Provider),
+				zap.String("synthetic_email", email),
+			)
+		} else {
+			return nil, nil, false, utils.NewBadRequestError("Email is required from OAuth provider", nil)
+		}
 	}
 
 	// Check if user exists

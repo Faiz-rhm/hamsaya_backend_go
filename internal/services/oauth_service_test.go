@@ -38,17 +38,33 @@ func TestOAuthService_AuthenticateWithOAuth(t *testing.T) {
 		isNewUser     bool
 	}{
 		{
-			name: "empty email and no known provider account",
-			setupMocks: func(userRepo *mocks.MockUserRepository) {
-				userRepo.On("GetByOAuthProviderID", mock.Anything, "google", "google-123").
-					Return(nil, errors.New("not found"))
-			},
+			name: "empty email with no provider id errors",
+			setupMocks: func(_ *mocks.MockUserRepository) {},
 			oauthInfo: &OAuthUserInfo{
-				ProviderUserID: "google-123",
+				ProviderUserID: "",
 				Email:          "",
-				Provider:       "google",
+				Provider:       "apple",
 			},
 			expectedError: "email is required",
+		},
+		{
+			name: "empty email new user gets synthetic placeholder email",
+			setupMocks: func(userRepo *mocks.MockUserRepository) {
+				userRepo.On("GetByOAuthProviderID", mock.Anything, "apple", "apple-sub-new").
+					Return(nil, errors.New("not found"))
+				userRepo.On("GetByEmail", mock.Anything, "apple_apple-sub-new@no-email.hamsaya.af").
+					Return(nil, errors.New("not found"))
+				userRepo.On("Create", mock.Anything, mock.MatchedBy(func(u *models.User) bool {
+					return u.Email == "apple_apple-sub-new@no-email.hamsaya.af" && u.EmailVerified
+				})).Return(nil)
+				userRepo.On("CreateProfile", mock.Anything, mock.AnythingOfType("*models.Profile")).Return(nil)
+			},
+			oauthInfo: &OAuthUserInfo{
+				ProviderUserID: "apple-sub-new",
+				Email:          "",
+				Provider:       "apple",
+			},
+			isNewUser: true,
 		},
 		{
 			name: "empty email recovers returning user by provider id",
