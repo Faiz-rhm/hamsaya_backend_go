@@ -118,6 +118,14 @@ func seedUsers(ctx context.Context, repo repositories.UserRepository, passwordSe
 	var userIDs []string
 
 	for _, userData := range users {
+		// Idempotency: if a user with this email already exists (e.g. admin
+		// seeded by seed-master on container boot), reuse it instead of
+		// failing on the unique constraint.
+		if existing, err := repo.GetByEmail(ctx, userData.Email); err == nil && existing != nil {
+			userIDs = append(userIDs, existing.ID)
+			continue
+		}
+
 		// Hash password
 		hashedPassword, err := passwordService.Hash(userData.Password)
 		if err != nil {
