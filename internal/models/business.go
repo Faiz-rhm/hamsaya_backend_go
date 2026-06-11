@@ -92,6 +92,14 @@ type BusinessFollower struct {
 }
 
 // CreateBusinessRequest represents a request to create a business profile
+// AdminCreateBusinessRequest lets an admin create a business on behalf of
+// another user. OwnerID is the user the business is assigned to; the rest of
+// the fields are identical to a normal create.
+type AdminCreateBusinessRequest struct {
+	OwnerID string `json:"owner_id" validate:"required,uuid"`
+	CreateBusinessRequest
+}
+
 type CreateBusinessRequest struct {
 	Name           string   `json:"name" validate:"required,min=2,max=255"`
 	LicenseNo      *string  `json:"license_no,omitempty" validate:"omitempty,max=100"`

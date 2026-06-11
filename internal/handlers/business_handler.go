@@ -224,6 +224,40 @@ func (h *BusinessHandler) CreateBusiness(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusCreated, "Business created successfully", business)
 }
 
+// CreateBusinessForOwner godoc
+// @Summary Create a business on behalf of a user (admin)
+// @Description Admin-only: create a business profile owned by the given owner_id.
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param request body models.AdminCreateBusinessRequest true "Business creation request with owner_id"
+// @Success 201 {object} utils.Response{data=models.BusinessResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 403 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Router /admin/businesses [post]
+func (h *BusinessHandler) CreateBusinessForOwner(c *gin.Context) {
+	var req models.AdminCreateBusinessRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	business, err := h.businessService.CreateBusinessAsAdmin(c.Request.Context(), req.OwnerID, &req.CreateBusinessRequest)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusCreated, "Business created successfully", business)
+}
+
 // GetBusiness godoc
 // @Summary Get a business profile
 // @Description Get a business profile by ID

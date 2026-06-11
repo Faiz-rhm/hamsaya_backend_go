@@ -82,6 +82,16 @@ func (s *BusinessService) invalidateBusinessCache(ctx context.Context, businessI
 }
 
 // CreateBusiness creates a new business profile
+// CreateBusinessAsAdmin creates a business owned by ownerID after verifying
+// that the owner user exists. Used by the admin panel so staff can register a
+// business on behalf of a member.
+func (s *BusinessService) CreateBusinessAsAdmin(ctx context.Context, ownerID string, req *models.CreateBusinessRequest) (*models.BusinessResponse, error) {
+	if _, err := s.userRepo.GetByID(ctx, ownerID); err != nil {
+		return nil, utils.NewNotFoundError("Owner user not found", err)
+	}
+	return s.CreateBusiness(ctx, ownerID, req)
+}
+
 func (s *BusinessService) CreateBusiness(ctx context.Context, userID string, req *models.CreateBusinessRequest) (*models.BusinessResponse, error) {
 	// Create business profile
 	businessID := uuid.New().String()

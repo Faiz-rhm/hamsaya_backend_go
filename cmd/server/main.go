@@ -825,7 +825,8 @@ func main() {
 			admin.GET("/feedback", adminHandler.ListFeedback)
 			admin.PUT("/feedback/:feedback_id/resolve", adminOnly, adminHandler.ResolveFeedback)
 
-			// Business Management — read+approve for all admins; delete admin-only.
+			// Business Management — read+approve for all admins; create+delete admin-only.
+			admin.POST("/businesses", adminOnly, businessHandler.CreateBusinessForOwner)
 			admin.GET("/businesses", adminHandler.ListAllBusinesses)
 			admin.GET("/businesses/:business_id", adminHandler.GetBusinessDetail)
 			admin.PUT("/businesses/:business_id/status", adminHandler.UpdateBusinessStatus)
