@@ -144,6 +144,10 @@ type AdminUserResponse struct {
 	FollowersCount int64     `json:"followers_count"`
 	FollowingCount int64     `json:"following_count"`
 	CustomRoleName string    `json:"custom_role_name,omitempty"`
+	// LastPlatform is the OS of the user's most recent session ("iOS",
+	// "Android", "Web"), derived from the session device_info/user_agent.
+	// nil when the user has no sessions or the platform can't be inferred.
+	LastPlatform *string `json:"last_platform,omitempty"`
 }
 
 // AdminUserDetailResponse is the full user detail returned in admin API

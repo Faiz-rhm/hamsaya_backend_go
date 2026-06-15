@@ -627,7 +627,16 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 			(SELECT COUNT(*) FROM posts WHERE user_id = u.id AND deleted_at IS NULL) as posts_count,
 			(SELECT COUNT(*) FROM user_follows WHERE following_id = u.id) as followers_count,
 			(SELECT COUNT(*) FROM user_follows WHERE follower_id = u.id) as following_count,
-			COALESCE(cr.name, '') as custom_role_name
+			COALESCE(cr.name, '') as custom_role_name,
+			(SELECT CASE
+				WHEN s.device_info::text ILIKE '%%iphone%%' OR s.device_info::text ILIKE '%%ipad%%'
+				     OR s.device_info::text ILIKE '%%ipod%%' OR s.user_agent ILIKE '%%cfnetwork%%'
+				     OR s.user_agent ILIKE '%%darwin%%' THEN 'iOS'
+				WHEN s.device_info::text ILIKE '%%android%%' OR s.user_agent ILIKE '%%android%%' THEN 'Android'
+				WHEN s.user_agent ILIKE '%%mozilla%%' THEN 'Web'
+				ELSE NULL END
+			 FROM user_sessions s WHERE s.user_id = u.id
+			 ORDER BY s.created_at DESC LIMIT 1) as last_platform
 		FROM users u
 		LEFT JOIN profiles p ON u.id = p.id
 		LEFT JOIN custom_roles cr ON cr.id = u.custom_role_id
@@ -655,7 +664,7 @@ func (r *adminRepository) ListUsers(ctx context.Context, filter *models.AdminUse
 			&user.OAuthProvider,
 			&user.LockedUntil, &user.LastLoginAt, &user.CreatedAt,
 			&user.PostsCount, &user.FollowersCount, &user.FollowingCount,
-			&user.CustomRoleName,
+			&user.CustomRoleName, &user.LastPlatform,
 		)
 		if err != nil {
 			return nil, 0, err
