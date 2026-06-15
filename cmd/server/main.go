@@ -239,6 +239,28 @@ func main() {
 		sugaredLogger.Info("Firebase credentials not provided, push notifications will be disabled")
 	}
 
+	// Initialize direct APNs (optional). Delivers iOS push straight to Apple,
+	// bypassing FCM/Google — required because Google endpoints are blocked in
+	// Afghanistan, so iOS devices can't mint an FCM token without a VPN.
+	var apnsClient *notification.APNsClient
+	apnsCfg := notification.APNsConfig{
+		KeyP8:      cfg.APNs.KeyP8,
+		KeyID:      cfg.APNs.KeyID,
+		TeamID:     cfg.APNs.TeamID,
+		BundleID:   cfg.APNs.BundleID,
+		Production: cfg.APNs.Production,
+	}
+	if apnsCfg.KeyP8 != "" && apnsCfg.KeyID != "" && apnsCfg.TeamID != "" && apnsCfg.BundleID != "" {
+		sugaredLogger.Info("Initializing direct APNs client...")
+		apnsClient, err = notification.NewAPNsClient(apnsCfg, logger)
+		if err != nil {
+			sugaredLogger.Warnw("Failed to initialize APNs client (iOS direct push disabled)", "error", err)
+			apnsClient = nil
+		}
+	} else {
+		sugaredLogger.Info("APNs credentials not provided, iOS direct push disabled")
+	}
+
 	// At-rest encryption for MFA secrets. Plaintext fallback is logged loudly.
 	var mfaCipher *pkgcrypto.SecretCipher
 	if cfg.Crypto.MFASecretKey != "" {
@@ -303,7 +325,8 @@ func main() {
 	}
 	profileService := services.NewProfileService(userRepo, postRepo, commentRepo, relationshipsRepo, logger)
 	notificationService := services.NewNotificationService(notificationRepo, notificationSettingsRepo, userRepo, fcmClient, redisClient, wsHub, logger).
-		WithCache(cache.New(redisClient, "notifications", logger))
+		WithCache(cache.New(redisClient, "notifications", logger)).
+		WithAPNs(apnsClient)
 	relationshipsService := services.NewRelationshipsService(relationshipsRepo, userRepo, notificationService, logger)
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger).
 		WithCache(cache.New(redisClient, "businesses", logger))
@@ -730,6 +753,10 @@ func main() {
 			// FCM token registration (auth only — token must be registerable before email is verified)
 			notifications.POST("/fcm-token", authMiddleware.RequireAuth(), notificationHandler.RegisterFCMToken)
 			notifications.DELETE("/fcm-token", authMiddleware.RequireAuth(), notificationHandler.UnregisterFCMToken)
+
+			// APNs token registration (iOS direct-to-Apple path; works where Google is blocked)
+			notifications.POST("/apns-token", authMiddleware.RequireAuth(), notificationHandler.RegisterAPNsToken)
+			notifications.DELETE("/apns-token", authMiddleware.RequireAuth(), notificationHandler.UnregisterAPNsToken)
 		}
 
 		// Search and discovery routes (require auth + rate limit — full-text +

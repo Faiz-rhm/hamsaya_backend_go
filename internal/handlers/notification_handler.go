@@ -279,6 +279,55 @@ func (h *NotificationHandler) UnregisterFCMToken(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "FCM token unregistered successfully", nil)
 }
 
+// RegisterAPNsToken handles POST /api/v1/notifications/apns-token
+//
+// iOS registers its native APNs device token here instead of an FCM token,
+// because the FCM token endpoint is unreachable in Afghanistan without a VPN.
+// The backend then pushes to iOS directly via Apple (see apns.go).
+func (h *NotificationHandler) RegisterAPNsToken(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	var req models.FCMTokenRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	if err := h.notificationService.RegisterAPNsToken(c.Request.Context(), userID.(string), req.Token); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "APNs token registered successfully", nil)
+}
+
+// UnregisterAPNsToken handles DELETE /api/v1/notifications/apns-token
+func (h *NotificationHandler) UnregisterAPNsToken(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	var req models.FCMTokenRequest
+	_ = c.ShouldBindJSON(&req)
+
+	if err := h.notificationService.UnregisterAPNsToken(c.Request.Context(), userID.(string), req.Token); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "APNs token unregistered successfully", nil)
+}
+
 // handleError handles service errors and sends appropriate HTTP responses
 func (h *NotificationHandler) handleError(c *gin.Context, err error) {
 	// Check if it's an AppError

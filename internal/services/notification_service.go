@@ -32,6 +32,13 @@ const (
 	fcmLegacyTokenPrefix = "fcm:token:"
 	fcmTokenTTL          = 90 * 24 * time.Hour // 90 days
 
+	// apnsTokensPrefix keys a Redis SET of native APNs device tokens for a
+	// user's iOS devices. iOS registers here instead of FCM because the FCM
+	// token endpoint (fcmtoken.googleapis.com) is DNS-blocked in Afghanistan,
+	// so devices there can't mint an FCM token without a VPN. APNs delivery
+	// rides Apple's own infra and works without one. See pkg/notification/apns.go.
+	apnsTokensPrefix = "apns:tokens:"
+
 	// unreadCountTTL keeps the badge counter cached briefly. The mobile
 	// app polls the unread-count endpoint frequently for the bell badge;
 	// 30 seconds is long enough to drop most of that load and short
@@ -46,6 +53,7 @@ type NotificationService struct {
 	settingsRepo     repositories.NotificationSettingsRepository
 	userRepo         repositories.UserRepository
 	fcmClient        *fcmclient.FCMClient
+	apnsClient       *fcmclient.APNsClient // optional; nil = iOS direct-APNs disabled
 	redisClient      *redis.Client
 	wsHub            *websocket.Hub
 	logger           *zap.Logger
@@ -77,6 +85,13 @@ func NewNotificationService(
 // without it, every unread-count poll hits Postgres directly.
 func (s *NotificationService) WithCache(c *cache.Cache) *NotificationService {
 	s.cache = c
+	return s
+}
+
+// WithAPNs attaches a direct-APNs client for iOS push. Call once at startup.
+// Optional — without it, iOS falls back to FCM (which fails in Afghanistan).
+func (s *NotificationService) WithAPNs(c *fcmclient.APNsClient) *NotificationService {
+	s.apnsClient = c
 	return s
 }
 
@@ -526,6 +541,48 @@ func (s *NotificationService) UnregisterFCMToken(ctx context.Context, userID, to
 	return nil
 }
 
+// RegisterAPNsToken adds a native APNs device token to the user's iOS token
+// set. iOS uses this instead of FCM so push works where Google is blocked.
+func (s *NotificationService) RegisterAPNsToken(ctx context.Context, userID, token string) error {
+	key := apnsTokensPrefix + userID
+
+	if _, err := s.redisClient.SAdd(ctx, key, token).Result(); err != nil {
+		s.logger.Error("Failed to register APNs token",
+			zap.Error(err), zap.String("user_id", userID))
+		return utils.NewInternalError("Failed to register device token", err)
+	}
+	if err := s.redisClient.Expire(ctx, key, fcmTokenTTL).Err(); err != nil {
+		s.logger.Warn("Failed to refresh APNs token set TTL",
+			zap.Error(err), zap.String("user_id", userID))
+	}
+	s.logger.Info("APNs token registered", zap.String("user_id", userID))
+	return nil
+}
+
+// UnregisterAPNsToken removes a specific APNs token (or, when empty, the whole
+// iOS token set) for the user. Mirrors UnregisterFCMToken semantics.
+func (s *NotificationService) UnregisterAPNsToken(ctx context.Context, userID, token string) error {
+	key := apnsTokensPrefix + userID
+
+	if token == "" {
+		if err := s.redisClient.Del(ctx, key).Err(); err != nil {
+			s.logger.Error("Failed to unregister APNs tokens",
+				zap.Error(err), zap.String("user_id", userID))
+			return utils.NewInternalError("Failed to unregister device tokens", err)
+		}
+		s.logger.Info("All APNs tokens unregistered", zap.String("user_id", userID))
+		return nil
+	}
+
+	if err := s.redisClient.SRem(ctx, key, token).Err(); err != nil {
+		s.logger.Error("Failed to unregister APNs token",
+			zap.Error(err), zap.String("user_id", userID))
+		return utils.NewInternalError("Failed to unregister device token", err)
+	}
+	s.logger.Info("APNs token unregistered", zap.String("user_id", userID))
+	return nil
+}
+
 // Push fatigue controls. Non-urgent pushes are suppressed during quiet hours
 // and once a user exceeds these rolling caps. Tuned for a single-region
 // (Afghanistan) audience; revisit if the app expands across time zones.
@@ -616,7 +673,7 @@ func (s *NotificationService) shouldSendPush(ctx context.Context, n *models.Noti
 // scoped to a single device — a stale iOS token doesn't suppress an active
 // Android device, and vice versa.
 func (s *NotificationService) sendPushNotification(ctx context.Context, notification *models.Notification) {
-	if s.fcmClient == nil {
+	if s.fcmClient == nil && s.apnsClient == nil {
 		return
 	}
 
@@ -628,39 +685,15 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 		return
 	}
 
-	// Get every FCM token for the user (one per active device).
-	key := fcmTokensPrefix + notification.UserID
-	tokens, err := s.redisClient.SMembers(ctx, key).Result()
-	if err != nil {
-		s.logger.Warn("Failed to get FCM tokens", zap.Error(err), zap.String("user_id", notification.UserID))
-		return
-	}
-	// Migration fallback: pre-multi-device sessions stored a single token
-	// at the legacy STRING key. Honour it until the device re-registers
-	// (which moves the token into the SET and deletes the legacy entry).
-	if len(tokens) == 0 {
-		legacy, lErr := s.redisClient.Get(ctx, fcmLegacyTokenPrefix+notification.UserID).Result()
-		if lErr == nil && legacy != "" {
-			tokens = []string{legacy}
-		}
-	}
-	if len(tokens) == 0 {
-		s.logger.Debug("No FCM token found for user", zap.String("user_id", notification.UserID))
-		return
-	}
-
-	// Prepare push payload
+	// Prepare push payload (shared by FCM and direct-APNs senders).
 	title := "Notification"
 	if notification.Title != nil {
 		title = *notification.Title
 	}
-
 	body := ""
 	if notification.Message != nil {
 		body = *notification.Message
 	}
-
-	// Convert notification data to string map for FCM
 	data := make(map[string]string)
 	if notification.Data != nil {
 		for k, v := range notification.Data {
@@ -678,30 +711,86 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 		ChannelID: channelForType(notification.Type),
 	}
 
+	s.sendViaFCM(ctx, notification, payload)
+	s.sendViaAPNs(ctx, notification, payload)
+}
+
+// sendViaFCM pushes to the user's FCM tokens (Android, plus any legacy iOS
+// tokens registered before the direct-APNs migration). No-op without a client.
+func (s *NotificationService) sendViaFCM(ctx context.Context, notification *models.Notification, payload *fcmclient.PushPayload) {
+	if s.fcmClient == nil {
+		return
+	}
+
+	key := fcmTokensPrefix + notification.UserID
+	tokens, err := s.redisClient.SMembers(ctx, key).Result()
+	if err != nil {
+		s.logger.Warn("Failed to get FCM tokens", zap.Error(err), zap.String("user_id", notification.UserID))
+		return
+	}
+	// Migration fallback: pre-multi-device sessions stored a single token
+	// at the legacy STRING key. Honour it until the device re-registers.
+	if len(tokens) == 0 {
+		legacy, lErr := s.redisClient.Get(ctx, fcmLegacyTokenPrefix+notification.UserID).Result()
+		if lErr == nil && legacy != "" {
+			tokens = []string{legacy}
+		}
+	}
+
 	for _, token := range tokens {
 		if err := s.fcmClient.SendNotification(ctx, token, payload); err != nil {
 			if errors.Is(err, fcmclient.ErrTokenInvalid) {
-				s.logger.Info("FCM token invalid, pruning",
-					zap.String("user_id", notification.UserID),
-				)
+				s.logger.Info("FCM token invalid, pruning", zap.String("user_id", notification.UserID))
 				if delErr := s.redisClient.SRem(ctx, key, token).Err(); delErr != nil {
 					s.logger.Warn("Failed to prune stale FCM token",
-						zap.Error(delErr),
-						zap.String("user_id", notification.UserID),
-					)
+						zap.Error(delErr), zap.String("user_id", notification.UserID))
 				}
 				continue
 			}
 			s.logger.Error("Failed to send push notification",
 				zap.Error(err),
 				zap.String("user_id", notification.UserID),
-				zap.String("notification_id", notification.ID),
-			)
+				zap.String("notification_id", notification.ID))
 			continue
 		}
 		s.logger.Info("Push notification sent successfully",
 			zap.String("user_id", notification.UserID),
-			zap.String("notification_id", notification.ID),
-		)
+			zap.String("notification_id", notification.ID))
+	}
+}
+
+// sendViaAPNs pushes to the user's native APNs device tokens (iOS). This is the
+// Afghanistan-safe path: it reaches Apple directly with no Google dependency.
+func (s *NotificationService) sendViaAPNs(ctx context.Context, notification *models.Notification, payload *fcmclient.PushPayload) {
+	if s.apnsClient == nil {
+		return
+	}
+
+	key := apnsTokensPrefix + notification.UserID
+	tokens, err := s.redisClient.SMembers(ctx, key).Result()
+	if err != nil {
+		s.logger.Warn("Failed to get APNs tokens", zap.Error(err), zap.String("user_id", notification.UserID))
+		return
+	}
+
+	for _, token := range tokens {
+		if err := s.apnsClient.SendNotification(ctx, token, payload); err != nil {
+			if errors.Is(err, fcmclient.ErrAPNsTokenInvalid) {
+				s.logger.Info("APNs token invalid, pruning", zap.String("user_id", notification.UserID))
+				if delErr := s.redisClient.SRem(ctx, key, token).Err(); delErr != nil {
+					s.logger.Warn("Failed to prune stale APNs token",
+						zap.Error(delErr), zap.String("user_id", notification.UserID))
+				}
+				continue
+			}
+			s.logger.Error("Failed to send APNs push",
+				zap.Error(err),
+				zap.String("user_id", notification.UserID),
+				zap.String("notification_id", notification.ID))
+			continue
+		}
+		s.logger.Info("APNs push sent successfully",
+			zap.String("user_id", notification.UserID),
+			zap.String("notification_id", notification.ID))
 	}
 }

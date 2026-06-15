@@ -220,6 +220,14 @@ services:
       FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
       FIREBASE_PRIVATE_KEY: ${FIREBASE_PRIVATE_KEY:-}
 
+      # APNs (iOS push direct to Apple — works where Google/FCM is blocked).
+      # APNS_KEY_P8 may be base64/\\n-escaped PEM (see normalizePEM).
+      APNS_KEY_P8: ${APNS_KEY_P8:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-af.hamsaya}
+      APNS_PRODUCTION: ${APNS_PRODUCTION:-true}
+
       # Email (Resend takes precedence over SMTP when set)
       RESEND_API_KEY: ${RESEND_API_KEY:-}
 

@@ -48,6 +48,7 @@ type Config struct {
 	OAuth     OAuthConfig
 	Storage   StorageConfig
 	Firebase  FirebaseConfig
+	APNs      APNsConfig
 	Geocoding GeocodingConfig
 	RateLimit RateLimitConfig
 	Email     EmailConfig
@@ -193,6 +194,17 @@ type FirebaseConfig struct {
 	CredentialsPath string
 }
 
+// APNsConfig holds Apple Push Notification service .p8 auth-key credentials.
+// Used to deliver iOS push directly via Apple, bypassing FCM/Google — required
+// because Google endpoints are blocked in Afghanistan (see pkg/notification/apns.go).
+type APNsConfig struct {
+	KeyP8      string // APNS_KEY_P8 (PEM, \n-escaped PEM, or base64 PEM)
+	KeyID      string // APNS_KEY_ID
+	TeamID     string // APNS_TEAM_ID
+	BundleID   string // APNS_BUNDLE_ID (apns-topic)
+	Production bool   // APNS_PRODUCTION
+}
+
 // GeocodingConfig holds geocoding service configuration
 type GeocodingConfig struct {
 	APIKey   string
@@ -313,6 +325,13 @@ func Load() (*Config, error) {
 			PrivateKey:      viper.GetString("FIREBASE_PRIVATE_KEY"),
 			ClientEmail:     viper.GetString("FIREBASE_CLIENT_EMAIL"),
 			CredentialsPath: viper.GetString("FIREBASE_CREDENTIALS_PATH"),
+		},
+		APNs: APNsConfig{
+			KeyP8:      viper.GetString("APNS_KEY_P8"),
+			KeyID:      viper.GetString("APNS_KEY_ID"),
+			TeamID:     viper.GetString("APNS_TEAM_ID"),
+			BundleID:   viper.GetString("APNS_BUNDLE_ID"),
+			Production: viper.GetBool("APNS_PRODUCTION"),
 		},
 		Geocoding: GeocodingConfig{
 			APIKey:   viper.GetString("GEOCODING_API_KEY"),
