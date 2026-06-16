@@ -1,11 +1,55 @@
 package notification
 
 import (
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"testing"
 
 	"go.uber.org/zap"
 )
+
+// freshP256Base64DER returns a valid PKCS8 P-256 key encoded two ways: a full
+// PEM and the bare base64 DER body (no header lines) — the two forms a user may
+// paste into APNS_KEY_P8.
+func freshP256Base64DER(t *testing.T) (pemStr, bareB64 string) {
+	t.Helper()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("keygen: %v", err)
+	}
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	pemStr = string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+	bareB64 = base64.StdEncoding.EncodeToString(der)
+	return pemStr, bareB64
+}
+
+func TestNewAPNsClient_AcceptsPEM(t *testing.T) {
+	pemStr, _ := freshP256Base64DER(t)
+	_, err := NewAPNsClient(APNsConfig{
+		KeyP8: pemStr, KeyID: "JGXW594YC8", TeamID: "37T82WQTNV", BundleID: "af.hamsaya",
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("expected PEM key to parse, got: %v", err)
+	}
+}
+
+func TestNewAPNsClient_AcceptsBareBase64DER(t *testing.T) {
+	_, bare := freshP256Base64DER(t)
+	_, err := NewAPNsClient(APNsConfig{
+		KeyP8: bare, KeyID: "JGXW594YC8", TeamID: "37T82WQTNV", BundleID: "af.hamsaya",
+	}, zap.NewNop())
+	if err != nil {
+		t.Fatalf("expected bare base64 DER to parse, got: %v", err)
+	}
+}
 
 func TestBuildAPNsPayload_Alert(t *testing.T) {
 	badge := 3

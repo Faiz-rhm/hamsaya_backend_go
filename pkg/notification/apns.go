@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,12 +76,23 @@ func NewAPNsClient(cfg APNsConfig, logger *zap.Logger) (*APNsClient, error) {
 		return nil, fmt.Errorf("apns: KeyP8, KeyID, TeamID and BundleID are all required")
 	}
 
+	// Accept three shapes for the key:
+	//   1. a full PEM (-----BEGIN PRIVATE KEY----- ... ), incl. \n-escaped,
+	//   2. base64 of the whole PEM file (normalizePEM decodes it back to #1),
+	//   3. the bare base64 PKCS8 DER body — the inner lines of the .p8 with the
+	//      header/footer stripped (common when only the key material is pasted).
 	pemStr := normalizePEM(cfg.KeyP8)
-	block, _ := pem.Decode([]byte(pemStr))
-	if block == nil {
-		return nil, fmt.Errorf("apns: failed to PEM-decode .p8 key")
+	var der []byte
+	if block, _ := pem.Decode([]byte(pemStr)); block != nil {
+		der = block.Bytes
+	} else {
+		decoded, dErr := base64.StdEncoding.DecodeString(strings.Join(strings.Fields(pemStr), ""))
+		if dErr != nil {
+			return nil, fmt.Errorf("apns: key is neither PEM nor base64 DER: %w", dErr)
+		}
+		der = decoded
 	}
-	parsed, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
 	if err != nil {
 		return nil, fmt.Errorf("apns: failed to parse PKCS8 .p8 key: %w", err)
 	}
@@ -205,13 +218,16 @@ func (a *APNsClient) send(ctx context.Context, host, deviceToken string, body []
 	_ = json.Unmarshal(respBody, &apnsErr)
 
 	switch apnsErr.Reason {
-	case "BadDeviceToken", "DeviceTokenNotForTopic", "Unregistered":
-		// May be an environment mismatch (BadDeviceToken on the wrong gateway)
-		// or a genuinely dead token. Signal a retry on the other host; if that
-		// also fails the caller prunes.
-		if resp.StatusCode == http.StatusGone /* 410 Unregistered */ {
-			return ErrAPNsTokenInvalid
-		}
+	case "Unregistered":
+		// 410 — the device token is permanently dead (app uninstalled). Prune it.
+		return ErrAPNsTokenInvalid
+	case "BadDeviceToken", "DeviceTokenNotForTopic", "BadEnvironmentKeyInToken":
+		// The token belongs to the OTHER APNs environment (a sandbox token sent
+		// to production, or vice versa). A dev/Xcode build mints a sandbox token
+		// while APNS_PRODUCTION=true targets production → "BadEnvironmentKeyInToken";
+		// a TestFlight token against sandbox → the same class of error. Signal a
+		// one-shot retry on the opposite gateway so both build types deliver
+		// regardless of the configured default.
 		return errAPNsWrongEnv
 	case "ExpiredProviderToken", "InvalidProviderToken", "MissingProviderToken":
 		// Our JWT is stale/bad — drop the cache so the next call re-signs.
