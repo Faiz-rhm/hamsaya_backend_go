@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_user_sessions_refresh_token_hash;
