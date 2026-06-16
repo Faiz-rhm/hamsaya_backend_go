@@ -134,7 +134,7 @@ services:
       # that, keeping the API's footprint down (and off the host's total RAM,
       # which on the shared CPX31 is the real constraint). GOMAXPROCS is pinned
       # to the cpus limit so the scheduler doesn't assume all host cores.
-      GOMEMLIMIT: "1750MiB"
+      GOMEMLIMIT: "3500MiB"
       GOMAXPROCS: "2"
 
       # Server
@@ -277,7 +277,13 @@ services:
       resources:
         limits:
           cpus: '2'
-          memory: 2G
+          # Raised 2G -> 4G: the API was being cgroup-OOM-killed (exit 137) at
+          # the 2G cap while the host still had ~5G free. GOMEMLIMIT (env, set to
+          # 3500MiB) keeps Go's heap under this cap so it GCs instead of growing
+          # into the kill. Host is the 8G CPX31, so 4G here still leaves Postgres
+          # (3G) + Redis (1G) room only if Postgres isn't simultaneously maxed —
+          # watch `free -m`; if tight, trim Postgres shared_buffers next.
+          memory: 4G
         reservations:
           cpus: '0.5'
           memory: 512M
