@@ -269,6 +269,20 @@ func buildAPNsPayload(p *PushPayload) ([]byte, error) {
 		root[k] = v
 	}
 
+	// FCM identifier so the firebase_messaging Flutter plugin recognises this
+	// direct-APNs push as one of its messages. Without `gcm.message_id` the
+	// plugin ignores the notification — onMessage / onMessageOpenedApp /
+	// getInitialMessage never fire, so a tap doesn't deep-link to the target
+	// screen. The custom data keys (type, post_id, …) are already at the root,
+	// which the plugin maps into RemoteMessage.data for the tap router.
+	if _, exists := root["gcm.message_id"]; !exists {
+		id := p.Data["notification_id"]
+		if id == "" {
+			id = p.Data["type"]
+		}
+		root["gcm.message_id"] = id
+	}
+
 	out, err := json.Marshal(root)
 	if err != nil {
 		return nil, fmt.Errorf("apns: marshal payload: %w", err)
