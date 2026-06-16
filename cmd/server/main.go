@@ -458,6 +458,7 @@ func main() {
 	dailyLimitHandler := handlers.NewDailyLimitHandler(dailyLimitService, userRepo, validator, logger)
 	monetizationHandler := handlers.NewMonetizationHandler(monetizationService, storageService, validator, logger, redisClient)
 	appLogHandler := handlers.NewAppLogHandler(appLogRepo, logger)
+	appVersionHandler := handlers.NewAppVersionHandler(cfg.AppVersion)
 
 	// Health check routes (no versioning)
 	router.GET("/health", healthHandler.Health)
@@ -516,6 +517,10 @@ func main() {
 		// stable single-origin media URL for clients. Rate-limited by IP so
 		// the open endpoint can't be abused for bandwidth.
 		v1.GET("/storage/*key", rateLimiter.LimitByType("storage-stream"), storageHandler.Stream)
+
+		// App update gate — public, no auth (runs before login). Backend-driven
+		// so it works where Google Play / iTunes lookups are blocked.
+		v1.GET("/app/version", appVersionHandler.GetAppVersion)
 
 		// Explicit /users/me/* routes first so they always match (avoid 404 from param route)
 		v1.GET("/users/me/posts", authMiddleware.RequireAuth(), postHandler.GetMyPosts)

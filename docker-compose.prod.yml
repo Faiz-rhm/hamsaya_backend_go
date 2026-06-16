@@ -237,6 +237,14 @@ services:
       APNS_BUNDLE_ID: ${APNS_BUNDLE_ID:-af.hamsaya}
       APNS_PRODUCTION: ${APNS_PRODUCTION:-true}
 
+      # In-app update gate (backend-driven; 0 = disabled). Bump per release.
+      APP_MIN_BUILD_IOS: ${APP_MIN_BUILD_IOS:-0}
+      APP_LATEST_BUILD_IOS: ${APP_LATEST_BUILD_IOS:-0}
+      APP_MIN_BUILD_ANDROID: ${APP_MIN_BUILD_ANDROID:-0}
+      APP_LATEST_BUILD_ANDROID: ${APP_LATEST_BUILD_ANDROID:-0}
+      APP_STORE_URL_IOS: ${APP_STORE_URL_IOS:-}
+      APP_STORE_URL_ANDROID: ${APP_STORE_URL_ANDROID:-}
+
       # Email (Resend takes precedence over SMTP when set)
       RESEND_API_KEY: ${RESEND_API_KEY:-}
 

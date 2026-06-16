@@ -47,9 +47,10 @@ type Config struct {
 	JWT       JWTConfig
 	OAuth     OAuthConfig
 	Storage   StorageConfig
-	Firebase  FirebaseConfig
-	APNs      APNsConfig
-	Geocoding GeocodingConfig
+	Firebase   FirebaseConfig
+	APNs       APNsConfig
+	AppVersion AppVersionConfig
+	Geocoding  GeocodingConfig
 	RateLimit RateLimitConfig
 	Email     EmailConfig
 	CORS      CORSConfig
@@ -194,6 +195,19 @@ type FirebaseConfig struct {
 	CredentialsPath string
 }
 
+// AppVersionConfig drives the in-app update gate. Store-scraping (Play/iTunes)
+// can't work in Afghanistan (Google blocked), so the app asks the backend what
+// the minimum/latest build is and shows a forced or soft upgrade prompt with a
+// store link. All env-driven so ops can bump it without a deploy of the app.
+type AppVersionConfig struct {
+	MinBuildIOS       int    // APP_MIN_BUILD_IOS — below this = forced update
+	LatestBuildIOS    int    // APP_LATEST_BUILD_IOS — below this = soft prompt
+	MinBuildAndroid   int    // APP_MIN_BUILD_ANDROID
+	LatestBuildAndroid int   // APP_LATEST_BUILD_ANDROID
+	StoreURLIOS       string // APP_STORE_URL_IOS
+	StoreURLAndroid   string // APP_STORE_URL_ANDROID
+}
+
 // APNsConfig holds Apple Push Notification service .p8 auth-key credentials.
 // Used to deliver iOS push directly via Apple, bypassing FCM/Google — required
 // because Google endpoints are blocked in Afghanistan (see pkg/notification/apns.go).
@@ -332,6 +346,14 @@ func Load() (*Config, error) {
 			TeamID:     viper.GetString("APNS_TEAM_ID"),
 			BundleID:   viper.GetString("APNS_BUNDLE_ID"),
 			Production: viper.GetBool("APNS_PRODUCTION"),
+		},
+		AppVersion: AppVersionConfig{
+			MinBuildIOS:        viper.GetInt("APP_MIN_BUILD_IOS"),
+			LatestBuildIOS:     viper.GetInt("APP_LATEST_BUILD_IOS"),
+			MinBuildAndroid:    viper.GetInt("APP_MIN_BUILD_ANDROID"),
+			LatestBuildAndroid: viper.GetInt("APP_LATEST_BUILD_ANDROID"),
+			StoreURLIOS:        viper.GetString("APP_STORE_URL_IOS"),
+			StoreURLAndroid:    viper.GetString("APP_STORE_URL_ANDROID"),
 		},
 		Geocoding: GeocodingConfig{
 			APIKey:   viper.GetString("GEOCODING_API_KEY"),
