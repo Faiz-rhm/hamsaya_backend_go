@@ -694,11 +694,32 @@ func (r *userRepository) CreateSession(ctx context.Context, session *models.User
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
-	// Convert device_info string to JSONB format
+	// Convert device_info string to JSONB format.
 	var deviceInfoJSON []byte
 	if session.DeviceInfo != nil {
-		// Wrap the string in a JSON object
-		deviceInfo := map[string]string{"device": *session.DeviceInfo}
+		raw := *session.DeviceInfo
+
+		// Unwrap a prior round-trip. The session SELECTs read this jsonb column
+		// straight into a Go string, so DeviceInfo comes back as the literal
+		// text `{"device":"…"}`. On token refresh that value is re-wrapped here,
+		// adding one nesting level + escaping every time — exponential growth
+		// that eventually exceeds jsonb's per-string limit (SQLSTATE 54000:
+		// "string too long to represent as jsonb string") and 500s the refresh.
+		var wrapper map[string]string
+		if json.Unmarshal([]byte(raw), &wrapper) == nil {
+			if d, ok := wrapper["device"]; ok {
+				raw = d
+			}
+		}
+		// Hard cap matching the model's `max=512` validation. Guarantees the
+		// value can never approach the jsonb string limit and bounds any runaway
+		// re-encoding — also truncates already-bloated sessions on their next
+		// refresh so affected users recover instead of staying stuck on 500.
+		if len(raw) > 512 {
+			raw = raw[:512]
+		}
+
+		deviceInfo := map[string]string{"device": raw}
 		var err error
 		deviceInfoJSON, err = json.Marshal(deviceInfo)
 		if err != nil {
