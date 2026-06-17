@@ -148,11 +148,19 @@ func (t *Telemetry) MeterRequestDuration() gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		start := time.Now()
-		path := c.Request.URL.Path
+		// Use the matched ROUTE TEMPLATE (/api/v1/posts/:id), not the raw URL.
+		// The raw path embeds UUIDs/keys, so every distinct id — and every
+		// bot-scanned 404 — would mint a new permanent Prometheus series
+		// (the SDK never evicts them), an unbounded-memory cardinality leak.
+		// FullPath() collapses to the ~fixed set of routes; 404s share one label.
 		method := c.Request.Method
 
 		c.Next()
 
+		path := c.FullPath()
+		if path == "" {
+			path = "unmatched"
+		}
 		status := c.Writer.Status()
 		duration := time.Since(start)
 		var reqSize, respSize int64
@@ -173,9 +181,17 @@ func (t *Telemetry) MeterRequestsInFlight() gin.HandlerFunc {
 	}
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
+		// Route template, not raw path — same cardinality-leak guard as
+		// MeterRequestDuration. FullPath() is set after routing, but the
+		// in-flight pair must use the SAME label on add+done, so resolve it
+		// once here (Gin matches the route before middleware runs).
+		route := c.FullPath()
+		if route == "" {
+			route = "unmatched"
+		}
 		attrs := []attribute.KeyValue{
 			attribute.String("method", c.Request.Method),
-			attribute.String("path", c.Request.URL.Path),
+			attribute.String("path", route),
 		}
 		m.AddActiveRequest(ctx, attrs...)
 		defer m.DoneActiveRequest(ctx, attrs...)
