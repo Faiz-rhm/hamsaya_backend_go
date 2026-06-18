@@ -353,7 +353,8 @@ func main() {
 	helpChatService.SetNotificationService(notificationService)
 	// Proactive re-engagement jobs (event reminders, dormant win-back, sell
 	// expiring-soon). Scheduled hourly + leader-elected below.
-	engagementService := services.NewEngagementService(db, notificationService, logger)
+	engagementService := services.NewEngagementService(db, notificationService, logger).
+		WithEmail(emailService, redisClient)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")

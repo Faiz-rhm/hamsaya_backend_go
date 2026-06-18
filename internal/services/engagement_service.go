@@ -3,9 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/pkg/database"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 )
 
@@ -20,11 +22,24 @@ type EngagementService struct {
 	db     *database.DB
 	notif  *NotificationService
 	logger *zap.Logger
+
+	// Optional — set via WithEmail to enable the unread-activity digest email.
+	email *EmailService
+	rdb   *redis.Client
 }
 
 // NewEngagementService constructs an EngagementService.
 func NewEngagementService(db *database.DB, notif *NotificationService, logger *zap.Logger) *EngagementService {
 	return &EngagementService{db: db, notif: notif, logger: logger}
+}
+
+// WithEmail enables the unread-activity digest email job. Requires both an
+// EmailService (to send) and a Redis client (to dedupe sends). No-op job
+// without it — the other re-engagement jobs are unaffected.
+func (s *EngagementService) WithEmail(email *EmailService, rdb *redis.Client) *EngagementService {
+	s.email = email
+	s.rdb = rdb
+	return s
 }
 
 // RunHourly runs every re-engagement job once. Intended to be invoked hourly.
@@ -34,14 +49,108 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 	ev := s.sendEventReminders(ctx)
 	wb := s.sendWinback(ctx)
 	sx := s.sendSellExpiring(ctx)
-	if ev+wb+sx > 0 {
+	ud := s.sendUnreadDigest(ctx)
+	if ev+wb+sx+ud > 0 {
 		s.logger.Info("engagement run complete",
 			zap.Int("event_reminders", ev),
 			zap.Int("winback", wb),
 			zap.Int("sell_expiring", sx),
+			zap.Int("unread_digest", ud),
 		)
 	}
 	return nil
+}
+
+// sendUnreadDigest emails users who have messages and/or notifications that have
+// sat unread for 2+ days. Deduped via Redis so a user gets at most one digest
+// per 2 days. No-op unless WithEmail wired an EmailService + Redis client.
+//
+// Why email (not push): push can be unreliable for this audience (Google
+// blocked in Afghanistan), so an email is the dependable re-engagement channel
+// for someone who hasn't opened the app in a couple of days.
+func (s *EngagementService) sendUnreadDigest(ctx context.Context) int {
+	if s.email == nil || s.rdb == nil {
+		return 0
+	}
+
+	// Qualify: verified, real email (exclude OAuth placeholder inboxes), not
+	// deleted, with at least one unread message OR notification ≥2 days old.
+	// Counts are total-unread for the email copy. Bounded per run.
+	const query = `
+		SELECT u.id, u.email,
+		       COALESCE(NULLIF(TRIM(pr.first_name), ''), '') AS first_name,
+		       (SELECT COUNT(*) FROM notifications n
+		          WHERE n.user_id = u.id AND n.read = false) AS unread_notifs,
+		       (SELECT COUNT(*) FROM messages m
+		          JOIN conversations c ON c.id = m.conversation_id
+		          WHERE (c.participant1_id = u.id OR c.participant2_id = u.id)
+		            AND m.sender_id <> u.id AND m.read_at IS NULL) AS unread_msgs
+		FROM users u
+		LEFT JOIN profiles pr ON pr.id = u.id
+		WHERE u.deleted_at IS NULL
+		  AND u.email_verified = true
+		  AND u.email NOT LIKE '%@no-email.hamsaya.af'
+		  AND (
+		    EXISTS (
+		      SELECT 1 FROM notifications n
+		      WHERE n.user_id = u.id AND n.read = false
+		        AND n.created_at <= NOW() - INTERVAL '2 days'
+		    )
+		    OR EXISTS (
+		      SELECT 1 FROM messages m
+		      JOIN conversations c ON c.id = m.conversation_id
+		      WHERE (c.participant1_id = u.id OR c.participant2_id = u.id)
+		        AND m.sender_id <> u.id AND m.read_at IS NULL
+		        AND m.created_at <= NOW() - INTERVAL '2 days'
+		    )
+		  )
+		LIMIT 500
+	`
+
+	rows, err := s.db.Pool.Query(ctx, query)
+	if err != nil {
+		s.logger.Error("unread digest query failed", zap.Error(err))
+		return 0
+	}
+	defer rows.Close()
+
+	type target struct {
+		userID, email, firstName string
+		notifs, msgs             int
+	}
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.userID, &t.email, &t.firstName, &t.notifs, &t.msgs); err != nil {
+			s.logger.Error("scan unread digest row", zap.Error(err))
+			continue
+		}
+		targets = append(targets, t)
+	}
+
+	sent := 0
+	for _, t := range targets {
+		// Dedup: at most one digest per user per 2 days. SetNX returns false if
+		// the key already exists (already emailed within the window) → skip.
+		key := "engagement:unread-digest:" + t.userID
+		ok, err := s.rdb.SetNX(ctx, key, "1", 48*time.Hour).Result()
+		if err != nil {
+			s.logger.Warn("unread digest dedup failed", zap.String("user_id", t.userID), zap.Error(err))
+			continue
+		}
+		if !ok {
+			continue // already emailed recently
+		}
+
+		if err := s.email.SendUnreadDigestEmail(t.email, t.firstName, t.notifs, t.msgs); err != nil {
+			s.logger.Error("send unread digest email", zap.String("user_id", t.userID), zap.Error(err))
+			// Release the dedup key so the next run can retry this user.
+			_ = s.rdb.Del(ctx, key).Err()
+			continue
+		}
+		sent++
+	}
+	return sent
 }
 
 // sendEventReminders notifies RSVP'd users 24h and 1h before an event starts.

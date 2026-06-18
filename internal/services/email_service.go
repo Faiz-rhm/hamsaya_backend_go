@@ -213,6 +213,50 @@ func (s *EmailService) SendPasswordChangedEmail(email, name string) error {
 	return s.sendEmail(email, data.Subject, htmlBody)
 }
 
+// SendUnreadDigestEmail nudges a user who has unread messages and/or
+// notifications that have sat unread for 2+ days. Backend-driven re-engagement
+// that works regardless of push delivery (notably in Afghanistan, where push
+// can be unreliable). Keeps the copy short and links back to the app.
+func (s *EmailService) SendUnreadDigestEmail(email, name string, unreadNotifications, unreadMessages int) error {
+	if strings.TrimSpace(name) == "" {
+		name = "there"
+	}
+
+	var parts []string
+	if unreadMessages > 0 {
+		noun := "message"
+		if unreadMessages > 1 {
+			noun = "messages"
+		}
+		parts = append(parts, fmt.Sprintf("<b>%d unread %s</b>", unreadMessages, noun))
+	}
+	if unreadNotifications > 0 {
+		noun := "notification"
+		if unreadNotifications > 1 {
+			noun = "notifications"
+		}
+		parts = append(parts, fmt.Sprintf("<b>%d unread %s</b>", unreadNotifications, noun))
+	}
+	if len(parts) == 0 {
+		return nil // nothing to nudge about
+	}
+	summary := strings.Join(parts, " and ")
+
+	subject := "You have unread activity on Hamsaya"
+	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#1a1a1a;line-height:1.6;">
+<div style="max-width:480px;margin:0 auto;padding:24px;">
+  <h2 style="margin:0 0 12px;">Hi %s,</h2>
+  <p>You have %s waiting on Hamsaya. Open the app to catch up.</p>
+  <p style="margin:24px 0;">
+    <a href="https://hamsaya.af" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block;">Open Hamsaya</a>
+  </p>
+  <p style="color:#666;font-size:13px;">If you've already caught up, you can ignore this email.</p>
+  <p style="color:#999;font-size:12px;margin-top:24px;">© %s Hamsaya</p>
+</div></body></html>`, template.HTMLEscapeString(name), summary, strconv.Itoa(time.Now().Year()))
+
+	return s.sendEmail(email, subject, htmlBody)
+}
+
 // sendEmail sends an email using Resend API (if RESEND_API_KEY set) or SMTP.
 // Returns an error if neither is configured so callers can report failure.
 func (s *EmailService) sendEmail(to, subject, htmlBody string) error {

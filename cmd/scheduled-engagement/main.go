@@ -79,7 +79,9 @@ func main() {
 	settingsRepo := repositories.NewNotificationSettingsRepository(db)
 	userRepo := repositories.NewUserRepository(db)
 	notifSvc := services.NewNotificationService(notificationRepo, settingsRepo, userRepo, fcmClient, redisClient, nil, logger)
-	engagement := services.NewEngagementService(db, notifSvc, logger)
+	emailSvc := services.NewEmailService(&cfg.Email, logger)
+	engagement := services.NewEngagementService(db, notifSvc, logger).
+		WithEmail(emailSvc, redisClient)
 
 	if err := engagement.RunHourly(ctx); err != nil {
 		logger.Error("engagement run failed", zap.Error(err))
