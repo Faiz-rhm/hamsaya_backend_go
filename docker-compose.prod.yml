@@ -244,6 +244,8 @@ services:
       APP_LATEST_BUILD_ANDROID: ${APP_LATEST_BUILD_ANDROID:-0}
       APP_STORE_URL_IOS: ${APP_STORE_URL_IOS:-}
       APP_STORE_URL_ANDROID: ${APP_STORE_URL_ANDROID:-}
+      # Smart deep link for re-engagement emails (AppsFlyer OneLink → app or store)
+      APP_DEEP_LINK_URL: ${APP_DEEP_LINK_URL:-}
 
       # Email (Resend takes precedence over SMTP when set)
       RESEND_API_KEY: ${RESEND_API_KEY:-}

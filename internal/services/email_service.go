@@ -213,6 +213,25 @@ func (s *EmailService) SendPasswordChangedEmail(email, name string) error {
 	return s.sendEmail(email, data.Subject, htmlBody)
 }
 
+// summaryLine builds the plain-text subhead, e.g. "1 unread message and 3
+// unread notifications waiting for you."
+func summaryLine(unreadMessages, unreadNotifications int) string {
+	plural := func(n int, word string) string {
+		if n == 1 {
+			return fmt.Sprintf("%d unread %s", n, word)
+		}
+		return fmt.Sprintf("%d unread %ss", n, word)
+	}
+	var parts []string
+	if unreadMessages > 0 {
+		parts = append(parts, plural(unreadMessages, "message"))
+	}
+	if unreadNotifications > 0 {
+		parts = append(parts, plural(unreadNotifications, "notification"))
+	}
+	return strings.Join(parts, " and ") + " waiting for you."
+}
+
 // SendUnreadDigestEmail nudges a user who has unread messages and/or
 // notifications that have sat unread for 2+ days. Backend-driven re-engagement
 // that works regardless of push delivery (notably in Afghanistan, where push
@@ -222,39 +241,100 @@ func (s *EmailService) SendUnreadDigestEmail(email, name string, unreadNotificat
 		name = "there"
 	}
 
-	var parts []string
-	if unreadMessages > 0 {
-		noun := "message"
-		if unreadMessages > 1 {
-			noun = "messages"
-		}
-		parts = append(parts, fmt.Sprintf("<b>%d unread %s</b>", unreadMessages, noun))
-	}
-	if unreadNotifications > 0 {
-		noun := "notification"
-		if unreadNotifications > 1 {
-			noun = "notifications"
-		}
-		parts = append(parts, fmt.Sprintf("<b>%d unread %s</b>", unreadNotifications, noun))
-	}
-	if len(parts) == 0 {
+	if unreadMessages <= 0 && unreadNotifications <= 0 {
 		return nil // nothing to nudge about
 	}
-	summary := strings.Join(parts, " and ")
 
-	subject := "You have unread activity on Hamsaya"
-	htmlBody := fmt.Sprintf(`<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#1a1a1a;line-height:1.6;">
-<div style="max-width:480px;margin:0 auto;padding:24px;">
-  <h2 style="margin:0 0 12px;">Hi %s,</h2>
-  <p>You have %s waiting on Hamsaya. Open the app to catch up.</p>
-  <p style="margin:24px 0;">
-    <a href="https://hamsaya.af" style="background:#2563eb;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block;">Open Hamsaya</a>
-  </p>
-  <p style="color:#666;font-size:13px;">If you've already caught up, you can ignore this email.</p>
-  <p style="color:#999;font-size:12px;margin-top:24px;">© %s Hamsaya</p>
-</div></body></html>`, template.HTMLEscapeString(name), summary, strconv.Itoa(time.Now().Year()))
+	// Title mirrors what's actually waiting.
+	var title string
+	switch {
+	case unreadMessages > 0 && unreadNotifications > 0:
+		title = "You have unread activity on Hamsaya"
+	case unreadMessages > 0:
+		if unreadMessages == 1 {
+			title = "1 new message awaits your response"
+		} else {
+			title = fmt.Sprintf("%d new messages await your response", unreadMessages)
+		}
+	default:
+		if unreadNotifications == 1 {
+			title = "You have 1 new notification"
+		} else {
+			title = fmt.Sprintf("You have %d new notifications", unreadNotifications)
+		}
+	}
 
-	return s.sendEmail(email, subject, htmlBody)
+	// Small unread badges (chat + bell) for the header, LinkedIn-style. Inline
+	// red count chips — no absolute positioning, which many email clients strip.
+	var badges strings.Builder
+	if unreadMessages > 0 {
+		badges.WriteString(fmt.Sprintf(`<span style="font-size:18px;margin-left:14px;white-space:nowrap;">&#128172; <span style="background:#cc1016;color:#fff;border-radius:10px;padding:1px 6px;font-size:12px;font-weight:bold;">%d</span></span>`, unreadMessages))
+	}
+	if unreadNotifications > 0 {
+		badges.WriteString(fmt.Sprintf(`<span style="font-size:18px;margin-left:14px;white-space:nowrap;">&#128276; <span style="background:#cc1016;color:#fff;border-radius:10px;padding:1px 6px;font-size:12px;font-weight:bold;">%d</span></span>`, unreadNotifications))
+	}
+
+	// Smart deep link: AppsFlyer OneLink opens the app if installed, else the
+	// store. Falls back to the website when APP_DEEP_LINK_URL isn't configured.
+	openURL := s.cfg.AppLink
+	if strings.TrimSpace(openURL) == "" {
+		openURL = "https://hamsaya.af"
+	}
+	storeIOS := s.cfg.StoreURLIOS
+	if strings.TrimSpace(storeIOS) == "" {
+		storeIOS = openURL
+	}
+	storeAndroid := s.cfg.StoreURLAndroid
+	if strings.TrimSpace(storeAndroid) == "" {
+		storeAndroid = openURL
+	}
+
+	iconHTML := `<span style="font-size:22px;font-weight:bold;color:#2563eb;">Hamsaya</span>`
+	if s.iconURL != "" {
+		iconHTML = fmt.Sprintf(`<img src="%s" width="40" height="40" alt="Hamsaya" style="border-radius:9px;display:block;">`, s.iconURL)
+	}
+
+	const tmpl = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f2ef;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f2ef;padding:24px 12px;"><tr><td align="center">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:512px;">
+    <tr><td style="background:#ffffff;border-radius:10px;padding:24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td align="left">{{ICON}}</td>
+        <td align="right" style="white-space:nowrap;">{{BADGES}}</td>
+      </tr></table>
+      <h1 style="font-size:21px;text-align:center;margin:28px 0 8px;">{{TITLE}}</h1>
+      <p style="text-align:center;color:#555;margin:0 0 24px;font-size:15px;">{{SUMMARY}}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+        <a href="{{URL}}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:13px 32px;border-radius:24px;display:inline-block;font-weight:bold;font-size:16px;">Open Hamsaya</a>
+      </td></tr></table>
+    </td></tr>
+    <tr><td align="center" style="padding:28px 0 8px;">
+      <p style="color:#2c5d63;font-weight:bold;font-size:16px;margin:0 0 14px;">Get the Hamsaya app</p>
+      <a href="{{STORE_IOS}}" style="text-decoration:none;"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" height="40" alt="Download on the App Store" style="margin:0 4px;vertical-align:middle;"></a>
+      <a href="{{STORE_ANDROID}}" style="text-decoration:none;"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="40" alt="Get it on Google Play" style="margin:0 4px;vertical-align:middle;"></a>
+    </td></tr>
+    <tr><td style="padding:24px 8px 0;border-top:1px solid #e0e0e0;">
+      <p style="color:#888;font-size:12px;margin:8px 0;">Hi {{NAME}} — you're receiving this because you have unread activity on Hamsaya. If you've already caught up, you can ignore it.</p>
+      <p style="color:#aaa;font-size:12px;margin:8px 0;">&copy; {{YEAR}} Hamsaya</p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`
+
+	htmlBody := strings.NewReplacer(
+		"{{ICON}}", iconHTML,
+		"{{BADGES}}", badges.String(),
+		"{{TITLE}}", template.HTMLEscapeString(title),
+		"{{SUMMARY}}", template.HTMLEscapeString(summaryLine(unreadMessages, unreadNotifications)),
+		"{{URL}}", template.HTMLEscapeString(openURL),
+		"{{STORE_IOS}}", template.HTMLEscapeString(storeIOS),
+		"{{STORE_ANDROID}}", template.HTMLEscapeString(storeAndroid),
+		"{{NAME}}", template.HTMLEscapeString(name),
+		"{{YEAR}}", strconv.Itoa(time.Now().Year()),
+	).Replace(tmpl)
+
+	return s.sendEmail(email, "You have unread activity on Hamsaya", htmlBody)
 }
 
 // sendEmail sends an email using Resend API (if RESEND_API_KEY set) or SMTP.

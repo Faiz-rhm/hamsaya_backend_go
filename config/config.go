@@ -241,6 +241,15 @@ type EmailConfig struct {
 	From              string
 	ResendAPIKey      string // When set, send via Resend API instead of SMTP
 	EmailVerifyBaseURL string // Base URL for verification link (e.g. https://hamsaya.com or app deep link)
+	// AppLink is the smart deep link used in re-engagement emails (e.g. the
+	// AppsFlyer OneLink https://hamsaya.onelink.me/XXXX): opens the app if
+	// installed, else falls back to the App Store / Play Store. Falls back to
+	// the website when unset. Env: APP_DEEP_LINK_URL.
+	AppLink string
+	// Store links for the App Store / Play badges in emails. Reuse the same env
+	// vars as the in-app update gate.
+	StoreURLIOS     string // APP_STORE_URL_IOS
+	StoreURLAndroid string // APP_STORE_URL_ANDROID
 }
 
 // CORSConfig holds CORS configuration
@@ -372,6 +381,9 @@ func Load() (*Config, error) {
 			From:               viper.GetString("EMAIL_FROM"),
 			ResendAPIKey:       viper.GetString("RESEND_API_KEY"),
 			EmailVerifyBaseURL: viper.GetString("EMAIL_VERIFY_BASE_URL"),
+			AppLink:            viper.GetString("APP_DEEP_LINK_URL"),
+			StoreURLIOS:        viper.GetString("APP_STORE_URL_IOS"),
+			StoreURLAndroid:    viper.GetString("APP_STORE_URL_ANDROID"),
 		},
 		CORS: CORSConfig{
 			AllowedOrigins:   parseStringSlice(viper.GetString("CORS_ALLOWED_ORIGINS")),
