@@ -522,6 +522,9 @@ func main() {
 		// App update gate — public, no auth (runs before login). Backend-driven
 		// so it works where Google Play / iTunes lookups are blocked.
 		v1.GET("/app/version", appVersionHandler.GetAppVersion)
+		// Platform-aware "Open Hamsaya" redirect for emails (iOS→App Store,
+		// Android→Play, else→website). Public, no auth.
+		v1.GET("/app/open", appVersionHandler.OpenApp)
 
 		// Explicit /users/me/* routes first so they always match (avoid 404 from param route)
 		v1.GET("/users/me/posts", authMiddleware.RequireAuth(), postHandler.GetMyPosts)

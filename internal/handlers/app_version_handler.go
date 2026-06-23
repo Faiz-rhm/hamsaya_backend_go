@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/hamsaya/backend/config"
@@ -51,4 +52,32 @@ func (h *AppVersionHandler) GetAppVersion(c *gin.Context) {
 	}
 
 	utils.SendSuccess(c, http.StatusOK, "App version info", resp)
+}
+
+// OpenApp handles GET /api/v1/app/open — a platform-aware redirect used as the
+// "Open Hamsaya" target in emails (which can't run JS to branch by device).
+// It reads the User-Agent and 302-redirects: iOS → App Store, Android → Play
+// Store, anything else → the website. Lets one static email link route every
+// recipient to the right place.
+//
+// Public, no auth. When AASA/assetlinks are hosted, an installed app will
+// intercept this via universal/app links before the redirect even runs.
+func (h *AppVersionHandler) OpenApp(c *gin.Context) {
+	ua := strings.ToLower(c.Request.UserAgent())
+
+	target := "https://hamsaya.af"
+	switch {
+	case strings.Contains(ua, "iphone") || strings.Contains(ua, "ipad") || strings.Contains(ua, "ipod"):
+		if h.cfg.StoreURLIOS != "" {
+			target = h.cfg.StoreURLIOS
+		}
+	case strings.Contains(ua, "android"):
+		if h.cfg.StoreURLAndroid != "" {
+			target = h.cfg.StoreURLAndroid
+		}
+	}
+
+	// 302 (temporary) so the device UA is re-evaluated on every click rather
+	// than cached to one store.
+	c.Redirect(http.StatusFound, target)
 }

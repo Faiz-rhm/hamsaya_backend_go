@@ -311,8 +311,8 @@ func (s *EmailService) SendUnreadDigestEmail(email, name string, unreadNotificat
     </td></tr>
     <tr><td align="center" style="padding:28px 0 8px;">
       <p style="color:#2c5d63;font-weight:bold;font-size:16px;margin:0 0 14px;">Get the Hamsaya app</p>
-      <a href="{{STORE_IOS}}" style="text-decoration:none;"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" height="40" alt="Download on the App Store" style="margin:0 4px;vertical-align:middle;"></a>
-      <a href="{{STORE_ANDROID}}" style="text-decoration:none;"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" height="40" alt="Get it on Google Play" style="margin:0 4px;vertical-align:middle;"></a>
+      <a href="{{STORE_IOS}}" style="text-decoration:none;"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="44" style="height:44px;width:auto;margin:0 5px;vertical-align:middle;"></a>
+      <a href="{{STORE_ANDROID}}" style="text-decoration:none;"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="44" style="height:44px;width:auto;margin:0 5px;vertical-align:middle;"></a>
     </td></tr>
     <tr><td style="padding:24px 8px 0;border-top:1px solid #e0e0e0;">
       <p style="color:#888;font-size:12px;margin:8px 0;">Hi {{NAME}} — you're receiving this because you have unread activity on Hamsaya. If you've already caught up, you can ignore it.</p>
