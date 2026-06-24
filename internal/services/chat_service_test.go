@@ -120,9 +120,10 @@ func TestChatService_SendMessage(t *testing.T) {
 		convRepo.On("GetOrCreate", mock.Anything, "sender-1", "recv-1", mock.Anything).Return(conv, nil)
 		msgRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
 		convRepo.On("UpdateLastMessageAt", mock.Anything, "conv-1").Return(nil)
-		// enrichMessage calls GetProfileByUserID
+		// enrichMessage calls GetProfileByUserID + GetReactions
 		userRepo.On("GetProfileByUserID", mock.Anything, "sender-1").
 			Return(&models.Profile{ID: "sender-1"}, nil)
+		msgRepo.On("GetReactions", mock.Anything, mock.Anything, mock.Anything).Return(map[string][]models.MessageReaction{}, nil).Maybe()
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
 		content := "hello"
@@ -232,6 +233,7 @@ func TestChatService_GetMessages(t *testing.T) {
 			Return([]*models.Message{msg}, nil)
 		userRepo.On("GetProfileByUserID", mock.Anything, "user-1").
 			Return(&models.Profile{ID: "user-1"}, nil)
+		msgRepo.On("GetReactions", mock.Anything, mock.Anything, mock.Anything).Return(map[string][]models.MessageReaction{}, nil).Maybe()
 
 		svc := newTestChatService(convRepo, msgRepo, userRepo)
 		result, err := svc.GetMessages(context.Background(), "user-1", "conv-1", 10, 0)

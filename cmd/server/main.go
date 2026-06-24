@@ -743,6 +743,8 @@ func main() {
 			chat.POST("/conversations/:conversation_id/read", authMiddleware.RequireAuth(), chatHandler.MarkConversationAsRead)
 			chat.DELETE("/messages/:message_id", verifiedAuth, chatHandler.DeleteMessage)
 			chat.POST("/messages/:message_id/delete-for-me", verifiedAuth, chatHandler.DeleteMessageForMe)
+			chat.POST("/messages/:message_id/react", verifiedAuth, chatHandler.ReactToMessage)
+			chat.DELETE("/messages/:message_id/react", verifiedAuth, chatHandler.UnreactToMessage)
 		}
 
 		// Notification routes (require auth for reads; verified email for writes)

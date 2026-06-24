@@ -96,13 +96,14 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 	// Create message
 	messageID := uuid.New().String()
 	message := &models.Message{
-		ID:             messageID,
-		ConversationID: conversation.ID,
-		SenderID:       senderID,
-		Content:        req.Content,
-		MessageType:    req.MessageType,
-		ProductID:      req.ProductID,
-		CreatedAt:      time.Now(),
+		ID:               messageID,
+		ConversationID:   conversation.ID,
+		SenderID:         senderID,
+		Content:          req.Content,
+		MessageType:      req.MessageType,
+		ProductID:        req.ProductID,
+		ReplyToMessageID: req.ReplyToMessageID,
+		CreatedAt:        time.Now(),
 	}
 
 	if err := s.messageRepo.Create(ctx, message); err != nil {
@@ -135,7 +136,7 @@ func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *mod
 	go s.notifyMessageSent(message, req.RecipientID, conversation)
 
 	// Get enriched message response
-	return s.enrichMessage(ctx, message)
+	return s.enrichMessage(ctx, message, senderID)
 }
 
 // GetConversations retrieves all conversations for a user. businessID nil =
@@ -210,7 +211,7 @@ func (s *ChatService) GetMessages(ctx context.Context, userID, conversationID st
 	// Enrich messages
 	var enrichedMessages []*models.MessageResponse
 	for _, message := range messages {
-		enriched, err := s.enrichMessage(ctx, message)
+		enriched, err := s.enrichMessage(ctx, message, userID)
 		if err != nil {
 			s.logger.Warn("Failed to enrich message",
 				zap.Error(err),
@@ -366,6 +367,61 @@ func (s *ChatService) broadcastMessageDeleted(message *models.Message) {
 	}
 }
 
+// ReactToMessage toggles an emoji reaction by the user on a message. add=true
+// adds the reaction, add=false removes it. Authorizes the user as a participant
+// and broadcasts the change to the other participant over WebSocket.
+func (s *ChatService) ReactToMessage(ctx context.Context, userID, messageID, emoji string, add bool) error {
+	message, err := s.messageRepo.GetByID(ctx, messageID)
+	if err != nil {
+		return utils.NewNotFoundError("Message not found", err)
+	}
+
+	isParticipant, perr := s.conversationRepo.IsParticipant(ctx, message.ConversationID, userID)
+	if perr != nil {
+		return utils.NewInternalError("Failed to verify access", perr)
+	}
+	if !isParticipant {
+		return utils.NewForbiddenError("You don't have access to this message", nil)
+	}
+
+	if add {
+		if err := s.messageRepo.AddReaction(ctx, messageID, userID, emoji); err != nil {
+			return utils.NewInternalError("Failed to add reaction", err)
+		}
+	} else {
+		if err := s.messageRepo.RemoveReaction(ctx, messageID, userID, emoji); err != nil {
+			return utils.NewInternalError("Failed to remove reaction", err)
+		}
+	}
+
+	go s.broadcastReaction(message, userID, emoji, add)
+	return nil
+}
+
+// broadcastReaction pushes a reaction add/remove to the other participant.
+func (s *ChatService) broadcastReaction(message *models.Message, userID, emoji string, added bool) {
+	if s.wsHub == nil {
+		return
+	}
+	other, oerr := s.conversationRepo.GetOtherParticipantID(context.Background(), message.ConversationID, userID)
+	if oerr != nil || other == "" {
+		return
+	}
+	frame := models.WSMessage{
+		Type: "message_reaction",
+		Payload: models.WSReactionPayload{
+			ConversationID: message.ConversationID,
+			MessageID:      message.ID,
+			UserID:         userID,
+			Emoji:          emoji,
+			Added:          added,
+		},
+	}
+	if err := s.wsHub.SendToUser(other, frame); err != nil {
+		s.logger.Debug("Failed to send WS message_reaction", zap.Error(err), zap.String("recipient_id", other))
+	}
+}
+
 // enrichConversation enriches a conversation with participant and last message info
 func (s *ChatService) enrichConversation(ctx context.Context, conversation *models.Conversation, viewerID string) (*models.ConversationResponse, error) {
 	response := &models.ConversationResponse{
@@ -440,7 +496,7 @@ func (s *ChatService) enrichConversation(ctx context.Context, conversation *mode
 }
 
 // enrichMessage enriches a message with sender info
-func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message) (*models.MessageResponse, error) {
+func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message, viewerID string) (*models.MessageResponse, error) {
 	response := &models.MessageResponse{
 		ID:             message.ID,
 		ConversationID: message.ConversationID,
@@ -449,6 +505,23 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 		ProductID:      message.ProductID,
 		IsRead:         message.ReadAt != nil,
 		CreatedAt:      message.CreatedAt,
+	}
+
+	// Quoted message preview (reply target).
+	if message.ReplyToMessageID != nil && *message.ReplyToMessageID != "" {
+		if replied, rErr := s.messageRepo.GetByID(ctx, *message.ReplyToMessageID); rErr == nil && replied != nil {
+			response.ReplyTo = &models.MessageReplyPreview{
+				ID:          replied.ID,
+				SenderID:    replied.SenderID,
+				Content:     replied.Content,
+				MessageType: replied.MessageType,
+			}
+		}
+	}
+
+	// Emoji reactions, aggregated, with the viewer's own reactions flagged.
+	if reactions, rErr := s.messageRepo.GetReactions(ctx, []string{message.ID}, viewerID); rErr == nil {
+		response.Reactions = reactions[message.ID]
 	}
 
 	// Get sender's profile

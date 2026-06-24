@@ -34,6 +34,14 @@ type MessageRepository interface {
 	// Get last message in conversation. viewerID excludes per-user-deleted
 	// rows so the conversation list preview reflects what the viewer sees.
 	GetLastMessage(ctx context.Context, conversationID, viewerID string) (*models.Message, error)
+
+	// Reactions
+	AddReaction(ctx context.Context, messageID, userID, emoji string) error
+	RemoveReaction(ctx context.Context, messageID, userID, emoji string) error
+	// GetReactions aggregates reactions for the given messages into
+	// per-emoji {emoji,count,reacted} lists keyed by message id. `reacted` is
+	// relative to viewerID.
+	GetReactions(ctx context.Context, messageIDs []string, viewerID string) (map[string][]models.MessageReaction, error)
 }
 
 type messageRepository struct {
@@ -49,8 +57,8 @@ func NewMessageRepository(db *database.DB) MessageRepository {
 func (r *messageRepository) Create(ctx context.Context, message *models.Message) error {
 	query := `
 		INSERT INTO messages (
-			id, conversation_id, sender_id, content, message_type, product_id, created_at
-		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+			id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, created_at
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 	`
 
 	_, err := r.db.Pool.Exec(ctx, query,
@@ -60,6 +68,7 @@ func (r *messageRepository) Create(ctx context.Context, message *models.Message)
 		message.Content,
 		message.MessageType,
 		message.ProductID,
+		message.ReplyToMessageID,
 		message.CreatedAt,
 	)
 
@@ -73,7 +82,7 @@ func (r *messageRepository) Create(ctx context.Context, message *models.Message)
 // GetByID retrieves a message by ID
 func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, deleted_at
 		FROM messages
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -86,6 +95,7 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 		&message.Content,
 		&message.MessageType,
 		&message.ProductID,
+		&message.ReplyToMessageID,
 		&message.ReadAt,
 		&message.CreatedAt,
 		&message.DeletedAt,
@@ -106,7 +116,7 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 // already filtered via `deleted_at IS NULL`.
 func (r *messageRepository) List(ctx context.Context, filter *models.GetMessagesFilter) ([]*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, deleted_at
 		FROM messages
 		WHERE conversation_id = $1
 		  AND deleted_at IS NULL
@@ -131,6 +141,7 @@ func (r *messageRepository) List(ctx context.Context, filter *models.GetMessages
 			&message.Content,
 			&message.MessageType,
 			&message.ProductID,
+			&message.ReplyToMessageID,
 			&message.ReadAt,
 			&message.CreatedAt,
 			&message.DeletedAt,
@@ -252,7 +263,7 @@ func (r *messageRepository) GetUnreadCount(ctx context.Context, conversationID, 
 // viewer can still see (i.e. not in their per-user delete list).
 func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID, viewerID string) (*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, product_id, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, deleted_at
 		FROM messages
 		WHERE conversation_id = $1
 		  AND deleted_at IS NULL
@@ -269,6 +280,7 @@ func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID, 
 		&message.Content,
 		&message.MessageType,
 		&message.ProductID,
+		&message.ReplyToMessageID,
 		&message.ReadAt,
 		&message.CreatedAt,
 		&message.DeletedAt,
@@ -282,4 +294,56 @@ func (r *messageRepository) GetLastMessage(ctx context.Context, conversationID, 
 	}
 
 	return message, nil
+}
+
+// AddReaction adds an emoji reaction (idempotent — duplicate (message,user,emoji) is a no-op).
+func (r *messageRepository) AddReaction(ctx context.Context, messageID, userID, emoji string) error {
+	query := `
+		INSERT INTO message_reactions (message_id, user_id, emoji)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (message_id, user_id, emoji) DO NOTHING
+	`
+	if _, err := r.db.Pool.Exec(ctx, query, messageID, userID, emoji); err != nil {
+		return fmt.Errorf("failed to add reaction: %w", err)
+	}
+	return nil
+}
+
+// RemoveReaction removes a user's specific emoji reaction.
+func (r *messageRepository) RemoveReaction(ctx context.Context, messageID, userID, emoji string) error {
+	query := `DELETE FROM message_reactions WHERE message_id = $1 AND user_id = $2 AND emoji = $3`
+	if _, err := r.db.Pool.Exec(ctx, query, messageID, userID, emoji); err != nil {
+		return fmt.Errorf("failed to remove reaction: %w", err)
+	}
+	return nil
+}
+
+// GetReactions aggregates reactions for a set of messages, keyed by message id.
+func (r *messageRepository) GetReactions(ctx context.Context, messageIDs []string, viewerID string) (map[string][]models.MessageReaction, error) {
+	out := make(map[string][]models.MessageReaction)
+	if len(messageIDs) == 0 {
+		return out, nil
+	}
+	query := `
+		SELECT message_id, emoji, COUNT(*) AS cnt,
+		       BOOL_OR(user_id = $2) AS reacted
+		FROM message_reactions
+		WHERE message_id = ANY($1)
+		GROUP BY message_id, emoji
+		ORDER BY MIN(created_at)
+	`
+	rows, err := r.db.Pool.Query(ctx, query, messageIDs, viewerID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get reactions: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var mid string
+		var rx models.MessageReaction
+		if err := rows.Scan(&mid, &rx.Emoji, &rx.Count, &rx.Reacted); err != nil {
+			return nil, fmt.Errorf("failed to scan reaction: %w", err)
+		}
+		out[mid] = append(out[mid], rx)
+	}
+	return out, rows.Err()
 }

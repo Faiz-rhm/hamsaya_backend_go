@@ -25,15 +25,31 @@ type Conversation struct {
 
 // Message represents a chat message
 type Message struct {
-	ID             string       `json:"id"`
-	ConversationID string       `json:"conversation_id"`
-	SenderID       string       `json:"sender_id"`
-	Content        *string      `json:"content"`
-	MessageType    MessageType  `json:"message_type"`
-	ProductID      *string      `json:"product_id,omitempty"`
-	ReadAt         *time.Time   `json:"read_at,omitempty"`
-	CreatedAt      time.Time    `json:"created_at"`
-	DeletedAt      *time.Time   `json:"deleted_at,omitempty"`
+	ID               string      `json:"id"`
+	ConversationID   string      `json:"conversation_id"`
+	SenderID         string      `json:"sender_id"`
+	Content          *string     `json:"content"`
+	MessageType      MessageType `json:"message_type"`
+	ProductID        *string     `json:"product_id,omitempty"`
+	ReplyToMessageID *string     `json:"reply_to_message_id,omitempty"`
+	ReadAt           *time.Time  `json:"read_at,omitempty"`
+	CreatedAt        time.Time   `json:"created_at"`
+	DeletedAt        *time.Time  `json:"deleted_at,omitempty"`
+}
+
+// MessageReplyPreview is the quoted message shown above a reply.
+type MessageReplyPreview struct {
+	ID          string      `json:"id"`
+	SenderID    string      `json:"sender_id"`
+	Content     *string     `json:"content"`
+	MessageType MessageType `json:"message_type"`
+}
+
+// MessageReaction is an aggregated emoji reaction on a message.
+type MessageReaction struct {
+	Emoji   string `json:"emoji"`
+	Count   int    `json:"count"`
+	Reacted bool   `json:"reacted"` // true if the requesting user reacted with this emoji
 }
 
 // ConversationResponse is the API response for a conversation
@@ -57,14 +73,16 @@ type ConversationBizRef struct {
 
 // MessageResponse is the API response for a message
 type MessageResponse struct {
-	ID             string       `json:"id"`
-	ConversationID string       `json:"conversation_id"`
-	Sender         *UserInfo    `json:"sender"`
-	Content        *string      `json:"content"`
-	MessageType    MessageType  `json:"message_type"`
-	ProductID      *string      `json:"product_id,omitempty"`
-	IsRead         bool         `json:"is_read"`
-	CreatedAt      time.Time    `json:"created_at"`
+	ID             string               `json:"id"`
+	ConversationID string               `json:"conversation_id"`
+	Sender         *UserInfo            `json:"sender"`
+	Content        *string              `json:"content"`
+	MessageType    MessageType          `json:"message_type"`
+	ProductID      *string              `json:"product_id,omitempty"`
+	ReplyTo        *MessageReplyPreview `json:"reply_to,omitempty"`
+	Reactions      []MessageReaction    `json:"reactions,omitempty"`
+	IsRead         bool                 `json:"is_read"`
+	CreatedAt      time.Time            `json:"created_at"`
 }
 
 // MessageInfo is a brief message summary for conversation lists
@@ -88,11 +106,17 @@ type UserInfo struct {
 
 // SendMessageRequest represents a request to send a message
 type SendMessageRequest struct {
-	RecipientID string      `json:"recipient_id" validate:"required,uuid"`
-	Content     *string     `json:"content,omitempty" validate:"omitempty,min=1,max=5000"`
-	MessageType MessageType `json:"message_type" validate:"required"`
-	ProductID   *string     `json:"product_id,omitempty" validate:"omitempty,uuid"`
-	BusinessID  *string     `json:"business_id,omitempty" validate:"omitempty,uuid"`
+	RecipientID      string      `json:"recipient_id" validate:"required,uuid"`
+	Content          *string     `json:"content,omitempty" validate:"omitempty,min=1,max=5000"`
+	MessageType      MessageType `json:"message_type" validate:"required"`
+	ProductID        *string     `json:"product_id,omitempty" validate:"omitempty,uuid"`
+	BusinessID       *string     `json:"business_id,omitempty" validate:"omitempty,uuid"`
+	ReplyToMessageID *string     `json:"reply_to_message_id,omitempty" validate:"omitempty,uuid"`
+}
+
+// ReactToMessageRequest toggles an emoji reaction on a message.
+type ReactToMessageRequest struct {
+	Emoji string `json:"emoji" validate:"required,min=1,max=16"`
 }
 
 // GetConversationsFilter represents filters for listing conversations
@@ -142,6 +166,16 @@ type WSMessageDeletedPayload struct {
 	ConversationID string  `json:"conversation_id"`
 	MessageID      string  `json:"message_id"`
 	BusinessID     *string `json:"business_id,omitempty"`
+}
+
+// WSReactionPayload notifies the other participant that a reaction was added or
+// removed on a message, so their UI updates the bubble's reactions in real time.
+type WSReactionPayload struct {
+	ConversationID string `json:"conversation_id"`
+	MessageID      string `json:"message_id"`
+	UserID         string `json:"user_id"`
+	Emoji          string `json:"emoji"`
+	Added          bool   `json:"added"` // true = reaction added, false = removed
 }
 
 // WSTypingPayload represents the payload for typing indicators

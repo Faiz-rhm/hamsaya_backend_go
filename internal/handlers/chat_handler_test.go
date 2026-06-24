@@ -98,6 +98,7 @@ func TestChatHandler_SendMessage(t *testing.T) {
 		msgRepo.On("Create", mock.Anything, mock.AnythingOfType("*models.Message")).Return(nil)
 		convRepo.On("UpdateLastMessageAt", mock.Anything, chatTestConvID).Return(nil)
 		userRepo.On("GetProfileByUserID", mock.Anything, mock.Anything).Return(&models.Profile{}, nil).Maybe()
+		msgRepo.On("GetReactions", mock.Anything, mock.Anything, mock.Anything).Return(map[string][]models.MessageReaction{}, nil).Maybe()
 
 		r := newChatRouter(t, convRepo, msgRepo, userRepo)
 		body := `{"recipient_id":"` + chatTestRecipientID + `","message_type":"TEXT","content":"hello"}`

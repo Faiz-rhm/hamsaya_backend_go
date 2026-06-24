@@ -33,9 +33,10 @@ func makeMessageScanFn(m *models.Message) func(dest ...any) error {
 		*dest[3].(**string) = contentPtr
 		*dest[4].(*models.MessageType) = m.MessageType
 		*dest[5].(**string) = m.ProductID
-		*dest[6].(**time.Time) = m.ReadAt
-		*dest[7].(*time.Time) = m.CreatedAt
-		*dest[8].(**time.Time) = m.DeletedAt
+		*dest[6].(**string) = m.ReplyToMessageID
+		*dest[7].(**time.Time) = m.ReadAt
+		*dest[8].(*time.Time) = m.CreatedAt
+		*dest[9].(**time.Time) = m.DeletedAt
 		return nil
 	}
 }

@@ -1813,6 +1813,24 @@ func (m *MockMessageRepository) GetLastMessage(ctx context.Context, conversation
 	return args.Get(0).(*models.Message), args.Error(1)
 }
 
+func (m *MockMessageRepository) AddReaction(ctx context.Context, messageID, userID, emoji string) error {
+	args := m.Called(ctx, messageID, userID, emoji)
+	return args.Error(0)
+}
+
+func (m *MockMessageRepository) RemoveReaction(ctx context.Context, messageID, userID, emoji string) error {
+	args := m.Called(ctx, messageID, userID, emoji)
+	return args.Error(0)
+}
+
+func (m *MockMessageRepository) GetReactions(ctx context.Context, messageIDs []string, viewerID string) (map[string][]models.MessageReaction, error) {
+	args := m.Called(ctx, messageIDs, viewerID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[string][]models.MessageReaction), args.Error(1)
+}
+
 // MockMFARepository is a mock implementation of MFARepository
 type MockMFARepository struct {
 	mock.Mock

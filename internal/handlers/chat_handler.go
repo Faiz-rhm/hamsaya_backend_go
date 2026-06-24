@@ -343,6 +343,52 @@ func (h *ChatHandler) DeleteMessageForMe(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Message hidden", nil)
 }
 
+// ReactToMessage handles POST /api/v1/chat/messages/:message_id/react
+// Adds an emoji reaction by the authenticated user.
+func (h *ChatHandler) ReactToMessage(c *gin.Context) {
+	h.reactToMessage(c, true)
+}
+
+// UnreactToMessage handles DELETE /api/v1/chat/messages/:message_id/react
+// Removes the authenticated user's emoji reaction.
+func (h *ChatHandler) UnreactToMessage(c *gin.Context) {
+	h.reactToMessage(c, false)
+}
+
+func (h *ChatHandler) reactToMessage(c *gin.Context, add bool) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+	messageID := c.Param("message_id")
+	if messageID == "" {
+		utils.SendError(c, http.StatusBadRequest, "Message ID is required", utils.ErrBadRequest)
+		return
+	}
+
+	var req models.ReactToMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	if err := h.chatService.ReactToMessage(c.Request.Context(), userID.(string), messageID, req.Emoji, add); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	msg := "Reaction added"
+	if !add {
+		msg = "Reaction removed"
+	}
+	utils.SendSuccess(c, http.StatusOK, msg, nil)
+}
+
 // handleError handles service errors and sends appropriate HTTP responses
 func (h *ChatHandler) handleError(c *gin.Context, err error) {
 	// Check if it's an AppError
