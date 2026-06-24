@@ -50,15 +50,81 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 	wb := s.sendWinback(ctx)
 	sx := s.sendSellExpiring(ctx)
 	ud := s.sendUnreadDigest(ctx)
-	if ev+wb+sx+ud > 0 {
+	pc := s.sendProfileCompletion(ctx)
+	if ev+wb+sx+ud+pc > 0 {
 		s.logger.Info("engagement run complete",
 			zap.Int("event_reminders", ev),
 			zap.Int("winback", wb),
 			zap.Int("sell_expiring", sx),
 			zap.Int("unread_digest", ud),
+			zap.Int("profile_completion", pc),
 		)
 	}
 	return nil
+}
+
+// sendProfileCompletion emails users who haven't finished their profile
+// (profiles.is_complete = false). Deduped to at most once per 7 days. No-op
+// unless WithEmail wired an EmailService + Redis client.
+//
+// Apple "Hide My Email" users who never shared an address are stored with a
+// @no-email.hamsaya.af placeholder and excluded here — they can't be reached by
+// email; nudge them via push / in-app instead.
+func (s *EngagementService) sendProfileCompletion(ctx context.Context) int {
+	if s.email == nil || s.rdb == nil {
+		return 0
+	}
+
+	const query = `
+		SELECT u.id, u.email,
+		       COALESCE(NULLIF(TRIM(pr.first_name), ''), '') AS first_name
+		FROM users u
+		JOIN profiles pr ON pr.id = u.id
+		WHERE u.deleted_at IS NULL
+		  AND u.email_verified = true
+		  AND u.email NOT LIKE '%@no-email.hamsaya.af'
+		  AND pr.is_complete = false
+		LIMIT 500
+	`
+
+	rows, err := s.db.Pool.Query(ctx, query)
+	if err != nil {
+		s.logger.Error("profile completion query failed", zap.Error(err))
+		return 0
+	}
+	defer rows.Close()
+
+	type target struct{ userID, email, firstName string }
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.userID, &t.email, &t.firstName); err != nil {
+			s.logger.Error("scan profile completion row", zap.Error(err))
+			continue
+		}
+		targets = append(targets, t)
+	}
+
+	sent := 0
+	for _, t := range targets {
+		// At most one profile-completion nudge per user per 7 days.
+		key := "engagement:profile-completion:" + t.userID
+		ok, err := s.rdb.SetNX(ctx, key, "1", 7*24*time.Hour).Result()
+		if err != nil {
+			s.logger.Warn("profile completion dedup failed", zap.String("user_id", t.userID), zap.Error(err))
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if err := s.email.SendProfileCompletionEmail(t.email, t.firstName); err != nil {
+			s.logger.Error("send profile completion email", zap.String("user_id", t.userID), zap.Error(err))
+			_ = s.rdb.Del(ctx, key).Err()
+			continue
+		}
+		sent++
+	}
+	return sent
 }
 
 // sendUnreadDigest emails users who have messages and/or notifications that have

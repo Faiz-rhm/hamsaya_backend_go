@@ -337,6 +337,71 @@ func (s *EmailService) SendUnreadDigestEmail(email, name string, unreadNotificat
 	return s.sendEmail(email, "You have unread activity on Hamsaya", htmlBody)
 }
 
+// SendProfileCompletionEmail nudges a user who hasn't finished their profile
+// (profiles.is_complete = false). Same card style as the unread digest, with a
+// "Complete your profile" CTA that deep-links into the app (or the store).
+func (s *EmailService) SendProfileCompletionEmail(email, name string) error {
+	if strings.TrimSpace(name) == "" {
+		name = "there"
+	}
+
+	openURL := s.cfg.AppLink
+	if strings.TrimSpace(openURL) == "" {
+		openURL = "https://hamsaya.af"
+	}
+	storeIOS := s.cfg.StoreURLIOS
+	if strings.TrimSpace(storeIOS) == "" {
+		storeIOS = openURL
+	}
+	storeAndroid := s.cfg.StoreURLAndroid
+	if strings.TrimSpace(storeAndroid) == "" {
+		storeAndroid = openURL
+	}
+	iconHTML := `<span style="font-size:22px;font-weight:bold;color:#2563eb;">Hamsaya</span>`
+	if s.iconURL != "" {
+		iconHTML = fmt.Sprintf(`<img src="%s" width="40" height="40" alt="Hamsaya" style="border-radius:9px;display:block;">`, s.iconURL)
+	}
+
+	const tmpl = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f2ef;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f2ef;padding:24px 12px;"><tr><td align="center">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:512px;">
+    <tr><td style="background:#ffffff;border-radius:10px;padding:24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td align="left">{{ICON}}</td>
+        <td align="right" style="color:#2563eb;font-size:13px;font-weight:bold;">Finish setup</td>
+      </tr></table>
+      <h1 style="font-size:21px;text-align:center;margin:28px 0 8px;">Complete your Hamsaya profile</h1>
+      <p style="text-align:center;color:#555;margin:0 0 24px;font-size:15px;">Add your name, photo and neighborhood so neighbors can recognize you and you get the most out of Hamsaya.</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+        <a href="{{URL}}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:13px 32px;border-radius:24px;display:inline-block;font-weight:bold;font-size:16px;">Complete profile</a>
+      </td></tr></table>
+    </td></tr>
+    <tr><td align="center" style="padding:28px 0 8px;">
+      <p style="color:#2c5d63;font-weight:bold;font-size:16px;margin:0 0 14px;">Get the Hamsaya app</p>
+      <a href="{{STORE_IOS}}" style="text-decoration:none;"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="44" style="height:44px;width:auto;margin:0 5px;vertical-align:middle;"></a>
+      <a href="{{STORE_ANDROID}}" style="text-decoration:none;"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="44" style="height:44px;width:auto;margin:0 5px;vertical-align:middle;"></a>
+    </td></tr>
+    <tr><td style="padding:24px 8px 0;border-top:1px solid #e0e0e0;">
+      <p style="color:#888;font-size:12px;margin:8px 0;">Hi {{NAME}} — you're receiving this because your Hamsaya profile isn't finished yet.</p>
+      <p style="color:#aaa;font-size:12px;margin:8px 0;">&copy; {{YEAR}} Hamsaya</p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`
+
+	htmlBody := strings.NewReplacer(
+		"{{ICON}}", iconHTML,
+		"{{URL}}", template.HTMLEscapeString(openURL),
+		"{{STORE_IOS}}", template.HTMLEscapeString(storeIOS),
+		"{{STORE_ANDROID}}", template.HTMLEscapeString(storeAndroid),
+		"{{NAME}}", template.HTMLEscapeString(name),
+		"{{YEAR}}", strconv.Itoa(time.Now().Year()),
+	).Replace(tmpl)
+
+	return s.sendEmail(email, "Complete your Hamsaya profile", htmlBody)
+}
+
 // sendEmail sends an email using Resend API (if RESEND_API_KEY set) or SMTP.
 // Returns an error if neither is configured so callers can report failure.
 func (s *EmailService) sendEmail(to, subject, htmlBody string) error {
