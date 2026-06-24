@@ -316,9 +316,13 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		}
 	}
 
-	// Create attachments if provided (full Photo or URL-only)
+	// Create attachments if provided (full Photo or URL-only).
+	// Stagger CreatedAt by index so attachments read back in upload order:
+	// reads use ORDER BY created_at ASC, and a shared timestamp would tie and
+	// resolve arbitrarily — dropping the user-chosen cover (index 0) from the
+	// front, which the SELL card relies on as the cover image.
 	if len(req.Attachments) > 0 {
-		for _, raw := range req.Attachments {
+		for i, raw := range req.Attachments {
 			photo, err := models.ParseAttachmentPhoto(raw)
 			if err != nil {
 				s.logger.Warn("Failed to parse attachment", zap.Error(err))
@@ -327,12 +331,13 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 			if photo.URL == "" {
 				continue
 			}
+			attachAt := now.Add(time.Duration(i) * time.Millisecond)
 			attachment := &models.Attachment{
 				ID:        uuid.New().String(),
 				PostID:    postID,
 				Photo:     photo,
-				CreatedAt: now,
-				UpdatedAt: now,
+				CreatedAt: attachAt,
+				UpdatedAt: attachAt,
 			}
 
 			if err := s.postRepo.CreateAttachment(ctx, attachment); err != nil {
@@ -508,9 +513,10 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 	}
 
 	// Add new attachments (same parsing as create: accepts Photo objects or bare URL strings).
+	// Stagger CreatedAt by index to preserve upload/cover order (see create path).
 	if len(req.Attachments) > 0 {
 		now := time.Now()
-		for _, raw := range req.Attachments {
+		for i, raw := range req.Attachments {
 			photo, err := models.ParseAttachmentPhoto(raw)
 			if err != nil {
 				s.logger.Warn("Failed to parse attachment on update", zap.Error(err))
@@ -519,12 +525,13 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 			if photo.URL == "" {
 				continue
 			}
+			attachAt := now.Add(time.Duration(i) * time.Millisecond)
 			attachment := &models.Attachment{
 				ID:        uuid.New().String(),
 				PostID:    postID,
 				Photo:     photo,
-				CreatedAt: now,
-				UpdatedAt: now,
+				CreatedAt: attachAt,
+				UpdatedAt: attachAt,
 			}
 			if err := s.postRepo.CreateAttachment(ctx, attachment); err != nil {
 				s.logger.Error("Failed to create attachment on update",
