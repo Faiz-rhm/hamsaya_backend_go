@@ -402,6 +402,91 @@ func (s *EmailService) SendProfileCompletionEmail(email, name string) error {
 	return s.sendEmail(email, "Complete your Hamsaya profile", htmlBody)
 }
 
+// SendWinbackEmail re-engages a dormant user. Same card style as the unread
+// digest, with a neighborhood-activity hook ("{n} new posts in {province} this
+// week") and an "Open Hamsaya" deep-link CTA. [recentPosts] and [province] may
+// be zero/empty — the copy degrades gracefully.
+func (s *EmailService) SendWinbackEmail(email, name, province string, recentPosts int) error {
+	if strings.TrimSpace(name) == "" {
+		name = "there"
+	}
+	province = strings.TrimSpace(province)
+
+	title := "Your neighborhood missed you"
+	if name != "there" {
+		title = fmt.Sprintf("%s, your neighborhood missed you", name)
+	}
+
+	var summary string
+	switch {
+	case recentPosts > 0 && province != "":
+		summary = fmt.Sprintf("%d new posts in %s this week — see what your neighbors are buying, selling and sharing.", recentPosts, province)
+	case province != "":
+		summary = fmt.Sprintf("There's fresh activity in %s. Jump back in and see what's new.", province)
+	default:
+		summary = "There's fresh activity in your neighborhood. Jump back in and see what's new."
+	}
+
+	openURL := s.cfg.AppLink
+	if strings.TrimSpace(openURL) == "" {
+		openURL = "https://hamsaya.af"
+	}
+	storeIOS := s.cfg.StoreURLIOS
+	if strings.TrimSpace(storeIOS) == "" {
+		storeIOS = openURL
+	}
+	storeAndroid := s.cfg.StoreURLAndroid
+	if strings.TrimSpace(storeAndroid) == "" {
+		storeAndroid = openURL
+	}
+	iconHTML := `<span style="font-size:22px;font-weight:bold;color:#2563eb;">Hamsaya</span>`
+	if s.iconURL != "" {
+		iconHTML = fmt.Sprintf(`<img src="%s" width="40" height="40" alt="Hamsaya" style="border-radius:9px;display:block;">`, s.iconURL)
+	}
+
+	const tmpl = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f2ef;font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f2ef;padding:24px 12px;"><tr><td align="center">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:512px;">
+    <tr><td style="background:#ffffff;border-radius:10px;padding:24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr>
+        <td align="left">{{ICON}}</td>
+        <td align="right" style="color:#2563eb;font-size:13px;font-weight:bold;">We miss you</td>
+      </tr></table>
+      <h1 style="font-size:21px;text-align:center;margin:28px 0 8px;">{{TITLE}}</h1>
+      <p style="text-align:center;color:#555;margin:0 0 24px;font-size:15px;">{{SUMMARY}}</p>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td align="center">
+        <a href="{{URL}}" style="background:#2563eb;color:#ffffff;text-decoration:none;padding:13px 32px;border-radius:24px;display:inline-block;font-weight:bold;font-size:16px;">Open Hamsaya</a>
+      </td></tr></table>
+    </td></tr>
+    <tr><td align="center" style="padding:28px 0 8px;">
+      <p style="color:#2c5d63;font-weight:bold;font-size:16px;margin:0 0 14px;">Get the Hamsaya app</p>
+      <a href="{{STORE_IOS}}" style="text-decoration:none;"><img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store" height="44" style="height:44px;width:auto;margin:0 5px;vertical-align:middle;"></a>
+      <a href="{{STORE_ANDROID}}" style="text-decoration:none;"><img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" height="44" style="height:44px;width:auto;margin:0 5px;vertical-align:middle;"></a>
+    </td></tr>
+    <tr><td style="padding:24px 8px 0;border-top:1px solid #e0e0e0;">
+      <p style="color:#888;font-size:12px;margin:8px 0;">Hi {{NAME}} — you're receiving this because you have a Hamsaya account and haven't visited in a while.</p>
+      <p style="color:#aaa;font-size:12px;margin:8px 0;">&copy; {{YEAR}} Hamsaya</p>
+    </td></tr>
+  </table>
+</td></tr></table>
+</body></html>`
+
+	htmlBody := strings.NewReplacer(
+		"{{ICON}}", iconHTML,
+		"{{TITLE}}", template.HTMLEscapeString(title),
+		"{{SUMMARY}}", template.HTMLEscapeString(summary),
+		"{{URL}}", template.HTMLEscapeString(openURL),
+		"{{STORE_IOS}}", template.HTMLEscapeString(storeIOS),
+		"{{STORE_ANDROID}}", template.HTMLEscapeString(storeAndroid),
+		"{{NAME}}", template.HTMLEscapeString(name),
+		"{{YEAR}}", strconv.Itoa(time.Now().Year()),
+	).Replace(tmpl)
+
+	subject := "Your neighborhood missed you — come back to Hamsaya"
+	return s.sendEmail(email, subject, htmlBody)
+}
+
 // sendEmail sends an email using Resend API (if RESEND_API_KEY set) or SMTP.
 // Returns an error if neither is configured so callers can report failure.
 func (s *EmailService) sendEmail(to, subject, htmlBody string) error {
