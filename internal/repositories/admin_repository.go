@@ -214,16 +214,60 @@ func (r *adminRepository) GetUserAnalytics(ctx context.Context, period string) (
 		analytics.GrowthData = append(analytics.GrowthData, data)
 	}
 	
-	countQuery := `
-		SELECT 
-			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) as total_users,
-			(SELECT COUNT(DISTINCT user_id) FROM posts WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '30 days') as active_users
+	// "Active users" = users who actually USED the app in the period, not just
+	// those who posted. Union of all engagement signals (posts, likes, comments,
+	// messages) plus explicit logins, so browsers/likers/chatters are counted,
+	// not only authors. Built once as a CTE and reused for the total + the
+	// daily-active time series.
+	activityCTE := fmt.Sprintf(`
+		WITH activity AS (
+			SELECT user_id AS uid, DATE(created_at) AS d FROM posts
+				WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '%[1]s'
+			UNION ALL
+			SELECT user_id, DATE(created_at) FROM post_likes
+				WHERE created_at >= CURRENT_DATE - INTERVAL '%[1]s'
+			UNION ALL
+			SELECT user_id, DATE(created_at) FROM post_comments
+				WHERE created_at >= CURRENT_DATE - INTERVAL '%[1]s'
+			UNION ALL
+			SELECT sender_id, DATE(created_at) FROM messages
+				WHERE deleted_at IS NULL AND created_at >= CURRENT_DATE - INTERVAL '%[1]s'
+			UNION ALL
+			SELECT id, DATE(last_login_at) FROM users
+				WHERE deleted_at IS NULL AND last_login_at >= CURRENT_DATE - INTERVAL '%[1]s'
+		)`, interval)
+
+	// Daily active users over the period.
+	dauRows, err := r.db.Pool.Query(ctx, activityCTE+`
+		SELECT d, COUNT(DISTINCT uid) FROM activity
+		WHERE uid IS NOT NULL
+		GROUP BY d ORDER BY d
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer dauRows.Close()
+	for dauRows.Next() {
+		var data models.TimeSeriesData
+		var date time.Time
+		if err := dauRows.Scan(&date, &data.Count); err != nil {
+			return nil, err
+		}
+		data.Date = date.Format("2006-01-02")
+		analytics.ActiveUsersData = append(analytics.ActiveUsersData, data)
+	}
+
+	// Total users + distinct active users over the whole period.
+	countQuery := activityCTE + `
+		SELECT
+			(SELECT COUNT(*) FROM users WHERE deleted_at IS NULL) AS total_users,
+			(SELECT COUNT(DISTINCT uid) FROM activity WHERE uid IS NOT NULL) AS active_users
 	`
 	err = r.db.Pool.QueryRow(ctx, countQuery).Scan(&analytics.TotalUsers, &analytics.ActiveUsers)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return analytics, nil
 }
 

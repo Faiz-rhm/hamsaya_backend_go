@@ -88,7 +88,8 @@ func (s *RelationshipsService) FollowUser(ctx context.Context, followerID, follo
 				actorAvatarColor = *actor.AvatarColor
 			}
 			title := strings.TrimSpace(actorName + " started following you")
-			msg := title
+			// Distinct body so the banner / in-app row doesn't repeat the title.
+			msg := "Tap to view their profile"
 			data := map[string]interface{}{
 				"actor_id":           followerID,
 				"actor_name":         actorName,
