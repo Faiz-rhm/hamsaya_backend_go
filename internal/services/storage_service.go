@@ -11,6 +11,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/hamsaya/backend/config"
@@ -259,6 +260,24 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 // maxPostVideoSize is the max size for post video uploads (50MB).
 const maxPostVideoSize = 50 * 1024 * 1024
 
+// maxPostAudioSize is the max size for voice message audio uploads (10MB).
+const maxPostAudioSize = 10 * 1024 * 1024
+
+// allowedAudioMimes is the allowlist of audio MIME types accepted for voice
+// messages. Unlike video, we trust the client-declared type here because
+// audio files are not rendered by browsers as images and carry no executable
+// MIME confusion risk via CDN; size limit is the primary defence.
+var allowedAudioMimes = map[string]struct{}{
+	"audio/mp4":   {},
+	"audio/x-m4a": {},
+	"audio/aac":   {},
+	"audio/mpeg":  {}, // mp3
+	"audio/ogg":   {},
+	"audio/webm":  {},
+	"audio/wav":   {},
+	"audio/x-wav": {},
+}
+
 // allowedVideoMimes is the strict allowlist of MIME types we re-derive from
 // the file's first 512 bytes via http.DetectContentType. The client-supplied
 // Content-Type is treated as a hint only — never as the authoritative type.
@@ -267,6 +286,12 @@ var allowedVideoMimes = map[string]struct{}{
 	"video/quicktime": {},
 	"video/webm":      {},
 	"video/x-m4v":     {}, // some encoders mislabel mp4 as m4v; same container.
+}
+
+// isAudioContentType returns true if contentType is an audio type (e.g. "audio/mp4").
+func isAudioContentType(contentType string) bool {
+	base := strings.TrimSpace(strings.Split(contentType, ";")[0])
+	return strings.HasPrefix(base, "audio/")
 }
 
 // isVideoContentType returns true if contentType is a video type (e.g. "video/mp4").
@@ -294,6 +319,24 @@ func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipar
 	contentType := header.Header.Get("Content-Type")
 	if contentType == "" {
 		contentType = "application/octet-stream"
+	}
+
+	// If client sent a generic octet-stream, infer audio type from the file
+	// extension. Dio's MultipartFile.fromFileSync may omit Content-Type for
+	// certain audio extensions on some platforms.
+	if contentType == "application/octet-stream" {
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		audioExtMimes := map[string]string{
+			".m4a":  "audio/x-m4a",
+			".aac":  "audio/aac",
+			".mp3":  "audio/mpeg",
+			".ogg":  "audio/ogg",
+			".wav":  "audio/wav",
+			".webm": "audio/webm",
+		}
+		if m, ok := audioExtMimes[ext]; ok {
+			contentType = m
+		}
 	}
 
 	if isVideoContentType(contentType) {
@@ -350,6 +393,44 @@ func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipar
 			Size:     result.Size,
 			Width:    result.Width,
 			Height:   result.Height,
+			MimeType: result.MimeType,
+		}, nil
+	}
+
+	// Audio (voice messages): store raw, 10MB cap, allowlist-validated MIME.
+	if isAudioContentType(contentType) {
+		mimeBase := strings.ToLower(strings.TrimSpace(strings.Split(contentType, ";")[0]))
+		if _, ok := allowedAudioMimes[mimeBase]; !ok {
+			return nil, utils.NewBadRequestError("Unsupported audio format", nil)
+		}
+		limited := io.LimitReader(file, maxPostAudioSize+1)
+		data, err := io.ReadAll(limited)
+		if err != nil {
+			return nil, utils.NewBadRequestError("Failed to read audio file", err)
+		}
+		if int64(len(data)) > maxPostAudioSize {
+			return nil, utils.NewBadRequestError("Audio file size exceeds 10MB limit", nil)
+		}
+		size := int64(len(data))
+		var result *storage.UploadResult
+		if s.client != nil {
+			result, err = s.client.UploadFile(ctx, bytes.NewReader(data), size, mimeBase, string(ImageTypePost), header.Filename)
+			if err != nil {
+				s.logger.Error("Failed to upload audio to storage", zap.Error(err))
+				return nil, utils.NewInternalError("Failed to upload audio", err)
+			}
+		} else {
+			result = &storage.UploadResult{
+				URL:      fmt.Sprintf("https://storage.hamsaya.local/uploads/post/%s", header.Filename),
+				Key:      "post/" + header.Filename,
+				Size:     size,
+				MimeType: mimeBase,
+			}
+		}
+		return &models.Photo{
+			URL:      result.URL,
+			Name:     header.Filename,
+			Size:     result.Size,
 			MimeType: result.MimeType,
 		}, nil
 	}
