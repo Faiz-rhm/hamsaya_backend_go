@@ -11,6 +11,8 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -313,6 +315,81 @@ func detectVideoMime(head []byte) string {
 	return ""
 }
 
+// ffmpegFaststart rewrites an MP4 in-memory so the moov atom is at the front,
+// allowing the player to start decoding immediately without downloading the
+// whole file. Returns original data unchanged if ffmpeg is unavailable or fails.
+func ffmpegFaststart(data []byte) []byte {
+	in, err := os.CreateTemp("", "vid-in-*.mp4")
+	if err != nil {
+		return data
+	}
+	defer os.Remove(in.Name())
+	if _, err := in.Write(data); err != nil {
+		in.Close()
+		return data
+	}
+	in.Close()
+
+	out, err := os.CreateTemp("", "vid-out-*.mp4")
+	if err != nil {
+		return data
+	}
+	outName := out.Name()
+	out.Close()
+	defer os.Remove(outName)
+
+	if err := exec.Command("ffmpeg", "-y", "-i", in.Name(), "-c", "copy", "-movflags", "+faststart", outName).Run(); err != nil {
+		return data
+	}
+	processed, err := os.ReadFile(outName)
+	if err != nil || len(processed) == 0 {
+		return data
+	}
+	return processed
+}
+
+// ffmpegThumbnail extracts a JPEG thumbnail from the first second of a video.
+// Returns nil if ffmpeg is unavailable or extraction fails.
+func ffmpegThumbnail(data []byte) []byte {
+	in, err := os.CreateTemp("", "vid-thumb-in-*.mp4")
+	if err != nil {
+		return nil
+	}
+	defer os.Remove(in.Name())
+	if _, err := in.Write(data); err != nil {
+		in.Close()
+		return nil
+	}
+	in.Close()
+
+	thumb, err := os.CreateTemp("", "vid-thumb-*.jpg")
+	if err != nil {
+		return nil
+	}
+	thumbName := thumb.Name()
+	thumb.Close()
+	defer os.Remove(thumbName)
+
+	// Seek to 1s (or 0 if < 1s). Scale to 720px wide keeping aspect ratio.
+	if err := exec.Command(
+		"ffmpeg", "-y", "-ss", "00:00:01", "-i", in.Name(),
+		"-vframes", "1", "-vf", "scale=720:-2", "-q:v", "3", thumbName,
+	).Run(); err != nil {
+		// Fallback: grab very first frame
+		if err2 := exec.Command(
+			"ffmpeg", "-y", "-i", in.Name(),
+			"-vframes", "1", "-vf", "scale=720:-2", "-q:v", "3", thumbName,
+		).Run(); err2 != nil {
+			return nil
+		}
+	}
+	thumbData, err := os.ReadFile(thumbName)
+	if err != nil || len(thumbData) == 0 {
+		return nil
+	}
+	return thumbData
+}
+
 // UploadPostAttachment uploads an image or video for a post. Images are limited to 10MB and processed;
 // videos are limited to 50MB and stored as-is.
 func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipart.File, header *multipart.FileHeader) (*models.Photo, error) {
@@ -369,6 +446,13 @@ func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipar
 		// Use the SERVER-DERIVED type for storage and metadata so attackers
 		// can't poison the CDN response Content-Type.
 		contentType = detected
+
+		// Move moov atom to the front of the MP4 so players can start decoding
+		// immediately without downloading the whole file (graceful no-op if
+		// ffmpeg is absent).
+		data = ffmpegFaststart(data)
+		size = int64(len(data))
+
 		var result *storage.UploadResult
 		if s.client != nil {
 			result, err = s.client.UploadFile(ctx, bytes.NewReader(data), size, contentType, string(ImageTypePost), header.Filename)
@@ -387,14 +471,32 @@ func (s *StorageService) UploadPostAttachment(ctx context.Context, file multipar
 				Height:   0,
 			}
 		}
-		return &models.Photo{
+
+		photo := &models.Photo{
 			URL:      result.URL,
 			Name:     header.Filename,
 			Size:     result.Size,
 			Width:    result.Width,
 			Height:   result.Height,
 			MimeType: result.MimeType,
-		}, nil
+		}
+
+		// Extract first-frame thumbnail so the mobile client can show a poster
+		// image while the video initialises (eliminates the black-screen flash).
+		if thumbData := ffmpegThumbnail(data); thumbData != nil && s.client != nil {
+			thumbName := "thumb-" + header.Filename + ".jpg"
+			thumbResult, thumbErr := s.client.UploadFile(
+				ctx, bytes.NewReader(thumbData), int64(len(thumbData)),
+				"image/jpeg", string(ImageTypePost), thumbName,
+			)
+			if thumbErr == nil {
+				photo.ThumbURL = thumbResult.URL
+			} else {
+				s.logger.Warn("Video thumbnail upload failed", zap.Error(thumbErr))
+			}
+		}
+
+		return photo, nil
 	}
 
 	// Audio (voice messages): store raw, 10MB cap, allowlist-validated MIME.

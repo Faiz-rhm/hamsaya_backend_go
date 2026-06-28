@@ -46,7 +46,8 @@ RUN apk --no-cache add \
     ca-certificates \
     tzdata \
     curl \
-    wget
+    wget \
+    ffmpeg
 
 # Set timezone
 ENV TZ=UTC
