@@ -10,6 +10,7 @@ const (
 	MessageTypeImage    MessageType = "IMAGE"
 	MessageTypeFile     MessageType = "FILE"
 	MessageTypeLocation MessageType = "LOCATION"
+	MessageTypeVoice    MessageType = "VOICE"
 )
 
 // Conversation represents a chat conversation between two users (optionally

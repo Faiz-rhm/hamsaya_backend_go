@@ -52,10 +52,10 @@ func NewChatService(
 func (s *ChatService) SendMessage(ctx context.Context, senderID string, req *models.SendMessageRequest) (*models.MessageResponse, error) {
 	// Validate message type — accept TEXT, IMAGE, FILE, LOCATION.
 	switch req.MessageType {
-	case models.MessageTypeText, models.MessageTypeImage, models.MessageTypeFile, models.MessageTypeLocation:
+	case models.MessageTypeText, models.MessageTypeImage, models.MessageTypeFile, models.MessageTypeLocation, models.MessageTypeVoice:
 		// valid
 	default:
-		return nil, utils.NewBadRequestError("message_type must be one of: TEXT IMAGE FILE LOCATION", nil)
+		return nil, utils.NewBadRequestError("message_type must be one of: TEXT IMAGE FILE LOCATION VOICE", nil)
 	}
 
 	// Validate message content
@@ -618,6 +618,8 @@ func (s *ChatService) notifyMessageSent(message *models.Message, recipientID str
 		preview = "📍 Location"
 	case models.MessageTypeFile:
 		preview = "📎 File"
+	case models.MessageTypeVoice:
+		preview = "🎤 Voice message"
 	default:
 		if message.Content != nil && *message.Content != "" {
 			c := *message.Content
