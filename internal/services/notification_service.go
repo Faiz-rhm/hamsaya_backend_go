@@ -711,8 +711,15 @@ func (s *NotificationService) sendPushNotification(ctx context.Context, notifica
 		ChannelID: channelForType(notification.Type),
 	}
 
+	// iOS is APNs-only: if the user has any native APNs token the device is an
+	// iPhone, and also sending via FCM (Firebase relays to the same APNs) would
+	// deliver every push twice. So APNs takes precedence — only fall back to FCM
+	// when no APNs token exists (i.e. an Android device, or a legacy iOS session
+	// from before the direct-APNs migration that hasn't re-registered yet).
+	if s.sendViaAPNs(ctx, notification, payload) {
+		return
+	}
 	s.sendViaFCM(ctx, notification, payload)
-	s.sendViaAPNs(ctx, notification, payload)
 }
 
 // sendViaFCM pushes to the user's FCM tokens (Android, plus any legacy iOS
@@ -761,16 +768,21 @@ func (s *NotificationService) sendViaFCM(ctx context.Context, notification *mode
 
 // sendViaAPNs pushes to the user's native APNs device tokens (iOS). This is the
 // Afghanistan-safe path: it reaches Apple directly with no Google dependency.
-func (s *NotificationService) sendViaAPNs(ctx context.Context, notification *models.Notification, payload *fcmclient.PushPayload) {
+// Returns true when the user has at least one APNs token (i.e. an iOS device),
+// so the caller can skip the FCM path and avoid double-delivery.
+func (s *NotificationService) sendViaAPNs(ctx context.Context, notification *models.Notification, payload *fcmclient.PushPayload) bool {
 	if s.apnsClient == nil {
-		return
+		return false
 	}
 
 	key := apnsTokensPrefix + notification.UserID
 	tokens, err := s.redisClient.SMembers(ctx, key).Result()
 	if err != nil {
 		s.logger.Warn("Failed to get APNs tokens", zap.Error(err), zap.String("user_id", notification.UserID))
-		return
+		return false
+	}
+	if len(tokens) == 0 {
+		return false
 	}
 
 	for _, token := range tokens {
@@ -793,4 +805,6 @@ func (s *NotificationService) sendViaAPNs(ctx context.Context, notification *mod
 			zap.String("user_id", notification.UserID),
 			zap.String("notification_id", notification.ID))
 	}
+	// User has an iOS device — caller must NOT also send via FCM (would dupe).
+	return true
 }
