@@ -1594,6 +1594,7 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 	actorName := ""
 	var actorAvatar interface{}
 	var actorAvatarColor string
+	var posterProvince, posterDistrict, posterNeighborhood string
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, posterUserID); err == nil {
 		if name := actor.FullName(); name != "" {
 			actorName = name
@@ -1601,6 +1602,15 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 		actorAvatar = actor.Avatar
 		if actor.AvatarColor != nil && *actor.AvatarColor != "" {
 			actorAvatarColor = *actor.AvatarColor
+		}
+		if actor.Province != nil {
+			posterProvince = *actor.Province
+		}
+		if actor.District != nil {
+			posterDistrict = *actor.District
+		}
+		if actor.Neighborhood != nil {
+			posterNeighborhood = *actor.Neighborhood
 		}
 	}
 
@@ -1674,11 +1684,48 @@ func (s *PostService) notifyFollowersOfNewPost(ctx context.Context, postID, post
 			zap.Int("count", len(followerIDs)))
 	}
 
-	sent := 0
-	for _, recipientID := range followerIDs {
-		if recipientID == posterUserID {
-			continue
+	// Recipient set: followers plus, for personal (non-business) posts, everyone
+	// in the poster's neighborhood. Using a set guarantees a neighbor who also
+	// follows the poster receives exactly one notification.
+	recipients := make(map[string]struct{}, len(followerIDs))
+	for _, id := range followerIDs {
+		if id != "" && id != posterUserID {
+			recipients[id] = struct{}{}
 		}
+	}
+
+	if (businessID == nil || *businessID == "") && strings.TrimSpace(posterNeighborhood) != "" {
+		neighborCount := 0
+		offset := 0
+		for {
+			ids, err := s.userRepo.GetUserIDsByNeighborhood(ctx, posterProvince, posterDistrict, posterNeighborhood, posterUserID, _newPostNotifyBatchSize, offset)
+			if err != nil {
+				s.logger.Warn("GetUserIDsByNeighborhood failed",
+					zap.String("poster_user_id", posterUserID), zap.Error(err))
+				break
+			}
+			if len(ids) == 0 {
+				break
+			}
+			for _, id := range ids {
+				if id != "" && id != posterUserID {
+					recipients[id] = struct{}{}
+				}
+			}
+			neighborCount += len(ids)
+			if len(ids) < _newPostNotifyBatchSize {
+				break
+			}
+			offset += _newPostNotifyBatchSize
+		}
+		s.logger.Info("New post: neighborhood members loaded",
+			zap.String("post_id", postID),
+			zap.String("neighborhood", posterNeighborhood),
+			zap.Int("count", neighborCount))
+	}
+
+	sent := 0
+	for recipientID := range recipients {
 		_, err := s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
 			UserID:  recipientID,
 			Type:    models.NotificationTypeNewPost,

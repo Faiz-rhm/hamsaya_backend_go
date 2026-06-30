@@ -80,8 +80,11 @@ func main() {
 	userRepo := repositories.NewUserRepository(db)
 	notifSvc := services.NewNotificationService(notificationRepo, settingsRepo, userRepo, fcmClient, redisClient, nil, logger)
 	emailSvc := services.NewEmailService(&cfg.Email, logger)
+	jwtSvc := services.NewJWTService(&cfg.JWT)
+	tokenStorage := services.NewTokenStorageService(redisClient, logger)
 	engagement := services.NewEngagementService(db, notifSvc, logger).
-		WithEmail(emailSvc, redisClient)
+		WithEmail(emailSvc, redisClient).
+		WithVerification(tokenStorage, jwtSvc)
 
 	if err := engagement.RunHourly(ctx); err != nil {
 		logger.Error("engagement run failed", zap.Error(err))

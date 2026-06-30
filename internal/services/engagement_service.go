@@ -26,7 +26,17 @@ type EngagementService struct {
 	// Optional — set via WithEmail to enable the unread-activity digest email.
 	email *EmailService
 	rdb   *redis.Client
+
+	// Optional — set via WithVerification to enable the unverified-account
+	// reminder job (needs to mint + store a fresh verification code).
+	jwt        *JWTService
+	tokenStore *TokenStorageService
 }
+
+// _maxVerifyReminders caps lifetime verification-reminder emails per user, so
+// an undeliverable (but format-valid) address bounces a few times at most
+// rather than every 3 days for the whole eligibility window.
+const _maxVerifyReminders = 3
 
 // NewEngagementService constructs an EngagementService.
 func NewEngagementService(db *database.DB, notif *NotificationService, logger *zap.Logger) *EngagementService {
@@ -42,6 +52,15 @@ func (s *EngagementService) WithEmail(email *EmailService, rdb *redis.Client) *E
 	return s
 }
 
+// WithVerification enables the unverified-account reminder job, which emails a
+// fresh verification code to users who registered but never verified. Requires
+// WithEmail too (for the EmailService + Redis dedup). No-op without it.
+func (s *EngagementService) WithVerification(tokenStore *TokenStorageService, jwt *JWTService) *EngagementService {
+	s.tokenStore = tokenStore
+	s.jwt = jwt
+	return s
+}
+
 // RunHourly runs every re-engagement job once. Intended to be invoked hourly.
 // Each job logs and swallows its own errors so one failure doesn't block the
 // others; the returned error is always nil to keep scheduler callers simple.
@@ -51,16 +70,117 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 	sx := s.sendSellExpiring(ctx)
 	ud := s.sendUnreadDigest(ctx)
 	pc := s.sendProfileCompletion(ctx)
-	if ev+wb+sx+ud+pc > 0 {
+	vr := s.sendVerificationReminder(ctx)
+	if ev+wb+sx+ud+pc+vr > 0 {
 		s.logger.Info("engagement run complete",
 			zap.Int("event_reminders", ev),
 			zap.Int("winback", wb),
 			zap.Int("sell_expiring", sx),
 			zap.Int("unread_digest", ud),
 			zap.Int("profile_completion", pc),
+			zap.Int("verification_reminder", vr),
 		)
 	}
 	return nil
+}
+
+// sendVerificationReminder emails a fresh verification code to users who
+// registered but never verified their email (users.email_verified = false). It
+// targets accounts that finished their profile (so we never send OTPs to
+// abandoned skeleton accounts — same rule as on-demand verification), are
+// between 1 hour and 30 days old (grace after signup; stop nagging stale
+// accounts), and excludes Apple "Hide My Email" placeholders that can't receive
+// mail. Deduped to at most once per 3 days. No-op unless WithEmail +
+// WithVerification are wired.
+func (s *EngagementService) sendVerificationReminder(ctx context.Context) int {
+	if s.email == nil || s.rdb == nil || s.jwt == nil || s.tokenStore == nil {
+		return 0
+	}
+
+	const query = `
+		SELECT u.id, u.email,
+		       COALESCE(NULLIF(TRIM(pr.first_name), ''), '') AS first_name
+		FROM users u
+		JOIN profiles pr ON pr.id = u.id
+		WHERE u.deleted_at IS NULL
+		  AND u.email_verified = false
+		  AND u.email NOT LIKE '%@no-email.hamsaya.af'
+		  AND pr.is_complete = true
+		  AND u.created_at < now() - interval '1 hour'
+		  AND u.created_at > now() - interval '30 days'
+		LIMIT 500
+	`
+
+	rows, err := s.db.Pool.Query(ctx, query)
+	if err != nil {
+		s.logger.Error("verification reminder query failed", zap.Error(err))
+		return 0
+	}
+	defer rows.Close()
+
+	type target struct{ userID, email, firstName string }
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.userID, &t.email, &t.firstName); err != nil {
+			s.logger.Error("scan verification reminder row", zap.Error(err))
+			continue
+		}
+		targets = append(targets, t)
+	}
+
+	sent := 0
+	for _, t := range targets {
+		// Hard cap on lifetime reminders per user. Format-valid addresses can
+		// still be undeliverable (typos like @gmial.com); Resend accepts the
+		// send and bounces asynchronously, so we never see the error and would
+		// otherwise retry every 3 days for the whole 30-day window (~10 bounces).
+		// Stopping after a few attempts protects domain sending reputation.
+		countKey := "engagement:verify-reminder:count:" + t.userID
+		if n, err := s.rdb.Get(ctx, countKey).Int(); err == nil && n >= _maxVerifyReminders {
+			continue
+		}
+
+		// Spacing: at most one verification reminder per user per 3 days.
+		spaceKey := "engagement:verify-reminder:" + t.userID
+		ok, err := s.rdb.SetNX(ctx, spaceKey, "1", 3*24*time.Hour).Result()
+		if err != nil {
+			s.logger.Warn("verification reminder dedup failed", zap.String("user_id", t.userID), zap.Error(err))
+			continue
+		}
+		if !ok {
+			continue
+		}
+
+		code, err := s.jwt.GenerateVerificationCode()
+		if err != nil {
+			s.logger.Error("generate verification code", zap.String("user_id", t.userID), zap.Error(err))
+			_ = s.rdb.Del(ctx, spaceKey).Err()
+			continue
+		}
+		if err := s.tokenStore.StoreVerificationToken(ctx, t.userID, code, 24*time.Hour); err != nil {
+			s.logger.Error("store verification token", zap.String("user_id", t.userID), zap.Error(err))
+			_ = s.rdb.Del(ctx, spaceKey).Err()
+			continue
+		}
+
+		name := t.firstName
+		if name == "" {
+			name = t.email
+		}
+		if err := s.email.SendVerificationEmail(t.email, name, code); err != nil {
+			s.logger.Error("send verification reminder email", zap.String("user_id", t.userID), zap.Error(err))
+			_ = s.rdb.Del(ctx, spaceKey).Err()
+			continue
+		}
+		// Count only successful sends; keep the counter well past the 30-day
+		// eligibility window so the cap can't be reset by it expiring.
+		if n, err := s.rdb.Incr(ctx, countKey).Result(); err == nil && n == 1 {
+			_ = s.rdb.Expire(ctx, countKey, 60*24*time.Hour).Err()
+		}
+		sent++
+	}
+	return sent
 }
 
 // sendProfileCompletion emails users who haven't finished their profile

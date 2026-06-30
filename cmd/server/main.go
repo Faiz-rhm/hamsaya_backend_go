@@ -354,7 +354,8 @@ func main() {
 	// Proactive re-engagement jobs (event reminders, dormant win-back, sell
 	// expiring-soon). Scheduled hourly + leader-elected below.
 	engagementService := services.NewEngagementService(db, notificationService, logger).
-		WithEmail(emailService, redisClient)
+		WithEmail(emailService, redisClient).
+		WithVerification(tokenStorage, jwtService)
 
 	// Initialize middleware
 	sugaredLogger.Info("Initializing middleware...")

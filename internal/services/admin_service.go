@@ -244,10 +244,10 @@ func (s *AdminService) SuspendUser(ctx context.Context, userID string, days int,
 	// Notify the user that their account was suspended.
 	if s.notificationService != nil {
 		title := "Your account has been suspended"
-		msg := reason
-		if msg == "" {
-			msg = "Your account has been suspended for " + fmt.Sprintf("%d days", days)
-		}
+		// User-facing message stays generic — the admin's free-text reason is an
+		// internal note (e.g. "Suspended via admin panel") and is kept only in
+		// the audit log + notification data, not shown to the user.
+		msg := fmt.Sprintf("Your account has been suspended for %d days.", days)
 		_, _ = s.notificationService.CreateNotification(context.WithoutCancel(ctx), &models.CreateNotificationRequest{
 			UserID:  userID,
 			Type:    models.NotificationTypeAccountSuspended,

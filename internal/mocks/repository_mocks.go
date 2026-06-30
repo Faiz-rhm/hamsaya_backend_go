@@ -112,6 +112,14 @@ func (m *MockUserRepository) GetProfilesByUserIDs(ctx context.Context, userIDs [
 	return args.Get(0).([]*models.Profile), args.Error(1)
 }
 
+func (m *MockUserRepository) GetUserIDsByNeighborhood(ctx context.Context, province, district, neighborhood, excludeUserID string, limit, offset int) ([]string, error) {
+	args := m.Called(ctx, province, district, neighborhood, excludeUserID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 func (m *MockUserRepository) UpdateProfile(ctx context.Context, profile *models.Profile) error {
 	args := m.Called(ctx, profile)
 	return args.Error(0)

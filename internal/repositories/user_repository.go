@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hamsaya/backend/internal/models"
@@ -35,6 +36,10 @@ type UserRepository interface {
 	GetProfileByUserID(ctx context.Context, userID string) (*models.Profile, error)
 	GetProfileByUserIDIncludingDeleted(ctx context.Context, userID string) (*models.Profile, error)
 	GetProfilesByUserIDs(ctx context.Context, userIDs []string) ([]*models.Profile, error)
+	// GetUserIDsByNeighborhood returns active profile IDs that share the given
+	// province/district/neighborhood (case-insensitive), excluding excludeUserID.
+	// Used to notify neighbors when someone posts in their area.
+	GetUserIDsByNeighborhood(ctx context.Context, province, district, neighborhood, excludeUserID string, limit, offset int) ([]string, error)
 	UpdateProfile(ctx context.Context, profile *models.Profile) error
 
 	// Transactional operations
@@ -552,6 +557,44 @@ func (r *userRepository) GetProfilesByUserIDs(ctx context.Context, userIDs []str
 	}
 
 	return profiles, rows.Err()
+}
+
+// GetUserIDsByNeighborhood returns active profile IDs in the same
+// province/district/neighborhood (case-insensitive, trimmed), excluding the
+// poster. neighborhood must be non-empty; province/district narrow the match so
+// identically named neighborhoods in different areas don't collide.
+func (r *userRepository) GetUserIDsByNeighborhood(ctx context.Context, province, district, neighborhood, excludeUserID string, limit, offset int) ([]string, error) {
+	if strings.TrimSpace(neighborhood) == "" {
+		return []string{}, nil
+	}
+
+	query := `
+		SELECT id
+		FROM profiles
+		WHERE deleted_at IS NULL
+			AND id <> $1
+			AND neighborhood IS NOT NULL AND TRIM(LOWER(neighborhood)) = TRIM(LOWER($2))
+			AND province IS NOT NULL AND TRIM(LOWER(province)) = TRIM(LOWER($3))
+			AND district IS NOT NULL AND TRIM(LOWER(district)) = TRIM(LOWER($4))
+		ORDER BY id
+		LIMIT $5 OFFSET $6
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, excludeUserID, neighborhood, province, district, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user ids by neighborhood: %w", err)
+	}
+	defer rows.Close()
+
+	ids := make([]string, 0, limit)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan neighborhood user id: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // GetProfileByUserIDIncludingDeleted retrieves a profile by user ID, including soft-deleted
