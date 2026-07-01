@@ -24,8 +24,9 @@ const (
 	NotificationTypeSellExpired    NotificationType = "SELL_EXPIRED"
 
 	// Re-engagement (scheduled, proactive)
-	NotificationTypeEventReminder NotificationType = "EVENT_REMINDER" // T-24h / T-1h before an RSVP'd event
-	NotificationTypeWinback       NotificationType = "WINBACK"        // dormant-user bring-back
+	NotificationTypeEventReminder  NotificationType = "EVENT_REMINDER"   // T-24h / T-1h before an RSVP'd event
+	NotificationTypeWinback        NotificationType = "WINBACK"          // dormant-user bring-back
+	NotificationTypeFirstPostNudge NotificationType = "FIRST_POST_NUDGE" // encourage users who never posted
 
 	// Account / security
 	NotificationTypeWelcome            NotificationType = "WELCOME"

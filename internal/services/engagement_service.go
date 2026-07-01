@@ -71,7 +71,8 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 	ud := s.sendUnreadDigest(ctx)
 	pc := s.sendProfileCompletion(ctx)
 	vr := s.sendVerificationReminder(ctx)
-	if ev+wb+sx+ud+pc+vr > 0 {
+	fp := s.sendFirstPostNudge(ctx)
+	if ev+wb+sx+ud+pc+vr+fp > 0 {
 		s.logger.Info("engagement run complete",
 			zap.Int("event_reminders", ev),
 			zap.Int("winback", wb),
@@ -79,9 +80,98 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 			zap.Int("unread_digest", ud),
 			zap.Int("profile_completion", pc),
 			zap.Int("verification_reminder", vr),
+			zap.Int("first_post_nudge", fp),
 		)
 	}
 	return nil
+}
+
+// _maxFirstPostNudges caps lifetime first-post nudges per user so someone who
+// simply prefers to lurk isn't nagged forever.
+const _maxFirstPostNudges = 3
+
+// sendFirstPostNudge pushes an in-app + push nudge to users who have never
+// created a post, encouraging them to share their first one. Targets verified
+// accounts aged 2–7 days (past the initial signup rush, before they go cold),
+// with zero non-deleted posts. Deduped to once per 3 days and capped at
+// _maxFirstPostNudges total — both enforced in SQL against the notifications
+// table (same approach as winback), so it's safe to run hourly.
+func (s *EngagementService) sendFirstPostNudge(ctx context.Context) int {
+	if s.notif == nil {
+		return 0
+	}
+
+	const query = `
+		SELECT u.id,
+		       COALESCE(NULLIF(TRIM(pr.first_name), ''), '') AS first_name,
+		       COALESCE(NULLIF(TRIM(pr.province), ''), '')   AS province
+		FROM users u
+		JOIN profiles pr ON pr.id = u.id
+		WHERE u.deleted_at IS NULL
+		  AND u.email_verified = true
+		  AND u.created_at BETWEEN NOW() - INTERVAL '7 days' AND NOW() - INTERVAL '2 days'
+		  AND NOT EXISTS (
+			SELECT 1 FROM posts p WHERE p.user_id = u.id AND p.deleted_at IS NULL
+		  )
+		  AND (
+			SELECT COUNT(*) FROM notifications n
+			WHERE n.user_id = u.id AND n.type = 'FIRST_POST_NUDGE'
+		  ) < $1
+		  AND NOT EXISTS (
+			SELECT 1 FROM notifications n
+			WHERE n.user_id = u.id
+			  AND n.type = 'FIRST_POST_NUDGE'
+			  AND n.created_at > NOW() - INTERVAL '3 days'
+		  )
+		ORDER BY u.created_at ASC
+		LIMIT 500
+	`
+
+	rows, err := s.db.Pool.Query(ctx, query, _maxFirstPostNudges)
+	if err != nil {
+		s.logger.Error("first-post nudge query failed", zap.Error(err))
+		return 0
+	}
+	defer rows.Close()
+
+	type target struct{ userID, firstName, province string }
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.userID, &t.firstName, &t.province); err != nil {
+			s.logger.Error("scan first-post nudge row", zap.Error(err))
+			continue
+		}
+		targets = append(targets, t)
+	}
+
+	sent := 0
+	for _, t := range targets {
+		title := "Share your first post"
+		if t.firstName != "" {
+			title = fmt.Sprintf("%s, share your first post", t.firstName)
+		}
+		msg := "Your neighbors are waiting — post something and start the conversation."
+		if t.province != "" {
+			msg = fmt.Sprintf("See what's happening in %s — share your first post with your neighbors.", t.province)
+		}
+
+		if _, err := s.notif.CreateNotification(ctx, &models.CreateNotificationRequest{
+			UserID:  t.userID,
+			Type:    models.NotificationTypeFirstPostNudge,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"type":   string(models.NotificationTypeFirstPostNudge),
+				"action": "open_composer",
+			},
+		}); err != nil {
+			s.logger.Error("create first-post nudge", zap.String("user_id", t.userID), zap.Error(err))
+			continue
+		}
+		sent++
+	}
+	return sent
 }
 
 // sendVerificationReminder emails a fresh verification code to users who
