@@ -19,6 +19,9 @@ type NotificationRepository interface {
 	List(ctx context.Context, filter *models.GetNotificationsFilter) ([]*models.Notification, error)
 	MarkAsRead(ctx context.Context, notificationID string) error
 	MarkAllAsRead(ctx context.Context, userID string) error
+	// MarkMessageNotificationsReadByConversation marks a user's unread MESSAGE
+	// notifications for a conversation as read. Returns rows updated.
+	MarkMessageNotificationsReadByConversation(ctx context.Context, userID, conversationID string) (int64, error)
 	Delete(ctx context.Context, notificationID string) error
 
 	// Unread count. When businessID is set, count only notifications for that business.
@@ -223,6 +226,27 @@ func (r *notificationRepository) MarkAllAsRead(ctx context.Context, userID strin
 	}
 
 	return nil
+}
+
+// MarkMessageNotificationsReadByConversation marks all unread MESSAGE
+// notifications belonging to the user for a given conversation as read. The
+// conversation id lives in the notification's JSONB data. Returns the number of
+// rows updated so callers can skip cache invalidation when nothing changed.
+func (r *notificationRepository) MarkMessageNotificationsReadByConversation(ctx context.Context, userID, conversationID string) (int64, error) {
+	query := `
+		UPDATE notifications
+		SET read = true
+		WHERE user_id = $1
+		  AND read = false
+		  AND type = 'MESSAGE'
+		  AND data->>'conversation_id' = $2
+	`
+
+	result, err := r.db.Pool.Exec(ctx, query, userID, conversationID)
+	if err != nil {
+		return 0, fmt.Errorf("failed to mark message notifications as read: %w", err)
+	}
+	return result.RowsAffected(), nil
 }
 
 // Delete deletes a notification

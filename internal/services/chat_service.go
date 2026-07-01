@@ -251,6 +251,13 @@ func (s *ChatService) MarkConversationAsRead(ctx context.Context, userID, conver
 		zap.String("user_id", userID),
 	)
 
+	// Also clear the MESSAGE notifications for this conversation from the bell
+	// badge, so the user doesn't have to open the notification screen to mark
+	// them read. Best-effort — never fail the read flow on this.
+	if s.notificationService != nil {
+		s.notificationService.MarkConversationRead(ctx, userID, conversationID)
+	}
+
 	return nil
 }
 

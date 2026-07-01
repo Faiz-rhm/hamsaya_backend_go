@@ -937,6 +937,11 @@ func (m *MockNotificationRepository) MarkAllAsRead(ctx context.Context, userID s
 	return args.Error(0)
 }
 
+func (m *MockNotificationRepository) MarkMessageNotificationsReadByConversation(ctx context.Context, userID, conversationID string) (int64, error) {
+	args := m.Called(ctx, userID, conversationID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 func (m *MockNotificationRepository) Delete(ctx context.Context, notificationID string) error {
 	args := m.Called(ctx, notificationID)
 	return args.Error(0)

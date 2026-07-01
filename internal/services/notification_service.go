@@ -337,6 +337,26 @@ func (s *NotificationService) MarkAsRead(ctx context.Context, userID, notificati
 	return nil
 }
 
+// MarkConversationRead marks the user's unread MESSAGE notifications for a
+// conversation as read, so opening a chat clears its notifications from the
+// bell badge without the user visiting the notification screen. Best-effort:
+// a failure here must not block the chat read flow. Only invalidates the
+// cached unread count when something actually changed.
+func (s *NotificationService) MarkConversationRead(ctx context.Context, userID, conversationID string) {
+	n, err := s.notificationRepo.MarkMessageNotificationsReadByConversation(ctx, userID, conversationID)
+	if err != nil {
+		s.logger.Warn("Failed to mark conversation notifications as read",
+			zap.Error(err),
+			zap.String("user_id", userID),
+			zap.String("conversation_id", conversationID),
+		)
+		return
+	}
+	if n > 0 {
+		s.invalidateUnreadForUser(ctx, userID)
+	}
+}
+
 // MarkAllAsRead marks all notifications as read for a user
 func (s *NotificationService) MarkAllAsRead(ctx context.Context, userID string) error {
 	if err := s.notificationRepo.MarkAllAsRead(ctx, userID); err != nil {
