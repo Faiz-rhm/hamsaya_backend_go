@@ -504,10 +504,15 @@ func (r *postRepository) CountPostViews(ctx context.Context, postID string) (int
 }
 
 // RecordPostView records a unique viewer for a post (idempotent per user).
+// The post's own author is never counted (matches Instagram — owners don't
+// inflate their own reach).
 func (r *postRepository) RecordPostView(ctx context.Context, userID, postID string) error {
 	_, err := r.db.Pool.Exec(ctx, `
 		INSERT INTO post_views (id, user_id, post_id, created_at)
-		VALUES ($1, $2, $3, $4)
+		SELECT $1, $2, $3, $4
+		WHERE NOT EXISTS (
+			SELECT 1 FROM posts p WHERE p.id = $3 AND p.user_id = $2
+		)
 		ON CONFLICT (user_id, post_id) DO NOTHING
 	`, uuid.New().String(), userID, postID, time.Now())
 	return err
