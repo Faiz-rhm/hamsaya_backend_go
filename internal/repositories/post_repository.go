@@ -36,6 +36,11 @@ type PostRepository interface {
 	// GetPostLikers returns the profiles of users who liked a post, newest
 	// first, with whether viewerID follows each. For the "liked by" sheet.
 	GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) ([]*models.PostLikerResponse, error)
+	// CountPostLikes / CountPostViews back the totals on the "liked by" sheet.
+	CountPostLikes(ctx context.Context, postID string) (int, error)
+	CountPostViews(ctx context.Context, postID string) (int, error)
+	// RecordPostView records a unique viewer for a post (idempotent per user).
+	RecordPostView(ctx context.Context, userID, postID string) error
 
 	// Bookmarks
 	BookmarkPost(ctx context.Context, userID, postID string) error
@@ -480,6 +485,32 @@ func (r *postRepository) GetPostLikers(ctx context.Context, postID, viewerID str
 		likers = append(likers, l)
 	}
 	return likers, rows.Err()
+}
+
+// CountPostLikes returns the total number of likes on a post.
+func (r *postRepository) CountPostLikes(ctx context.Context, postID string) (int, error) {
+	var n int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM post_likes WHERE post_id = $1`, postID).Scan(&n)
+	return n, err
+}
+
+// CountPostViews returns the total number of unique viewers of a post.
+func (r *postRepository) CountPostViews(ctx context.Context, postID string) (int, error) {
+	var n int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM post_views WHERE post_id = $1`, postID).Scan(&n)
+	return n, err
+}
+
+// RecordPostView records a unique viewer for a post (idempotent per user).
+func (r *postRepository) RecordPostView(ctx context.Context, userID, postID string) error {
+	_, err := r.db.Pool.Exec(ctx, `
+		INSERT INTO post_views (id, user_id, post_id, created_at)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id, post_id) DO NOTHING
+	`, uuid.New().String(), userID, postID, time.Now())
+	return err
 }
 
 // BookmarkPost bookmarks a post (idempotent)

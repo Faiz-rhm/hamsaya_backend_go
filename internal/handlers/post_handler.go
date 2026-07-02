@@ -372,6 +372,28 @@ func (h *PostHandler) GetPostLikes(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Post likes", likers)
 }
 
+// RecordPostView godoc
+// @Summary Record a post view
+// @Description Records that the authenticated user viewed the post (unique per user)
+// @Tags posts
+// @Produce json
+// @Security BearerAuth
+// @Param post_id path string true "Post ID"
+// @Success 200 {object} utils.Response
+// @Router /posts/{post_id}/view [post]
+func (h *PostHandler) RecordPostView(c *gin.Context) {
+	viewerID := ""
+	if v, ok := c.Get("user_id"); ok {
+		viewerID, _ = v.(string)
+	}
+	postID := c.Param("post_id")
+	if err := h.postService.RecordPostView(c.Request.Context(), postID, viewerID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "View recorded", nil)
+}
+
 // UnlikePost godoc
 // @Summary Unlike a post
 // @Description Remove like from a post

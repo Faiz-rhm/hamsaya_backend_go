@@ -324,6 +324,21 @@ func (m *MockPostRepository) GetPostLikers(ctx context.Context, postID, viewerID
 	return args.Get(0).([]*models.PostLikerResponse), args.Error(1)
 }
 
+func (m *MockPostRepository) CountPostLikes(ctx context.Context, postID string) (int, error) {
+	args := m.Called(ctx, postID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockPostRepository) CountPostViews(ctx context.Context, postID string) (int, error) {
+	args := m.Called(ctx, postID)
+	return args.Int(0), args.Error(1)
+}
+
+func (m *MockPostRepository) RecordPostView(ctx context.Context, userID, postID string) error {
+	args := m.Called(ctx, userID, postID)
+	return args.Error(0)
+}
+
 func (m *MockPostRepository) BookmarkPost(ctx context.Context, userID, postID string) error {
 	args := m.Called(ctx, userID, postID)
 	return args.Error(0)

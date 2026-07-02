@@ -392,8 +392,9 @@ func (s *PostService) GetPost(ctx context.Context, postID string, viewerID *stri
 	return s.enrichPost(ctx, post, viewerID)
 }
 
-// GetPostLikers returns the users who liked a post (newest first), paginated.
-func (s *PostService) GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) ([]*models.PostLikerResponse, error) {
+// GetPostLikers returns the "liked by" payload: total likes, total views, and
+// the (paginated) list of likers newest-first.
+func (s *PostService) GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) (*models.PostLikesResponse, error) {
 	if limit <= 0 || limit > 50 {
 		limit = 20
 	}
@@ -405,7 +406,26 @@ func (s *PostService) GetPostLikers(ctx context.Context, postID, viewerID string
 		s.logger.Error("Failed to get post likers", zap.String("post_id", postID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get likers", err)
 	}
-	return likers, nil
+	// Totals are best-effort — a count failure shouldn't drop the list.
+	totalLikes, _ := s.postRepo.CountPostLikes(ctx, postID)
+	totalViews, _ := s.postRepo.CountPostViews(ctx, postID)
+	return &models.PostLikesResponse{
+		TotalLikes: totalLikes,
+		TotalViews: totalViews,
+		Users:      likers,
+	}, nil
+}
+
+// RecordPostView records that viewerID has seen the post (unique per user).
+func (s *PostService) RecordPostView(ctx context.Context, postID, viewerID string) error {
+	if viewerID == "" {
+		return nil
+	}
+	if err := s.postRepo.RecordPostView(ctx, viewerID, postID); err != nil {
+		s.logger.Warn("Failed to record post view", zap.String("post_id", postID), zap.Error(err))
+		return utils.NewInternalError("Failed to record view", err)
+	}
+	return nil
 }
 
 // UpdatePost updates a post

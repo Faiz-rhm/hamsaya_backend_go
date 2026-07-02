@@ -626,6 +626,8 @@ func main() {
 			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
 			// Users who liked a post (for the "liked by" sheet).
 			posts.GET("/:post_id/likes", authMiddleware.RequireAuth(), postHandler.GetPostLikes)
+			// Record a unique post view (feeds the total-views count).
+			posts.POST("/:post_id/view", authMiddleware.RequireAuth(), postHandler.RecordPostView)
 
 			// Protected routes (require verified email)
 			posts.POST("", verifiedAuth, rateLimiter.LimitPostsCreate(), postHandler.CreatePost)

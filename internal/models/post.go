@@ -361,6 +361,14 @@ type PostLikerResponse struct {
 	FollowsMe bool `json:"follows_me"`
 }
 
+// PostLikesResponse is the payload for the "liked by" sheet: totals + the
+// (paginated) list of likers.
+type PostLikesResponse struct {
+	TotalLikes int                  `json:"total_likes"`
+	TotalViews int                  `json:"total_views"`
+	Users      []*PostLikerResponse `json:"users"`
+}
+
 // PostBookmark represents a bookmark on a post
 type PostBookmark struct {
 	ID        string    `json:"id"`
