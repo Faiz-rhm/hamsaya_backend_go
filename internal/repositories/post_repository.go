@@ -450,7 +450,11 @@ func (r *postRepository) GetPostLikers(ctx context.Context, postID, viewerID str
 			EXISTS(
 				SELECT 1 FROM user_follows f
 				WHERE f.follower_id = $2 AND f.following_id = pr.id
-			) AS is_following
+			) AS is_following,
+			EXISTS(
+				SELECT 1 FROM user_follows f
+				WHERE f.follower_id = pr.id AND f.following_id = $2
+			) AS follows_me
 		FROM post_likes pl
 		JOIN profiles pr ON pr.id = pl.user_id
 		WHERE pl.post_id = $1 AND pr.deleted_at IS NULL
@@ -468,7 +472,8 @@ func (r *postRepository) GetPostLikers(ctx context.Context, postID, viewerID str
 	for rows.Next() {
 		l := &models.PostLikerResponse{}
 		if err := rows.Scan(
-			&l.UserID, &l.FirstName, &l.LastName, &l.Avatar, &l.AvatarColor, &l.Province, &l.IsFollowing,
+			&l.UserID, &l.FirstName, &l.LastName, &l.Avatar, &l.AvatarColor, &l.Province,
+			&l.IsFollowing, &l.FollowsMe,
 		); err != nil {
 			return nil, err
 		}

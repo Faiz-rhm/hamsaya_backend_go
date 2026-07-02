@@ -355,7 +355,10 @@ type PostLikerResponse struct {
 	Avatar      *Photo  `json:"avatar,omitempty"`
 	AvatarColor *string `json:"avatar_color,omitempty"`
 	Province    *string `json:"province,omitempty"`
-	IsFollowing bool    `json:"is_following"`
+	// IsFollowing: the viewer follows this liker.
+	IsFollowing bool `json:"is_following"`
+	// FollowsMe: this liker follows the viewer (→ show "Follow back").
+	FollowsMe bool `json:"follows_me"`
 }
 
 // PostBookmark represents a bookmark on a post
