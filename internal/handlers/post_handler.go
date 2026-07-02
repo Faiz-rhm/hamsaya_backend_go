@@ -344,6 +344,34 @@ func (h *PostHandler) LikePost(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Post liked successfully", nil)
 }
 
+// GetPostLikes godoc
+// @Summary List users who liked a post
+// @Description Paginated list of the users who liked a post (newest first)
+// @Tags posts
+// @Produce json
+// @Security BearerAuth
+// @Param post_id path string true "Post ID"
+// @Param limit query int false "Page size (default 20, max 50)"
+// @Param offset query int false "Offset (default 0)"
+// @Success 200 {object} utils.Response
+// @Router /posts/{post_id}/likes [get]
+func (h *PostHandler) GetPostLikes(c *gin.Context) {
+	postID := c.Param("post_id")
+	viewerID := ""
+	if v, ok := c.Get("user_id"); ok {
+		viewerID, _ = v.(string)
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+
+	likers, err := h.postService.GetPostLikers(c.Request.Context(), postID, viewerID, limit, offset)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.SendSuccess(c, http.StatusOK, "Post likes", likers)
+}
+
 // UnlikePost godoc
 // @Summary Unlike a post
 // @Description Remove like from a post

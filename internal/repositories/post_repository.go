@@ -33,6 +33,9 @@ type PostRepository interface {
 	UnlikePost(ctx context.Context, userID, postID string) error
 	IsLikedByUser(ctx context.Context, userID, postID string) (bool, error)
 	GetPostLikes(ctx context.Context, postID string, limit, offset int) ([]*models.PostLike, error)
+	// GetPostLikers returns the profiles of users who liked a post, newest
+	// first, with whether viewerID follows each. For the "liked by" sheet.
+	GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) ([]*models.PostLikerResponse, error)
 
 	// Bookmarks
 	BookmarkPost(ctx context.Context, userID, postID string) error
@@ -437,6 +440,41 @@ func (r *postRepository) GetPostLikes(ctx context.Context, postID string, limit,
 	}
 
 	return likes, rows.Err()
+}
+
+// GetPostLikers returns the profiles of users who liked a post (newest first),
+// including whether the viewer follows each.
+func (r *postRepository) GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) ([]*models.PostLikerResponse, error) {
+	query := `
+		SELECT pr.id, pr.first_name, pr.last_name, pr.avatar, pr.avatar_color, pr.province,
+			EXISTS(
+				SELECT 1 FROM user_follows f
+				WHERE f.follower_id = $2 AND f.following_id = pr.id
+			) AS is_following
+		FROM post_likes pl
+		JOIN profiles pr ON pr.id = pl.user_id
+		WHERE pl.post_id = $1 AND pr.deleted_at IS NULL
+		ORDER BY pl.created_at DESC
+		LIMIT $3 OFFSET $4
+	`
+
+	rows, err := r.db.Pool.Query(ctx, query, postID, viewerID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	likers := make([]*models.PostLikerResponse, 0, limit)
+	for rows.Next() {
+		l := &models.PostLikerResponse{}
+		if err := rows.Scan(
+			&l.UserID, &l.FirstName, &l.LastName, &l.Avatar, &l.AvatarColor, &l.Province, &l.IsFollowing,
+		); err != nil {
+			return nil, err
+		}
+		likers = append(likers, l)
+	}
+	return likers, rows.Err()
 }
 
 // BookmarkPost bookmarks a post (idempotent)

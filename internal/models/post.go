@@ -347,6 +347,17 @@ type PostLike struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// PostLikerResponse is a user who liked a post, for the "liked by" list.
+type PostLikerResponse struct {
+	UserID      string  `json:"user_id"`
+	FirstName   *string `json:"first_name,omitempty"`
+	LastName    *string `json:"last_name,omitempty"`
+	Avatar      *Photo  `json:"avatar,omitempty"`
+	AvatarColor *string `json:"avatar_color,omitempty"`
+	Province    *string `json:"province,omitempty"`
+	IsFollowing bool    `json:"is_following"`
+}
+
 // PostBookmark represents a bookmark on a post
 type PostBookmark struct {
 	ID        string    `json:"id"`

@@ -316,6 +316,14 @@ func (m *MockPostRepository) GetPostLikes(ctx context.Context, postID string, li
 	return args.Get(0).([]*models.PostLike), args.Error(1)
 }
 
+func (m *MockPostRepository) GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) ([]*models.PostLikerResponse, error) {
+	args := m.Called(ctx, postID, viewerID, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]*models.PostLikerResponse), args.Error(1)
+}
+
 func (m *MockPostRepository) BookmarkPost(ctx context.Context, userID, postID string) error {
 	args := m.Called(ctx, userID, postID)
 	return args.Error(0)

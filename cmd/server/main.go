@@ -624,6 +624,8 @@ func main() {
 			// Daily limit usage — must come before /:post_id for the same reason.
 			posts.GET("/daily-limits", authMiddleware.RequireAuth(), dailyLimitHandler.GetMyDailyLimits)
 			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
+			// Users who liked a post (for the "liked by" sheet).
+			posts.GET("/:post_id/likes", authMiddleware.RequireAuth(), postHandler.GetPostLikes)
 
 			// Protected routes (require verified email)
 			posts.POST("", verifiedAuth, rateLimiter.LimitPostsCreate(), postHandler.CreatePost)

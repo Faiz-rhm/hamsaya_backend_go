@@ -392,6 +392,22 @@ func (s *PostService) GetPost(ctx context.Context, postID string, viewerID *stri
 	return s.enrichPost(ctx, post, viewerID)
 }
 
+// GetPostLikers returns the users who liked a post (newest first), paginated.
+func (s *PostService) GetPostLikers(ctx context.Context, postID, viewerID string, limit, offset int) ([]*models.PostLikerResponse, error) {
+	if limit <= 0 || limit > 50 {
+		limit = 20
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	likers, err := s.postRepo.GetPostLikers(ctx, postID, viewerID, limit, offset)
+	if err != nil {
+		s.logger.Error("Failed to get post likers", zap.String("post_id", postID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get likers", err)
+	}
+	return likers, nil
+}
+
 // UpdatePost updates a post
 func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req *models.UpdatePostRequest) (*models.PostResponse, error) {
 	// Get existing post
