@@ -17,6 +17,9 @@ type CommentRepository interface {
 	// Comment CRUD
 	Create(ctx context.Context, comment *models.PostComment) error
 	GetByID(ctx context.Context, commentID string) (*models.PostComment, error)
+	// GetRootCommentID walks parent_comment_id up to the top-level ancestor.
+	// Returns commentID itself when it is already top-level.
+	GetRootCommentID(ctx context.Context, commentID string) (string, error)
 	Update(ctx context.Context, comment *models.PostComment) error
 	Delete(ctx context.Context, commentID string) error
 
@@ -133,6 +136,29 @@ func (r *commentRepository) GetByID(ctx context.Context, commentID string) (*mod
 		_ = json.Unmarshal(mentionedRaw, &comment.MentionedUserIDs)
 	}
 	return comment, nil
+}
+
+// GetRootCommentID walks parent_comment_id up to the top-level ancestor via a
+// recursive CTE. Returns commentID itself when it is already top-level.
+func (r *commentRepository) GetRootCommentID(ctx context.Context, commentID string) (string, error) {
+	const query = `
+		WITH RECURSIVE ancestors AS (
+			SELECT id, parent_comment_id FROM post_comments WHERE id = $1
+			UNION ALL
+			SELECT c.id, c.parent_comment_id
+			FROM post_comments c
+			JOIN ancestors a ON c.id = a.parent_comment_id
+		)
+		SELECT id FROM ancestors WHERE parent_comment_id IS NULL LIMIT 1
+	`
+	var rootID string
+	if err := r.db.Pool.QueryRow(ctx, query, commentID).Scan(&rootID); err != nil {
+		if err == pgx.ErrNoRows {
+			return commentID, nil
+		}
+		return "", err
+	}
+	return rootID, nil
 }
 
 // Update updates a comment

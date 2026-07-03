@@ -178,6 +178,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			}
 			title := strings.TrimSpace(actorName + " commented on your post")
 			msg := title
+			rootID, _ := s.commentRepo.GetRootCommentID(ctxDetach, commentID)
 			data := map[string]interface{}{
 				"actor_id":           userID,
 				"actor_name":         actorName,
@@ -185,6 +186,8 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				"actor_avatar_color": actorAvatarColor,
 				"post_id":            postID,
 				"post_type":          strings.ToUpper(string(post.Type)),
+				"comment_id":         commentID,
+				"root_comment_id":    rootID,
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
@@ -227,6 +230,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 			}
 			title := strings.TrimSpace(actorName + " replied to your comment")
 			msg := title
+			rootID, _ := s.commentRepo.GetRootCommentID(ctxDetach, commentID)
 			data := map[string]interface{}{
 				"actor_id":           userID,
 				"actor_name":         actorName,
@@ -234,7 +238,9 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				"actor_avatar_color": actorAvatarColor,
 				"post_id":            postID,
 				"post_type":          strings.ToUpper(string(post.Type)),
-				"comment_id":         *req.ParentCommentID,
+				// Target the new reply; root is the top-level ancestor to scroll to.
+				"comment_id":      commentID,
+				"root_comment_id": rootID,
 			}
 			if post.BusinessID != nil && *post.BusinessID != "" {
 				data["business_id"] = *post.BusinessID
@@ -281,6 +287,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 				notified[taggedID] = true
 				title := strings.TrimSpace(actorName + " mentioned you in a comment")
 				msg := title
+				rootID, _ := s.commentRepo.GetRootCommentID(ctxDetach, commentID)
 				data := map[string]interface{}{
 					"actor_id":           userID,
 					"actor_name":         actorName,
@@ -289,6 +296,7 @@ func (s *CommentService) CreateComment(ctx context.Context, postID, userID strin
 					"post_id":            postID,
 					"post_type":          strings.ToUpper(string(post.Type)),
 					"comment_id":         commentID,
+					"root_comment_id":    rootID,
 				}
 				if post.BusinessID != nil && *post.BusinessID != "" {
 					data["business_id"] = *post.BusinessID
@@ -484,13 +492,20 @@ func (s *CommentService) LikeComment(ctx context.Context, userID, commentID stri
 			}
 			title := strings.TrimSpace(actorName + " liked your comment")
 			msg := title
+			rootID, _ := s.commentRepo.GetRootCommentID(ctxDetach, commentID)
+			postType := "FEED"
+			if p, err := s.postRepo.GetByID(ctxDetach, comment.PostID); err == nil {
+				postType = strings.ToUpper(string(p.Type))
+			}
 			data := map[string]interface{}{
 				"actor_id":           userID,
 				"actor_name":         actorName,
 				"actor_avatar":       actorAvatar,
 				"actor_avatar_color": actorAvatarColor,
 				"post_id":            comment.PostID,
+				"post_type":          postType,
 				"comment_id":         commentID,
+				"root_comment_id":    rootID,
 			}
 			_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
 				UserID:  comment.UserID,

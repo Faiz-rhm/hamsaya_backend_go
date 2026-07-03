@@ -689,6 +689,11 @@ func (m *MockCommentRepository) GetByID(ctx context.Context, commentID string) (
 	return args.Get(0).(*models.PostComment), args.Error(1)
 }
 
+func (m *MockCommentRepository) GetRootCommentID(ctx context.Context, commentID string) (string, error) {
+	args := m.Called(ctx, commentID)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockCommentRepository) Update(ctx context.Context, comment *models.PostComment) error {
 	args := m.Called(ctx, comment)
 	return args.Error(0)
