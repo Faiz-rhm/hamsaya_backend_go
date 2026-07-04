@@ -203,6 +203,12 @@ func (r *searchRepository) SearchUsers(ctx context.Context, filter *models.Searc
 		JOIN users u ON u.id = p.id
 		WHERE p.deleted_at IS NULL
 			AND u.deleted_at IS NULL
+			-- Exclude accounts that shouldn't surface in user search (chat /
+			-- tag / mention): incomplete profiles, deactivated accounts, and
+			-- currently-suspended (locked) users.
+			AND p.is_complete = TRUE
+			AND u.is_active = TRUE
+			AND (u.locked_until IS NULL OR u.locked_until <= NOW())
 	`
 
 	args := []interface{}{}
