@@ -374,6 +374,90 @@ func (s *ChatService) broadcastMessageDeleted(message *models.Message) {
 	}
 }
 
+// EditMessage replaces the text of a message the user sent. Only the sender
+// may edit, and only TEXT messages. Returns the enriched updated message and
+// broadcasts a `message_edited` frame to the other participant.
+func (s *ChatService) EditMessage(ctx context.Context, userID, messageID, content string) (*models.MessageResponse, error) {
+	message, err := s.messageRepo.GetByID(ctx, messageID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Message not found", err)
+	}
+
+	if message.SenderID != userID {
+		return nil, utils.NewForbiddenError("You can only edit your own messages", nil)
+	}
+
+	if message.MessageType != models.MessageTypeText {
+		return nil, utils.NewBadRequestError("Only text messages can be edited", nil)
+	}
+
+	updated, err := s.messageRepo.UpdateContent(ctx, messageID, content)
+	if err != nil {
+		s.logger.Error("Failed to edit message",
+			zap.Error(err),
+			zap.String("message_id", messageID),
+		)
+		return nil, utils.NewInternalError("Failed to edit message", err)
+	}
+
+	s.logger.Info("Message edited",
+		zap.String("message_id", messageID),
+		zap.String("user_id", userID),
+	)
+
+	if s.wsHub != nil {
+		go s.broadcastMessageEdited(updated)
+	}
+
+	return s.enrichMessage(ctx, updated, userID)
+}
+
+// broadcastMessageEdited notifies the other conversation participant that a
+// message's text changed so their open chat updates the bubble in real time.
+func (s *ChatService) broadcastMessageEdited(message *models.Message) {
+	ctx := context.Background()
+	convo, cerr := s.conversationRepo.GetByID(ctx, message.ConversationID)
+	if cerr != nil {
+		s.logger.Debug("edit broadcast: failed to load conversation",
+			zap.Error(cerr),
+			zap.String("conversation_id", message.ConversationID),
+		)
+		return
+	}
+
+	other, oerr := s.conversationRepo.GetOtherParticipantID(ctx, convo.ID, message.SenderID)
+	if oerr != nil || other == "" {
+		return
+	}
+
+	var businessID *string
+	if convo.BusinessID != nil && *convo.BusinessID != "" {
+		businessID = convo.BusinessID
+	}
+
+	editedAt := message.CreatedAt
+	if message.EditedAt != nil {
+		editedAt = *message.EditedAt
+	}
+
+	frame := models.WSMessage{
+		Type: "message_edited",
+		Payload: models.WSMessageEditedPayload{
+			ConversationID: message.ConversationID,
+			MessageID:      message.ID,
+			Content:        message.Content,
+			EditedAt:       editedAt,
+			BusinessID:     businessID,
+		},
+	}
+	if err := s.wsHub.SendToUser(other, frame); err != nil {
+		s.logger.Debug("Failed to send WS message_edited",
+			zap.Error(err),
+			zap.String("recipient_id", other),
+		)
+	}
+}
+
 // ReactToMessage toggles an emoji reaction by the user on a message. add=true
 // adds the reaction, add=false removes it. Authorizes the user as a participant
 // and broadcasts the change to the other participant over WebSocket.
@@ -512,6 +596,7 @@ func (s *ChatService) enrichMessage(ctx context.Context, message *models.Message
 		ProductID:      message.ProductID,
 		IsRead:         message.ReadAt != nil,
 		CreatedAt:      message.CreatedAt,
+		EditedAt:       message.EditedAt,
 	}
 
 	// Quoted message preview (reply target).

@@ -35,6 +35,7 @@ type Message struct {
 	ReplyToMessageID *string     `json:"reply_to_message_id,omitempty"`
 	ReadAt           *time.Time  `json:"read_at,omitempty"`
 	CreatedAt        time.Time   `json:"created_at"`
+	EditedAt         *time.Time  `json:"edited_at,omitempty"`
 	DeletedAt        *time.Time  `json:"deleted_at,omitempty"`
 }
 
@@ -84,6 +85,7 @@ type MessageResponse struct {
 	Reactions      []MessageReaction    `json:"reactions,omitempty"`
 	IsRead         bool                 `json:"is_read"`
 	CreatedAt      time.Time            `json:"created_at"`
+	EditedAt       *time.Time           `json:"edited_at,omitempty"`
 }
 
 // MessageInfo is a brief message summary for conversation lists
@@ -118,6 +120,11 @@ type SendMessageRequest struct {
 // ReactToMessageRequest toggles an emoji reaction on a message.
 type ReactToMessageRequest struct {
 	Emoji string `json:"emoji" validate:"required,min=1,max=16"`
+}
+
+// EditMessageRequest updates the text content of an existing message.
+type EditMessageRequest struct {
+	Content string `json:"content" validate:"required,min=1,max=5000"`
 }
 
 // GetConversationsFilter represents filters for listing conversations
@@ -167,6 +174,17 @@ type WSMessageDeletedPayload struct {
 	ConversationID string  `json:"conversation_id"`
 	MessageID      string  `json:"message_id"`
 	BusinessID     *string `json:"business_id,omitempty"`
+}
+
+// WSMessageEditedPayload notifies the other participant that a message's text
+// was edited so their UI can update the bubble (and show an "edited" marker)
+// in real time.
+type WSMessageEditedPayload struct {
+	ConversationID string    `json:"conversation_id"`
+	MessageID      string    `json:"message_id"`
+	Content        *string   `json:"content"`
+	EditedAt       time.Time `json:"edited_at"`
+	BusinessID     *string   `json:"business_id,omitempty"`
 }
 
 // WSReactionPayload notifies the other participant that a reaction was added or

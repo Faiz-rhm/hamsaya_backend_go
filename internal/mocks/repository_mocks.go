@@ -1831,6 +1831,15 @@ func (m *MockMessageRepository) DeleteForUser(ctx context.Context, messageID, us
 	return args.Error(0)
 }
 
+func (m *MockMessageRepository) UpdateContent(ctx context.Context, messageID, content string) (*models.Message, error) {
+	args := m.Called(ctx, messageID, content)
+	var msg *models.Message
+	if args.Get(0) != nil {
+		msg = args.Get(0).(*models.Message)
+	}
+	return msg, args.Error(1)
+}
+
 func (m *MockMessageRepository) MarkAsRead(ctx context.Context, messageID string) error {
 	args := m.Called(ctx, messageID)
 	return args.Error(0)

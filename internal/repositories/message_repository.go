@@ -21,6 +21,9 @@ type MessageRepository interface {
 	// DeleteForUser appends the user to deleted_for_user_ids so the message
 	// disappears for that user only; other participants still see it.
 	DeleteForUser(ctx context.Context, messageID, userID string) error
+	// UpdateContent replaces a message's text and stamps edited_at=now,
+	// returning the updated row. Sender authorization is enforced in the service.
+	UpdateContent(ctx context.Context, messageID, content string) (*models.Message, error)
 
 	// Read receipts
 	MarkAsRead(ctx context.Context, messageID string) error
@@ -82,7 +85,7 @@ func (r *messageRepository) Create(ctx context.Context, message *models.Message)
 // GetByID retrieves a message by ID
 func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, edited_at, deleted_at
 		FROM messages
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -98,6 +101,7 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 		&message.ReplyToMessageID,
 		&message.ReadAt,
 		&message.CreatedAt,
+		&message.EditedAt,
 		&message.DeletedAt,
 	)
 
@@ -116,7 +120,7 @@ func (r *messageRepository) GetByID(ctx context.Context, messageID string) (*mod
 // already filtered via `deleted_at IS NULL`.
 func (r *messageRepository) List(ctx context.Context, filter *models.GetMessagesFilter) ([]*models.Message, error) {
 	query := `
-		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, deleted_at
+		SELECT id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, edited_at, deleted_at
 		FROM messages
 		WHERE conversation_id = $1
 		  AND deleted_at IS NULL
@@ -144,6 +148,7 @@ func (r *messageRepository) List(ctx context.Context, filter *models.GetMessages
 			&message.ReplyToMessageID,
 			&message.ReadAt,
 			&message.CreatedAt,
+			&message.EditedAt,
 			&message.DeletedAt,
 		)
 		if err != nil {
@@ -201,6 +206,40 @@ func (r *messageRepository) DeleteForUser(ctx context.Context, messageID, userID
 	}
 
 	return nil
+}
+
+// UpdateContent replaces a message's text and stamps edited_at=now, returning
+// the updated row.
+func (r *messageRepository) UpdateContent(ctx context.Context, messageID, content string) (*models.Message, error) {
+	query := `
+		UPDATE messages
+		SET content = $2, edited_at = NOW()
+		WHERE id = $1 AND deleted_at IS NULL
+		RETURNING id, conversation_id, sender_id, content, message_type, product_id, reply_to_message_id, read_at, created_at, edited_at, deleted_at
+	`
+
+	message := &models.Message{}
+	err := r.db.Pool.QueryRow(ctx, query, messageID, content).Scan(
+		&message.ID,
+		&message.ConversationID,
+		&message.SenderID,
+		&message.Content,
+		&message.MessageType,
+		&message.ProductID,
+		&message.ReplyToMessageID,
+		&message.ReadAt,
+		&message.CreatedAt,
+		&message.EditedAt,
+		&message.DeletedAt,
+	)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("message not found")
+		}
+		return nil, fmt.Errorf("failed to update message: %w", err)
+	}
+
+	return message, nil
 }
 
 // MarkAsRead marks a message as read

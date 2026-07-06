@@ -319,6 +319,41 @@ func (h *ChatHandler) DeleteMessage(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Message deleted successfully", nil)
 }
 
+// EditMessage handles PUT /api/v1/chat/messages/:message_id
+// Replaces the text of a TEXT message the authenticated user sent. Returns the
+// updated message.
+func (h *ChatHandler) EditMessage(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	messageID := c.Param("message_id")
+	if messageID == "" {
+		utils.SendError(c, http.StatusBadRequest, "Message ID is required", utils.ErrBadRequest)
+		return
+	}
+
+	var req models.EditMessageRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, "Invalid request body", utils.ErrInvalidJSON)
+		return
+	}
+	if err := h.validator.Validate(&req); err != nil {
+		utils.SendError(c, http.StatusBadRequest, err.Error(), utils.ErrValidation)
+		return
+	}
+
+	updated, err := h.chatService.EditMessage(c.Request.Context(), userID.(string), messageID, req.Content)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Message updated", updated)
+}
+
 // DeleteMessageForMe handles POST /api/v1/chat/messages/:message_id/delete-for-me
 // Hides the message for the requesting user only — other participants still
 // see it. Any participant can call this (not just the sender).
