@@ -418,7 +418,7 @@ func (s *EngagementService) sendUnreadDigest(ctx context.Context) int {
 			continue // already emailed recently
 		}
 
-		if err := s.email.SendUnreadDigestEmail(t.email, t.firstName, t.notifs, t.msgs); err != nil {
+		if err := s.email.SendUnreadDigestEmail(t.email, t.firstName, t.userID, t.notifs, t.msgs); err != nil {
 			s.logger.Error("send unread digest email", zap.String("user_id", t.userID), zap.Error(err))
 			// Release the dedup key so the next run can retry this user.
 			_ = s.rdb.Del(ctx, key).Err()

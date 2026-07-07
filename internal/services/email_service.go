@@ -21,6 +21,13 @@ import (
 //go:embed assets/icon.jpg
 var emailIconJPG []byte
 
+// Public store listings for the "Get the app" badges in engagement emails.
+// These must point at the store (to install), never at an app-deep-link.
+const (
+	defaultStoreIOS     = "https://apps.apple.com/app/id6766050183"
+	defaultStoreAndroid = "https://play.google.com/store/apps/details?id=af.hamsaya"
+)
+
 // EmailIconBytes returns the resized JPEG payload for the brand icon used in
 // transactional emails. Resized to 128x128 once at package init so the HTTP
 // static handler can serve it without re-encoding per request.
@@ -236,7 +243,7 @@ func summaryLine(unreadMessages, unreadNotifications int) string {
 // notifications that have sat unread for 2+ days. Backend-driven re-engagement
 // that works regardless of push delivery (notably in Afghanistan, where push
 // can be unreliable). Keeps the copy short and links back to the app.
-func (s *EmailService) SendUnreadDigestEmail(email, name string, unreadNotifications, unreadMessages int) error {
+func (s *EmailService) SendUnreadDigestEmail(email, name, userID string, unreadNotifications, unreadMessages int) error {
 	if strings.TrimSpace(name) == "" {
 		name = "there"
 	}
@@ -274,19 +281,23 @@ func (s *EmailService) SendUnreadDigestEmail(email, name string, unreadNotificat
 		badges.WriteString(fmt.Sprintf(`<span style="font-size:18px;margin-left:14px;white-space:nowrap;">&#128276; <span style="background:#cc1016;color:#fff;border-radius:10px;padding:1px 6px;font-size:12px;font-weight:bold;">%d</span></span>`, unreadNotifications))
 	}
 
-	// Smart deep link: AppsFlyer OneLink opens the app if installed, else the
-	// store. Falls back to the website when APP_DEEP_LINK_URL isn't configured.
-	openURL := s.cfg.AppLink
-	if strings.TrimSpace(openURL) == "" {
-		openURL = "https://hamsaya.af"
+	// Open the app via a hamsaya.af Universal Link. A bare root URL (or the
+	// AppsFlyer OneLink, DNS-blocked in Afghanistan) opens the website instead
+	// of the app, so we target an app-associated path — the recipient's own
+	// profile — which is in the AASA / assetlinks path list and therefore opens
+	// the installed app directly. Falls back to the site root only when we have
+	// no user id.
+	openURL := "https://hamsaya.af"
+	if strings.TrimSpace(userID) != "" {
+		openURL = "https://hamsaya.af/profile/" + strings.TrimSpace(userID)
 	}
 	storeIOS := s.cfg.StoreURLIOS
 	if strings.TrimSpace(storeIOS) == "" {
-		storeIOS = openURL
+		storeIOS = defaultStoreIOS
 	}
 	storeAndroid := s.cfg.StoreURLAndroid
 	if strings.TrimSpace(storeAndroid) == "" {
-		storeAndroid = openURL
+		storeAndroid = defaultStoreAndroid
 	}
 
 	iconHTML := `<span style="font-size:22px;font-weight:bold;color:#2563eb;">Hamsaya</span>`
@@ -351,11 +362,11 @@ func (s *EmailService) SendProfileCompletionEmail(email, name string) error {
 	}
 	storeIOS := s.cfg.StoreURLIOS
 	if strings.TrimSpace(storeIOS) == "" {
-		storeIOS = openURL
+		storeIOS = defaultStoreIOS
 	}
 	storeAndroid := s.cfg.StoreURLAndroid
 	if strings.TrimSpace(storeAndroid) == "" {
-		storeAndroid = openURL
+		storeAndroid = defaultStoreAndroid
 	}
 	iconHTML := `<span style="font-size:22px;font-weight:bold;color:#2563eb;">Hamsaya</span>`
 	if s.iconURL != "" {
@@ -433,11 +444,11 @@ func (s *EmailService) SendWinbackEmail(email, name, province string, recentPost
 	}
 	storeIOS := s.cfg.StoreURLIOS
 	if strings.TrimSpace(storeIOS) == "" {
-		storeIOS = openURL
+		storeIOS = defaultStoreIOS
 	}
 	storeAndroid := s.cfg.StoreURLAndroid
 	if strings.TrimSpace(storeAndroid) == "" {
-		storeAndroid = openURL
+		storeAndroid = defaultStoreAndroid
 	}
 	iconHTML := `<span style="font-size:22px;font-weight:bold;color:#2563eb;">Hamsaya</span>`
 	if s.iconURL != "" {
