@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -20,6 +21,13 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"go.uber.org/zap"
 )
+
+// enforceBusinessUpdates gates the "only businesses can post FEED/EVENT/PULL"
+// rule. Default false so existing/old-app users are unaffected on deploy; set
+// env ENFORCE_BUSINESS_UPDATES=true once the business-updates app version is
+// live.
+var enforceBusinessUpdates = strings.EqualFold(
+	strings.TrimSpace(os.Getenv("ENFORCE_BUSINESS_UPDATES")), "true")
 
 // PostService handles post operations
 type PostService struct {
@@ -108,10 +116,12 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		return nil, err
 	}
 
-	// Product rule: normal users only create marketplace (SELL) listings.
-	// FEED/EVENT/PULL are business updates and require posting as a business
-	// (business_id set). Admins bypass so tooling/backfills still work.
-	if req.Type != models.PostTypeSell &&
+	// Product rule (opt-in): normal users only create marketplace (SELL)
+	// listings; FEED/EVENT/PULL are business updates requiring business_id.
+	// OFF by default so existing users on OLD app versions keep posting as
+	// before — flip ENFORCE_BUSINESS_UPDATES=true only after the new app is
+	// rolled out. Admins always bypass.
+	if enforceBusinessUpdates && req.Type != models.PostTypeSell &&
 		(req.BusinessID == nil || *req.BusinessID == "") {
 		if user, uerr := s.userRepo.GetByID(ctx, userID); uerr != nil ||
 			user == nil || user.Role != models.RoleAdmin {
