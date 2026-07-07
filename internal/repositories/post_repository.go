@@ -731,6 +731,9 @@ func (r *postRepository) GetFeed(ctx context.Context, filter *models.FeedFilter)
 		fmt.Fprintf(&queryBuilder, " AND business_id = $%d", argCount)
 		args = append(args, *filter.BusinessID)
 		argCount++
+	} else if filter.OnlyBusiness {
+		// Home "business & service updates" feed: only business-authored posts.
+		queryBuilder.WriteString(" AND business_id IS NOT NULL")
 	}
 
 	if filter.CategoryID != nil {
@@ -905,6 +908,9 @@ func (r *postRepository) CountFeed(ctx context.Context, filter *models.FeedFilte
 		fmt.Fprintf(&queryBuilder, " AND business_id = $%d", argCount)
 		args = append(args, *filter.BusinessID)
 		argCount++
+	} else if filter.OnlyBusiness {
+		// Home "business & service updates" feed: only business-authored posts.
+		queryBuilder.WriteString(" AND business_id IS NOT NULL")
 	}
 
 	if filter.CategoryID != nil {

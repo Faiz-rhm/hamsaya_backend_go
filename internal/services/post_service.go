@@ -108,6 +108,20 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		return nil, err
 	}
 
+	// Product rule: normal users only create marketplace (SELL) listings.
+	// FEED/EVENT/PULL are business updates and require posting as a business
+	// (business_id set). Admins bypass so tooling/backfills still work.
+	if req.Type != models.PostTypeSell &&
+		(req.BusinessID == nil || *req.BusinessID == "") {
+		if user, uerr := s.userRepo.GetByID(ctx, userID); uerr != nil ||
+			user == nil || user.Role != models.RoleAdmin {
+			return nil, utils.NewForbiddenError(
+				"Only business pages can post updates. Create a business page to post, or use Sell to list an item.",
+				nil,
+			)
+		}
+	}
+
 	// Automod scan — runs before any DB writes so a 'block' rule rejects
 	// the request without bumping daily-limit counters or creating
 	// half-baked rows. 'flag' and 'shadow' continue creation; flagging

@@ -579,6 +579,10 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 		filter.BusinessID = &businessID
 	}
 
+	if c.Query("only_business") == "true" {
+		filter.OnlyBusiness = true
+	}
+
 	if province := c.Query("province"); province != "" {
 		filter.Province = &province
 	}

@@ -425,6 +425,12 @@ type FeedFilter struct {
 	// is ignored.
 	HideUnpromotedSell bool `json:"-"`
 
+	// OnlyBusiness restricts the feed to business-authored posts
+	// (business_id IS NOT NULL). Drives the home "business & service updates"
+	// surface so the feed shows shops/service providers, not general user
+	// posts. Ignored when a specific BusinessID is already set.
+	OnlyBusiness bool `json:"-"`
+
 	// ViewerID is the authenticated user requesting the feed. When set, the
 	// query excludes posts authored by users the viewer has blocked OR who
 	// have blocked the viewer (bidirectional hide). Empty = no filter (used
