@@ -83,12 +83,12 @@ type BusinessAttachment struct {
 
 // BusinessFollower represents a user following a business
 type BusinessFollower struct {
-	ID         string     `json:"id"`
-	BusinessID string     `json:"business_id"`
-	FollowerID string     `json:"follower_id"`
-	IsActive   bool       `json:"is_active"`
-	CreatedAt  time.Time  `json:"created_at"`
-	UpdatedAt  time.Time  `json:"updated_at"`
+	ID         string    `json:"id"`
+	BusinessID string    `json:"business_id"`
+	FollowerID string    `json:"follower_id"`
+	IsActive   bool      `json:"is_active"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 // CreateBusinessRequest represents a request to create a business profile
@@ -161,35 +161,35 @@ type SetBusinessHoursRequest struct {
 
 // BusinessResponse represents a business profile in API responses
 type BusinessResponse struct {
-	ID               string                    `json:"id"`
-	UserID           string                    `json:"user_id"`
-	Name             string                    `json:"name"`
-	LicenseNo        *string                   `json:"license_no,omitempty"`
-	Description      *string                   `json:"description,omitempty"`
-	Address          *string                   `json:"address,omitempty"`
-	PhoneNumber      *string                   `json:"phone_number,omitempty"`
-	Email            *string                   `json:"email,omitempty"`
-	Website          *string                   `json:"website,omitempty"`
-	Avatar           *Photo                    `json:"avatar,omitempty"`
-	AvatarColor      *string                   `json:"avatar_color,omitempty"`
-	Cover            *Photo                    `json:"cover,omitempty"`
-	Status           bool                      `json:"status"`
-	AdditionalInfo   *string                   `json:"additional_info,omitempty"`
-	Location         *LocationInfo             `json:"location"`              // always present (null if no coordinates)
-	AddressLocation  *string                   `json:"address_location"`       // "(lat,lng)" for mobile; null if not set
-	Country          *string                   `json:"country"`
-	Province         *string                   `json:"province"`
-	District         *string                   `json:"district"`
-	Neighborhood     *string                   `json:"neighborhood"`
-	ShowLocation     bool                      `json:"show_location"`
-	TotalViews     int                       `json:"total_views"`
-	TotalFollow    int                       `json:"total_follow"`
-	Categories     []BusinessCategory        `json:"categories"`
-	Hours          []BusinessHoursResponse   `json:"hours,omitempty"`
-	Gallery        []GalleryItem             `json:"gallery,omitempty"`
-	IsFollowing    bool                      `json:"is_following"`
-	CreatedAt      time.Time                 `json:"created_at"`
-	UpdatedAt      time.Time                 `json:"updated_at"`
+	ID              string                  `json:"id"`
+	UserID          string                  `json:"user_id"`
+	Name            string                  `json:"name"`
+	LicenseNo       *string                 `json:"license_no,omitempty"`
+	Description     *string                 `json:"description,omitempty"`
+	Address         *string                 `json:"address,omitempty"`
+	PhoneNumber     *string                 `json:"phone_number,omitempty"`
+	Email           *string                 `json:"email,omitempty"`
+	Website         *string                 `json:"website,omitempty"`
+	Avatar          *Photo                  `json:"avatar,omitempty"`
+	AvatarColor     *string                 `json:"avatar_color,omitempty"`
+	Cover           *Photo                  `json:"cover,omitempty"`
+	Status          bool                    `json:"status"`
+	AdditionalInfo  *string                 `json:"additional_info,omitempty"`
+	Location        *LocationInfo           `json:"location"`         // always present (null if no coordinates)
+	AddressLocation *string                 `json:"address_location"` // "(lat,lng)" for mobile; null if not set
+	Country         *string                 `json:"country"`
+	Province        *string                 `json:"province"`
+	District        *string                 `json:"district"`
+	Neighborhood    *string                 `json:"neighborhood"`
+	ShowLocation    bool                    `json:"show_location"`
+	TotalViews      int                     `json:"total_views"`
+	TotalFollow     int                     `json:"total_follow"`
+	Categories      []BusinessCategory      `json:"categories"`
+	Hours           []BusinessHoursResponse `json:"hours,omitempty"`
+	Gallery         []GalleryItem           `json:"gallery,omitempty"`
+	IsFollowing     bool                    `json:"is_following"`
+	CreatedAt       time.Time               `json:"created_at"`
+	UpdatedAt       time.Time               `json:"updated_at"`
 }
 
 // BusinessHoursResponse represents business hours in API responses
@@ -211,4 +211,23 @@ type BusinessListFilter struct {
 	RadiusKm   *float64 `json:"radius_km,omitempty"`
 	Limit      int      `json:"limit"`
 	Offset     int      `json:"offset"`
+}
+
+// DailyCount is one point in an insights time-series.
+type DailyCount struct {
+	Date  string `json:"date"` // YYYY-MM-DD
+	Count int    `json:"count"`
+}
+
+// BusinessInsightsResponse is the owner-only analytics payload: per-day
+// series (zero-filled, oldest first) plus all-time totals for the header
+// numbers on the insight cards.
+type BusinessInsightsResponse struct {
+	Days           int          `json:"days"`
+	Views          []DailyCount `json:"views"`
+	Followers      []DailyCount `json:"followers"`
+	Reviews        []DailyCount `json:"reviews"`
+	TotalViews     int          `json:"total_views"`
+	TotalFollowers int          `json:"total_followers"`
+	TotalReviews   int          `json:"total_reviews"`
 }

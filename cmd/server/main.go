@@ -691,6 +691,7 @@ func main() {
 			businesses.GET("/categories", authMiddleware.RequireAuth(), businessHandler.GetCategories)
 			businesses.GET("/:business_id/hours", businessHandler.GetBusinessHours)
 			businesses.GET("/:business_id/attachments", authMiddleware.RequireAuth(), businessHandler.GetGallery)
+			businesses.GET("/:business_id/insights", authMiddleware.RequireAuth(), businessHandler.GetBusinessInsights)
 
 			businesses.GET("/:business_id", authMiddleware.RequireAuth(), businessHandler.GetBusiness)
 

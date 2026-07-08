@@ -52,6 +52,11 @@ type BusinessRepository interface {
 
 	// Analytics
 	IncrementViews(ctx context.Context, businessID string) error
+	// Insights time-series (owner dashboard). Each returns one zero-filled
+	// point per day for the trailing `days` window, oldest first.
+	GetDailyViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	GetDailyNewFollowers(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	GetDailyNewReviews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
 }
 
 type businessRepository struct {
@@ -946,7 +951,86 @@ func (r *businessRepository) IncrementViews(ctx context.Context, businessID stri
 		`UPDATE business_profiles SET total_views = total_views + 1 WHERE id = $1 AND deleted_at IS NULL`,
 		businessID,
 	)
+	if err != nil {
+		return err
+	}
+	// Daily bucket for the owner insights chart. Best-effort: the all-time
+	// counter above is the source of truth, so a failure here is non-fatal.
+	_, err = r.db.Pool.Exec(ctx,
+		`INSERT INTO business_profile_daily_views (business_id, day, views)
+		 VALUES ($1, CURRENT_DATE, 1)
+		 ON CONFLICT (business_id, day)
+		 DO UPDATE SET views = business_profile_daily_views.views + 1`,
+		businessID,
+	)
 	return err
+}
+
+// GetDailyViews returns profile views per day for the trailing `days` window,
+// zero-filled via generate_series so charts get a point for every day.
+func (r *businessRepository) GetDailyViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(v.views, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN business_profile_daily_views v
+		   ON v.business_id = $1 AND v.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// GetDailyNewFollowers returns new followers per day (zero-filled).
+func (r *businessRepository) GetDailyNewFollowers(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(f.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT created_at::date AS day, COUNT(*) AS cnt
+		   FROM business_profile_followers
+		   WHERE business_id = $1 AND created_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) f ON f.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// GetDailyNewReviews returns new visible reviews per day (zero-filled).
+func (r *businessRepository) GetDailyNewReviews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(rv.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT created_at::date AS day, COUNT(*) AS cnt
+		   FROM business_reviews
+		   WHERE business_profile_id = $1 AND NOT is_hidden
+		     AND created_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) rv ON rv.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// queryDailyCounts runs a (date, count) query and scans it into DailyCount
+// rows with the date formatted as YYYY-MM-DD.
+func (r *businessRepository) queryDailyCounts(ctx context.Context, query string, businessID string, days int) ([]models.DailyCount, error) {
+	rows, err := r.db.Pool.Query(ctx, query, businessID, days)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	counts := make([]models.DailyCount, 0, days)
+	for rows.Next() {
+		var day time.Time
+		var count int
+		if err := rows.Scan(&day, &count); err != nil {
+			return nil, err
+		}
+		counts = append(counts, models.DailyCount{Date: day.Format("2006-01-02"), Count: count})
+	}
+	return counts, rows.Err()
 }
 
 // GetOrCreateCategoryByName returns category id by name; creates the category if it doesn't exist.

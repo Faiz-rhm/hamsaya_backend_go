@@ -287,6 +287,43 @@ func (h *BusinessHandler) GetBusiness(c *gin.Context) {
 	utils.SendSuccess(c, http.StatusOK, "Business retrieved successfully", business)
 }
 
+// GetBusinessInsights godoc
+// @Summary Get business insights (owner only)
+// @Description Daily views / new-followers / new-reviews series plus all-time totals for the owner dashboard
+// @Tags businesses
+// @Produce json
+// @Security BearerAuth
+// @Param business_id path string true "Business ID"
+// @Param days query int false "Trailing window in days (1-365)" default(28)
+// @Success 200 {object} utils.Response{data=models.BusinessInsightsResponse}
+// @Failure 401 {object} utils.Response
+// @Failure 404 {object} utils.Response
+// @Router /businesses/{business_id}/insights [get]
+func (h *BusinessHandler) GetBusinessInsights(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+
+	days := 28
+	if daysStr := c.Query("days"); daysStr != "" {
+		if d, err := strconv.Atoi(daysStr); err == nil {
+			days = d
+		}
+	}
+
+	insights, err := h.businessService.GetBusinessInsights(
+		c.Request.Context(), c.Param("business_id"), userID.(string), days,
+	)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Insights retrieved successfully", insights)
+}
+
 // GetMyBusinesses godoc
 // @Summary Get authenticated user's businesses
 // @Description Get all businesses owned by the authenticated user

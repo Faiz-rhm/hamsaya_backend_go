@@ -797,6 +797,52 @@ func defaultAvatarColorForBusiness(businessID string) string {
 	return defaultBusinessAvatarColors[int(h.Sum32())%len(defaultBusinessAvatarColors)]
 }
 
+// GetBusinessInsights returns the owner-only analytics payload: per-day
+// views / new-followers / new-reviews series for the trailing `days` window
+// plus all-time totals. Non-owners get an authorization error.
+func (s *BusinessService) GetBusinessInsights(ctx context.Context, businessID, userID string, days int) (*models.BusinessInsightsResponse, error) {
+	if days < 1 {
+		days = 28
+	}
+	if days > 365 {
+		days = 365
+	}
+
+	business, err := s.businessRepo.GetByID(ctx, businessID)
+	if err != nil {
+		return nil, utils.NewNotFoundError("Business not found", err)
+	}
+	if business.UserID != userID {
+		return nil, utils.NewUnauthorizedError("You don't have permission to view this business's insights", nil)
+	}
+
+	views, err := s.businessRepo.GetDailyViews(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily views", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	followers, err := s.businessRepo.GetDailyNewFollowers(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily followers", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	reviews, err := s.businessRepo.GetDailyNewReviews(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily reviews", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+
+	return &models.BusinessInsightsResponse{
+		Days:           days,
+		Views:          views,
+		Followers:      followers,
+		Reviews:        reviews,
+		TotalViews:     business.TotalViews,
+		TotalFollowers: business.TotalFollow,
+		TotalReviews:   business.ReviewCount,
+	}, nil
+}
+
 // enrichBusiness enriches a business with categories, hours, and following status (gallery is separate endpoint).
 func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.BusinessProfile, viewerID *string) (*models.BusinessResponse, error) {
 	avatarColor := business.AvatarColor
