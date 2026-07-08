@@ -662,8 +662,10 @@ func (h *PostHandler) GetFeed(c *gin.Context) {
 
 	// Home feed suppression: hide SELL posts unless promoted. Explicit
 	// SELL queries (e.g. /posts?type=SELL from the marketplace screen)
-	// bypass this in the repo layer, so SELL discovery still works.
-	filter.HideUnpromotedSell = true
+	// bypass this in the repo layer, so SELL discovery still works. Also
+	// skip suppression for profile-scoped queries (a business or user's own
+	// posts) so their SELL listings show on their profile.
+	filter.HideUnpromotedSell = filter.BusinessID == nil && filter.UserID == nil
 
 	// Get feed
 	posts, totalCount, err := h.postService.GetFeed(c.Request.Context(), filter, viewerID)
