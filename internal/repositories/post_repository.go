@@ -206,6 +206,13 @@ func (r *postRepository) Update(ctx context.Context, post *models.Post) error {
 			discount = $6,
 			free = $7,
 			sold = $8,
+			-- Stamp when the listing transitions to sold; clear on un-sell
+			-- (resell). Keeps the "items sold" insights series accurate.
+			sold_at = CASE
+				WHEN $8 AND sold_at IS NULL THEN NOW()
+				WHEN NOT $8 THEN NULL
+				ELSE sold_at
+			END,
 			currency = $9,
 			country_code = $10,
 			contact_no = $11,
@@ -1150,7 +1157,7 @@ func (r *postRepository) MarkSellPostsExpired(ctx context.Context, postIDs []str
 func (r *postRepository) ReactivateSellPost(ctx context.Context, postID string) error {
 	query := `
 		UPDATE posts
-		SET status = true, sold = false, expired_at = NOW() + INTERVAL '30 days', updated_at = NOW()
+		SET status = true, sold = false, sold_at = NULL, expired_at = NOW() + INTERVAL '30 days', updated_at = NOW()
 		WHERE id = $1 AND deleted_at IS NULL
 	`
 	_, err := r.db.Pool.Exec(ctx, query, postID)

@@ -65,6 +65,13 @@ type BusinessRepository interface {
 	// GetOwnerPostCounts returns dashboard content counts: the business's
 	// updates/events/polls plus the owner's SELL listings.
 	GetOwnerPostCounts(ctx context.Context, businessID, ownerID string) (*models.BusinessOwnerPostCounts, error)
+	// GetDailySoldItems returns the owner's SELL listings marked sold per day.
+	GetDailySoldItems(ctx context.Context, ownerID string, days int) ([]models.DailyCount, error)
+	// GetDailyEventRSVPs returns "going" RSVPs on the business's events per day.
+	GetDailyEventRSVPs(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	// GetEventAttendeeTotal returns distinct users going to any of the
+	// business's events (all-time).
+	GetEventAttendeeTotal(ctx context.Context, businessID string) (int, error)
 }
 
 type businessRepository struct {
@@ -1118,6 +1125,56 @@ func (r *businessRepository) GetOwnerPostCounts(ctx context.Context, businessID,
 		return nil, err
 	}
 	return &counts, nil
+}
+
+// GetDailySoldItems returns the owner's SELL listings marked sold per day
+// (zero-filled), keyed on posts.sold_at.
+func (r *businessRepository) GetDailySoldItems(ctx context.Context, ownerID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(s.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT sold_at::date AS day, COUNT(*) AS cnt
+		   FROM posts
+		   WHERE user_id = $1 AND type = 'SELL' AND sold AND deleted_at IS NULL
+		     AND sold_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) s ON s.day = d::date
+		 ORDER BY d`,
+		ownerID, days,
+	)
+}
+
+// GetDailyEventRSVPs returns "going" RSVPs on the business's events per day
+// (zero-filled).
+func (r *businessRepository) GetDailyEventRSVPs(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(e.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT ei.created_at::date AS day, COUNT(*) AS cnt
+		   FROM event_interests ei
+		   JOIN posts p ON p.id = ei.post_id AND p.business_id = $1 AND p.deleted_at IS NULL
+		   WHERE ei.event_state = 'going' AND ei.created_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) e ON e.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// GetEventAttendeeTotal returns distinct users going to any of the business's
+// events (all-time).
+func (r *businessRepository) GetEventAttendeeTotal(ctx context.Context, businessID string) (int, error) {
+	var total int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(DISTINCT ei.user_id)
+		 FROM event_interests ei
+		 JOIN posts p ON p.id = ei.post_id AND p.business_id = $1 AND p.deleted_at IS NULL
+		 WHERE ei.event_state = 'going'`,
+		businessID,
+	).Scan(&total)
+	return total, err
 }
 
 // queryDailyCounts runs a (date, count) query and scans it into DailyCount

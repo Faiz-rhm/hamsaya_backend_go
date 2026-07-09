@@ -993,6 +993,27 @@ func (m *MockBusinessRepository) GetOwnerPostCounts(ctx context.Context, busines
 	return args.Get(0).(*models.BusinessOwnerPostCounts), args.Error(1)
 }
 
+func (m *MockBusinessRepository) GetDailySoldItems(ctx context.Context, ownerID string, days int) ([]models.DailyCount, error) {
+	args := m.Called(ctx, ownerID, days)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.DailyCount), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetDailyEventRSVPs(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	args := m.Called(ctx, businessID, days)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.DailyCount), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetEventAttendeeTotal(ctx context.Context, businessID string) (int, error) {
+	args := m.Called(ctx, businessID)
+	return args.Int(0), args.Error(1)
+}
+
 // MockNotificationRepository is a mock implementation of NotificationRepository
 type MockNotificationRepository struct {
 	mock.Mock

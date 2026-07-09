@@ -857,6 +857,21 @@ func (s *BusinessService) GetBusinessInsights(ctx context.Context, businessID, u
 		s.logger.Error("Failed to get owner post counts", zap.String("business_id", businessID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get insights", err)
 	}
+	sold, err := s.businessRepo.GetDailySoldItems(ctx, userID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily sold items", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	eventRSVPs, err := s.businessRepo.GetDailyEventRSVPs(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily event RSVPs", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	attendees, err := s.businessRepo.GetEventAttendeeTotal(ctx, businessID)
+	if err != nil {
+		s.logger.Error("Failed to get event attendee total", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
 	// JSON object keys are strings; convert star ints for the payload.
 	dist := make(map[string]int, len(distribution))
 	for star, count := range distribution {
@@ -864,19 +879,22 @@ func (s *BusinessService) GetBusinessInsights(ctx context.Context, businessID, u
 	}
 
 	return &models.BusinessInsightsResponse{
-		Days:               days,
-		Views:              views,
-		Followers:          followers,
-		Reviews:            reviews,
-		Likes:              likes,
-		Comments:           comments,
-		PostViews:          postViews,
-		RatingDistribution: dist,
-		AvgRating:          business.AvgRating,
-		TotalViews:         business.TotalViews,
-		TotalFollowers:     business.TotalFollow,
-		TotalReviews:       business.ReviewCount,
-		PostCounts:         postCounts,
+		Days:                days,
+		Views:               views,
+		Followers:           followers,
+		Reviews:             reviews,
+		Likes:               likes,
+		Comments:            comments,
+		PostViews:           postViews,
+		Sold:                sold,
+		EventRSVPs:          eventRSVPs,
+		RatingDistribution:  dist,
+		AvgRating:           business.AvgRating,
+		TotalViews:          business.TotalViews,
+		TotalFollowers:      business.TotalFollow,
+		TotalReviews:        business.ReviewCount,
+		TotalEventAttendees: attendees,
+		PostCounts:          postCounts,
 	}, nil
 }
 

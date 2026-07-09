@@ -223,19 +223,23 @@ type DailyCount struct {
 // series (zero-filled, oldest first) plus all-time totals for the header
 // numbers on the insight cards.
 type BusinessInsightsResponse struct {
-	Days      int          `json:"days"`
-	Views     []DailyCount `json:"views"`
-	Followers []DailyCount `json:"followers"`
-	Reviews   []DailyCount `json:"reviews"`
-	Likes     []DailyCount `json:"likes"`      // likes on the business's posts
-	Comments  []DailyCount `json:"comments"`   // comments on the business's posts
-	PostViews []DailyCount `json:"post_views"` // unique post views ("reach")
+	Days       int          `json:"days"`
+	Views      []DailyCount `json:"views"`
+	Followers  []DailyCount `json:"followers"`
+	Reviews    []DailyCount `json:"reviews"`
+	Likes      []DailyCount `json:"likes"`       // likes on the business's posts
+	Comments   []DailyCount `json:"comments"`    // comments on the business's posts
+	PostViews  []DailyCount `json:"post_views"`  // unique post views ("reach")
+	Sold       []DailyCount `json:"sold"`        // owner's SELL listings marked sold
+	EventRSVPs []DailyCount `json:"event_rsvps"` // "going" RSVPs on the business's events
 	// Visible-review counts keyed by star ("1".."5"), zero-filled.
 	RatingDistribution map[string]int `json:"rating_distribution"`
 	AvgRating          float64        `json:"avg_rating"`
 	TotalViews         int            `json:"total_views"`
 	TotalFollowers     int            `json:"total_followers"`
 	TotalReviews       int            `json:"total_reviews"`
+	// Distinct users going to any of the business's events (all-time).
+	TotalEventAttendees int `json:"total_event_attendees"`
 	// Content counts for the dashboard (business posts + owner's listings).
 	PostCounts *BusinessOwnerPostCounts `json:"post_counts,omitempty"`
 }
