@@ -1027,6 +1027,50 @@ func (m *MockBusinessRepository) GetEventAttendeeTotal(ctx context.Context, busi
 	return args.Int(0), args.Error(1)
 }
 
+// MockBusinessVerificationRepository is a mock implementation of BusinessVerificationRepository
+type MockBusinessVerificationRepository struct {
+	mock.Mock
+}
+
+func (m *MockBusinessVerificationRepository) Create(ctx context.Context, req *models.BusinessVerificationRequest) error {
+	args := m.Called(ctx, req)
+	return args.Error(0)
+}
+
+func (m *MockBusinessVerificationRepository) GetLatestByBusiness(ctx context.Context, businessID string) (*models.BusinessVerificationRequest, error) {
+	args := m.Called(ctx, businessID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessVerificationRequest), args.Error(1)
+}
+
+func (m *MockBusinessVerificationRepository) GetByID(ctx context.Context, id string) (*models.BusinessVerificationRequest, error) {
+	args := m.Called(ctx, id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessVerificationRequest), args.Error(1)
+}
+
+func (m *MockBusinessVerificationRepository) List(ctx context.Context, status *string, limit, offset int) ([]*models.BusinessVerificationListItem, int, error) {
+	args := m.Called(ctx, status, limit, offset)
+	if args.Get(0) == nil {
+		return nil, args.Int(1), args.Error(2)
+	}
+	return args.Get(0).([]*models.BusinessVerificationListItem), args.Int(1), args.Error(2)
+}
+
+func (m *MockBusinessVerificationRepository) Review(ctx context.Context, id, reviewerID, status string, reason *string) error {
+	args := m.Called(ctx, id, reviewerID, status, reason)
+	return args.Error(0)
+}
+
+func (m *MockBusinessVerificationRepository) SetBusinessVerified(ctx context.Context, businessID string, verified bool) error {
+	args := m.Called(ctx, businessID, verified)
+	return args.Error(0)
+}
+
 // MockNotificationRepository is a mock implementation of NotificationRepository
 type MockNotificationRepository struct {
 	mock.Mock

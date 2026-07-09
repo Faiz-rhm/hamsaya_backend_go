@@ -19,20 +19,24 @@ const maxVerificationDocuments = 5
 type BusinessVerificationHandler struct {
 	verificationService *services.BusinessVerificationService
 	storageService      *services.StorageService
+	adminService        *services.AdminService
 	validator           *utils.Validator
 	logger              *zap.Logger
 }
 
-// NewBusinessVerificationHandler constructs the handler.
+// NewBusinessVerificationHandler constructs the handler. adminService is used
+// for audit-logging review decisions (may be nil in tests).
 func NewBusinessVerificationHandler(
 	verificationService *services.BusinessVerificationService,
 	storageService *services.StorageService,
+	adminService *services.AdminService,
 	validator *utils.Validator,
 	logger *zap.Logger,
 ) *BusinessVerificationHandler {
 	return &BusinessVerificationHandler{
 		verificationService: verificationService,
 		storageService:      storageService,
+		adminService:        adminService,
 		validator:           validator,
 		logger:              logger,
 	}
@@ -87,7 +91,7 @@ func (h *BusinessVerificationHandler) SubmitVerification(c *gin.Context) {
 			utils.SendError(c, http.StatusBadRequest, "Failed to read document", err)
 			return
 		}
-		photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypePost)
+		photo, err := h.storageService.UploadImage(c.Request.Context(), file, header, services.ImageTypeVerification)
 		_ = file.Close()
 		if err != nil {
 			h.handleError(c, err)
@@ -215,6 +219,22 @@ func (h *BusinessVerificationHandler) ReviewVerification(c *gin.Context) {
 	if err != nil {
 		h.handleError(c, err)
 		return
+	}
+
+	// Audit trail — verification grants a public trust mark.
+	if h.adminService != nil {
+		details := map[string]interface{}{
+			"action":      req.Action,
+			"business_id": result.BusinessID,
+		}
+		if req.Reason != nil && *req.Reason != "" {
+			details["reason"] = *req.Reason
+		}
+		_ = h.adminService.LogAuditAction(
+			c.Request.Context(), adminID.(string),
+			"review_business_verification", "business_verification", result.ID,
+			details, c.ClientIP(),
+		)
 	}
 
 	utils.SendSuccess(c, http.StatusOK, "Verification request reviewed", result)

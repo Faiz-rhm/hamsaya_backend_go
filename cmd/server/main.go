@@ -452,7 +452,7 @@ func main() {
 	eventHandler := handlers.NewEventHandler(eventService, validator, logger)
 	businessHandler := handlers.NewBusinessHandler(businessService, storageService, validator, logger)
 	businessReviewHandler := handlers.NewBusinessReviewHandler(businessReviewService, userRepo, validator, logger)
-	businessVerificationHandler := handlers.NewBusinessVerificationHandler(businessVerificationService, storageService, validator, logger)
+	businessVerificationHandler := handlers.NewBusinessVerificationHandler(businessVerificationService, storageService, adminService, validator, logger)
 	categoryHandler := handlers.NewCategoryHandler(categoryService, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatService, wsHub, validator, logger, cfg)
 	notificationHandler := handlers.NewNotificationHandler(notificationService, validator, logger)
@@ -885,9 +885,10 @@ func main() {
 			admin.PUT("/businesses/:business_id/status", adminHandler.UpdateBusinessStatus)
 			admin.DELETE("/businesses/:business_id", adminOnly, adminHandler.DeleteBusiness)
 
-			// Business verification review queue
-			admin.GET("/business-verifications", businessVerificationHandler.ListVerifications)
-			admin.PATCH("/business-verifications/:request_id", businessVerificationHandler.ReviewVerification)
+			// Business verification review queue — admin-only (grants a
+			// public trust mark; moderators don't review these).
+			admin.GET("/business-verifications", adminOnly, businessVerificationHandler.ListVerifications)
+			admin.PATCH("/business-verifications/:request_id", adminOnly, businessVerificationHandler.ReviewVerification)
 
 			// Categories — admin-only (platform config).
 			admin.GET("/categories", adminOnly, categoryHandler.GetAllCategories)

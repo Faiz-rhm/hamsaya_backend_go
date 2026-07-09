@@ -32,6 +32,11 @@ const (
 	ImageTypeAvatar ImageType = "avatar"
 	ImageTypeCover  ImageType = "cover"
 	ImageTypePost   ImageType = "post"
+	// ImageTypeVerification stores business verification documents under a
+	// dedicated "verification/" key prefix, segregated from public post
+	// media so a bucket policy (or proxy rule) can restrict access later.
+	// Documents keep full post-size processing (text must stay legible).
+	ImageTypeVerification ImageType = "verification"
 	// ImageTypeAd forces WebP encoding regardless of source format. Ads are
 	// served at fixed render slots in feeds where size matters more than
 	// preserving the original codec.
@@ -187,8 +192,9 @@ func (s *StorageService) UploadImage(ctx context.Context, file multipart.File, h
 		if err != nil {
 			return nil, utils.NewInternalError("Failed to process cover image", err)
 		}
-	case ImageTypePost:
-		// Process for post (resize to fit within 2048x2048)
+	case ImageTypePost, ImageTypeVerification:
+		// Process for post (resize to fit within 2048x2048). Verification
+		// documents use the same processing — only the key prefix differs.
 		processedImg, err = s.processor.ProcessForPost(img)
 		if err != nil {
 			return nil, utils.NewInternalError("Failed to process post image", err)
