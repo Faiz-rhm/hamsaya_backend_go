@@ -682,6 +682,30 @@ func (s *BusinessService) FollowBusiness(ctx context.Context, businessID, userID
 				Message: &msg,
 				Data:    data,
 			})
+
+			// Growth milestone — celebrate round follower counts. Fires at
+			// most once per threshold in practice (the count crosses each
+			// value once, barring unfollow/refollow churn).
+			if count, cerr := s.businessRepo.GetFollowerCount(ctxDetach, businessID); cerr == nil {
+				for _, m := range []int{10, 25, 50, 100, 250, 500, 1000, 5000} {
+					if count == m {
+						mTitle := fmt.Sprintf("🎉 %s reached %d followers", business.Name, m)
+						mMsg := "Keep posting updates to grow your audience."
+						_, _ = s.notificationService.CreateNotification(ctxDetach, &models.CreateNotificationRequest{
+							UserID:  business.UserID,
+							Type:    models.NotificationTypeBusinessMilestone,
+							Title:   &mTitle,
+							Message: &mMsg,
+							Data: map[string]interface{}{
+								"type":        string(models.NotificationTypeBusinessMilestone),
+								"business_id": businessID,
+								"milestone":   m,
+							},
+						})
+						break
+					}
+				}
+			}
 		})
 	}
 

@@ -137,7 +137,13 @@ func TestBusinessReviewService_Update(t *testing.T) {
 		reviewRepo.On("Update", mock.Anything, "rev-1", "user-1", mock.Anything, mock.Anything).
 			Return(updated, nil)
 
-		svc := newTestReviewService(reviewRepo, &mocks.MockBusinessRepository{})
+		// Update now re-notifies the owner (best-effort goroutine) — stub the
+		// business lookup it does before spawning the notifier.
+		bizRepo := &mocks.MockBusinessRepository{}
+		bizRepo.On("GetByID", mock.Anything, "biz-1").
+			Return(&models.BusinessProfile{ID: "biz-1", UserID: "owner-1", Name: "Biz"}, nil).Maybe()
+
+		svc := newTestReviewService(reviewRepo, bizRepo)
 		got, err := svc.Update(context.Background(), "rev-1", "user-1",
 			&models.UpdateBusinessReviewRequest{Rating: ptrInt(3)})
 

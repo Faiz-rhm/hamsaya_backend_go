@@ -29,6 +29,9 @@ const (
 	NotificationTypeFirstPostNudge NotificationType = "FIRST_POST_NUDGE" // encourage users who never posted
 	NotificationTypeMonthlyReport  NotificationType = "MONTHLY_REPORT"   // business owners' monthly insights summary
 
+	// Business growth
+	NotificationTypeBusinessMilestone NotificationType = "BUSINESS_MILESTONE" // follower-count milestones (10, 25, 50, …)
+
 	// Account / security
 	NotificationTypeWelcome            NotificationType = "WELCOME"
 	NotificationTypePasswordChanged    NotificationType = "PASSWORD_CHANGED"

@@ -354,6 +354,14 @@ func (m *MockPostRepository) IsBookmarkedByUser(ctx context.Context, userID, pos
 	return args.Bool(0), args.Error(1)
 }
 
+func (m *MockPostRepository) GetBookmarkerIDs(ctx context.Context, postID string) ([]string, error) {
+	args := m.Called(ctx, postID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]string), args.Error(1)
+}
+
 func (m *MockPostRepository) SharePost(ctx context.Context, share *models.PostShare) error {
 	args := m.Called(ctx, share)
 	return args.Error(0)
@@ -983,6 +991,11 @@ func (m *MockBusinessRepository) GetRatingDistribution(ctx context.Context, busi
 		return nil, args.Error(1)
 	}
 	return args.Get(0).(map[int]int), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetFollowerCount(ctx context.Context, businessID string) (int, error) {
+	args := m.Called(ctx, businessID)
+	return args.Int(0), args.Error(1)
 }
 
 func (m *MockBusinessRepository) GetOwnerPostCounts(ctx context.Context, businessID, ownerID string) (*models.BusinessOwnerPostCounts, error) {

@@ -188,7 +188,11 @@ func TestBusinessReviewHandler_UpdateReview(t *testing.T) {
 		reviewRepo := &mocks.MockBusinessReviewRepository{}
 		reviewRepo.On("Update", mock.Anything, reviewTestRevID, reviewTestUserID, mock.Anything, mock.Anything).
 			Return(updated, nil)
-		r := newReviewRouter(t, reviewRepo, &mocks.MockBusinessRepository{}, &mocks.MockUserRepository{})
+		// Update re-notifies the owner — stub the business lookup it makes.
+		bizRepo := &mocks.MockBusinessRepository{}
+		bizRepo.On("GetByID", mock.Anything, reviewTestBizID).
+			Return(&models.BusinessProfile{ID: reviewTestBizID, UserID: "owner-1", Name: "Biz"}, nil).Maybe()
+		r := newReviewRouter(t, reviewRepo, bizRepo, &mocks.MockUserRepository{})
 
 		w := httptest.NewRecorder()
 		req, _ := http.NewRequest(http.MethodPut,

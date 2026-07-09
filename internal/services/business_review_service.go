@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -65,7 +66,7 @@ func (s *BusinessReviewService) Submit(ctx context.Context, businessID, userID s
 
 	// Best-effort notification to the business owner. Failures are logged
 	// only — they must not block the review write.
-	go s.notifyOwner(business, userID, review)
+	go s.notifyOwner(business, userID, review, false)
 
 	return review, nil
 }
@@ -79,6 +80,13 @@ func (s *BusinessReviewService) Update(ctx context.Context, reviewID, userID str
 	if err != nil {
 		return nil, utils.NewInternalError("Failed to update review", err)
 	}
+
+	// Owners care when a rating changes (a 2★→5★ edit is good news) — notify
+	// on edits too, best-effort.
+	if business, berr := s.businessRepo.GetByID(ctx, updated.BusinessProfileID); berr == nil {
+		go s.notifyOwner(business, userID, updated, true)
+	}
+
 	return updated, nil
 }
 
@@ -138,7 +146,7 @@ func (s *BusinessReviewService) Stats(ctx context.Context, businessID string) (*
 	return stats, nil
 }
 
-func (s *BusinessReviewService) notifyOwner(business *models.BusinessProfile, reviewerID string, review *models.BusinessReview) {
+func (s *BusinessReviewService) notifyOwner(business *models.BusinessProfile, reviewerID string, review *models.BusinessReview, updated bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			s.logger.Warn("notifyOwner panicked", zap.Any("recover", r))
@@ -147,19 +155,43 @@ func (s *BusinessReviewService) notifyOwner(business *models.BusinessProfile, re
 
 	ctx := context.Background()
 	reviewerName := ""
+	actorAvatar := ""
+	actorAvatarColor := ""
 	if actor, err := s.userRepo.GetProfileByUserID(ctx, reviewerID); err == nil && actor != nil {
 		if name := actor.FullName(); name != "" {
 			reviewerName = name
 		}
+		if actor.Avatar != nil && actor.Avatar.URL != "" {
+			actorAvatar = actor.Avatar.URL
+		}
+		if actor.AvatarColor != nil && *actor.AvatarColor != "" {
+			actorAvatarColor = *actor.AvatarColor
+		}
 	}
-	title := strings.TrimSpace(reviewerName + " left a review on your business")
+	stars := strings.Repeat("★", review.Rating) + strings.Repeat("☆", 5-review.Rating)
+	verb := "left a"
+	if updated {
+		verb = "updated their"
+	}
+	title := strings.TrimSpace(fmt.Sprintf("%s %s %s review on %s", reviewerName, verb, stars, business.Name))
 	msg := title
+	if review.Comment != nil && strings.TrimSpace(*review.Comment) != "" {
+		c := strings.TrimSpace(*review.Comment)
+		// Rune-safe truncation — review text is often Dari/Pashto (multibyte).
+		if r := []rune(c); len(r) > 100 {
+			c = string(r[:100]) + "…"
+		}
+		msg = c
+	}
 	data := map[string]interface{}{
-		"actor_id":    reviewerID,
-		"actor_name":  reviewerName,
-		"business_id": business.ID,
-		"review_id":   review.ID,
-		"rating":      review.Rating,
+		"actor_id":           reviewerID,
+		"actor_name":         reviewerName,
+		"actor_avatar":       actorAvatar,
+		"actor_avatar_color": actorAvatarColor,
+		"business_id":        business.ID,
+		"review_id":          review.ID,
+		"rating":             review.Rating,
+		"updated":            updated,
 	}
 	if _, err := s.notificationService.CreateNotification(ctx, &models.CreateNotificationRequest{
 		UserID:  business.UserID,

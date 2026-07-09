@@ -46,6 +46,8 @@ type PostRepository interface {
 	BookmarkPost(ctx context.Context, userID, postID string) error
 	UnbookmarkPost(ctx context.Context, userID, postID string) error
 	IsBookmarkedByUser(ctx context.Context, userID, postID string) (bool, error)
+	// GetBookmarkerIDs returns the ids of users who bookmarked the post.
+	GetBookmarkerIDs(ctx context.Context, postID string) ([]string, error)
 	GetUserBookmarks(ctx context.Context, userID string, limit, offset int) ([]*models.Post, error)
 	GetUserEventPosts(ctx context.Context, userID string, eventState models.EventInterestState, limit, offset int) ([]*models.Post, error)
 
@@ -541,6 +543,26 @@ func (r *postRepository) BookmarkPost(ctx context.Context, userID, postID string
 	)
 
 	return err
+}
+
+// GetBookmarkerIDs returns the ids of users who bookmarked the post.
+func (r *postRepository) GetBookmarkerIDs(ctx context.Context, postID string) ([]string, error) {
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT user_id FROM post_bookmarks WHERE post_id = $1`, postID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 // UnbookmarkPost removes a bookmark

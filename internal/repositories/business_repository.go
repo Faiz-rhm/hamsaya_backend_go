@@ -44,6 +44,8 @@ type BusinessRepository interface {
 	Unfollow(ctx context.Context, businessID, userID string) error
 	IsFollowing(ctx context.Context, businessID, userID string) (bool, error)
 	GetFollowers(ctx context.Context, businessID string, limit, offset int) ([]string, error)
+	// GetFollowerCount returns the number of active followers.
+	GetFollowerCount(ctx context.Context, businessID string) (int, error)
 
 	// Categories Management
 	GetAllCategories(ctx context.Context, search *string) ([]*models.BusinessCategory, error)
@@ -870,6 +872,17 @@ func (r *businessRepository) Follow(ctx context.Context, businessID, userID stri
 
 	_, err := r.db.Pool.Exec(ctx, query, businessID, userID)
 	return err
+}
+
+// GetFollowerCount returns the number of active followers.
+func (r *businessRepository) GetFollowerCount(ctx context.Context, businessID string) (int, error) {
+	var count int
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM business_profile_followers
+		 WHERE business_id = $1 AND is_active = true`,
+		businessID,
+	).Scan(&count)
+	return count, err
 }
 
 // Unfollow unfollows a business

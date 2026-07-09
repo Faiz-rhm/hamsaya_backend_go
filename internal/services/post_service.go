@@ -132,6 +132,22 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		}
 	}
 
+	// Posting on behalf of a business requires owning it — otherwise any
+	// caller could publish as any business by passing its id. Admins bypass
+	// (admin panel posts on behalf of owners).
+	if req.BusinessID != nil && *req.BusinessID != "" {
+		business, berr := s.businessRepo.GetByID(ctx, *req.BusinessID)
+		if berr != nil {
+			return nil, utils.NewNotFoundError("Business not found", berr)
+		}
+		if business.UserID != userID {
+			if user, uerr := s.userRepo.GetByID(ctx, userID); uerr != nil ||
+				user == nil || user.Role != models.RoleAdmin {
+				return nil, utils.NewForbiddenError("You don't own this business", nil)
+			}
+		}
+	}
+
 	// Automod scan — runs before any DB writes so a 'block' rule rejects
 	// the request without bumping daily-limit counters or creating
 	// half-baked rows. 'flag' and 'shadow' continue creation; flagging
@@ -469,6 +485,10 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 		return nil, utils.NewBadRequestError("View only visibility is only allowed for feed posts", nil)
 	}
 
+	// Capture the pre-update sold flag so we can detect the not-sold → sold
+	// transition after the write (bookmarkers get a SELL_SOLD heads-up).
+	wasSold := post.Sold
+
 	// Update fields
 	if req.Title != nil {
 		post.Title = req.Title
@@ -554,6 +574,12 @@ func (s *PostService) UpdatePost(ctx context.Context, postID, userID string, req
 	if err := s.postRepo.Update(ctx, post); err != nil {
 		s.logger.Error("Failed to update post", zap.String("post_id", postID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to update post", err)
+	}
+
+	// SELL listing just marked sold — tell everyone who saved it so they stop
+	// waiting (best-effort, actor-less system notification).
+	if post.Type == models.PostTypeSell && !wasSold && post.Sold && s.notificationService != nil {
+		s.notifySellSoldToBookmarkers(post)
 	}
 
 	// ── Attachment changes ──────────────────────────────────────────────
@@ -710,7 +736,8 @@ func (s *PostService) UnlikePost(ctx context.Context, userID, postID string) err
 // BookmarkPost bookmarks a post
 func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) error {
 	// Check if post exists
-	if _, err := s.postRepo.GetByID(ctx, postID); err != nil {
+	post, err := s.postRepo.GetByID(ctx, postID)
+	if err != nil {
 		return utils.NewNotFoundError("Post not found", err)
 	}
 
@@ -718,6 +745,17 @@ func (s *PostService) BookmarkPost(ctx context.Context, userID, postID string) e
 	if err := s.postRepo.BookmarkPost(ctx, userID, postID); err != nil {
 		s.logger.Error("Failed to bookmark post", zap.String("post_id", postID), zap.Error(err))
 		return utils.NewInternalError("Failed to bookmark post", err)
+	}
+
+	// A saved SELL listing is a buying signal — let the seller know
+	// (best-effort; skip self-saves).
+	if post.Type == models.PostTypeSell && post.UserID != nil && *post.UserID != userID &&
+		s.notificationService != nil {
+		recipient := *post.UserID
+		bgtasks.Submit(func(taskCtx context.Context) {
+			s.sendPostNotification(taskCtx, userID, recipient, postID,
+				models.NotificationTypeSellInterested, "saved your listing")
+		})
 	}
 
 	s.logger.Info("Post bookmarked", zap.String("post_id", postID), zap.String("user_id", userID))
@@ -1588,6 +1626,48 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 
 // sendPostNotification fires a notification for the post owner when someone likes or shares the post.
 // If the post belongs to a business, data.business_id is set so it only appears in business notifications.
+// notifySellSoldToBookmarkers tells everyone who saved a SELL listing that it
+// was just sold. Actor-less system notification (no actor_id, so the global
+// self-guard doesn't apply); the seller themself is skipped.
+func (s *PostService) notifySellSoldToBookmarkers(post *models.Post) {
+	postID := post.ID
+	sellerID := ""
+	if post.UserID != nil {
+		sellerID = *post.UserID
+	}
+	itemTitle := "An item"
+	if post.Title != nil && strings.TrimSpace(*post.Title) != "" {
+		itemTitle = "\"" + strings.TrimSpace(*post.Title) + "\""
+	}
+
+	bgtasks.Submit(func(taskCtx context.Context) {
+		bookmarkers, err := s.postRepo.GetBookmarkerIDs(taskCtx, postID)
+		if err != nil {
+			s.logger.Warn("Failed to load bookmarkers for sold notification",
+				zap.String("post_id", postID), zap.Error(err))
+			return
+		}
+		title := "Item sold"
+		msg := fmt.Sprintf("%s you saved has been sold.", itemTitle)
+		for _, uid := range bookmarkers {
+			if uid == sellerID {
+				continue
+			}
+			_, _ = s.notificationService.CreateNotification(taskCtx, &models.CreateNotificationRequest{
+				UserID:  uid,
+				Type:    models.NotificationTypeSellSold,
+				Title:   &title,
+				Message: &msg,
+				Data: map[string]interface{}{
+					"type":      string(models.NotificationTypeSellSold),
+					"post_id":   postID,
+					"post_type": "SELL",
+				},
+			})
+		}
+	})
+}
+
 func (s *PostService) sendPostNotification(ctx context.Context, actorUserID, recipientUserID, postID string, notifType models.NotificationType, action string) {
 	actorName := ""
 	var actorAvatar interface{}
