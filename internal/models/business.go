@@ -223,11 +223,17 @@ type DailyCount struct {
 // series (zero-filled, oldest first) plus all-time totals for the header
 // numbers on the insight cards.
 type BusinessInsightsResponse struct {
-	Days           int          `json:"days"`
-	Views          []DailyCount `json:"views"`
-	Followers      []DailyCount `json:"followers"`
-	Reviews        []DailyCount `json:"reviews"`
-	TotalViews     int          `json:"total_views"`
-	TotalFollowers int          `json:"total_followers"`
-	TotalReviews   int          `json:"total_reviews"`
+	Days      int          `json:"days"`
+	Views     []DailyCount `json:"views"`
+	Followers []DailyCount `json:"followers"`
+	Reviews   []DailyCount `json:"reviews"`
+	Likes     []DailyCount `json:"likes"`      // likes on the business's posts
+	Comments  []DailyCount `json:"comments"`   // comments on the business's posts
+	PostViews []DailyCount `json:"post_views"` // unique post views ("reach")
+	// Visible-review counts keyed by star ("1".."5"), zero-filled.
+	RatingDistribution map[string]int `json:"rating_distribution"`
+	AvgRating          float64        `json:"avg_rating"`
+	TotalViews         int            `json:"total_views"`
+	TotalFollowers     int            `json:"total_followers"`
+	TotalReviews       int            `json:"total_reviews"`
 }

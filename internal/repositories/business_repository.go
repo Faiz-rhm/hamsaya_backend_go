@@ -57,6 +57,11 @@ type BusinessRepository interface {
 	GetDailyViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
 	GetDailyNewFollowers(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
 	GetDailyNewReviews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	GetDailyPostLikes(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	GetDailyPostComments(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	GetDailyPostViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
+	// GetRatingDistribution returns visible-review counts keyed by star (1-5).
+	GetRatingDistribution(ctx context.Context, businessID string) (map[int]int, error)
 }
 
 type businessRepository struct {
@@ -1010,6 +1015,84 @@ func (r *businessRepository) GetDailyNewReviews(ctx context.Context, businessID 
 		 ORDER BY d`,
 		businessID, days,
 	)
+}
+
+// GetDailyPostLikes returns likes-per-day across the business's posts (zero-filled).
+func (r *businessRepository) GetDailyPostLikes(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(l.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT pl.created_at::date AS day, COUNT(*) AS cnt
+		   FROM post_likes pl
+		   JOIN posts p ON p.id = pl.post_id AND p.business_id = $1 AND p.deleted_at IS NULL
+		   WHERE pl.created_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) l ON l.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// GetDailyPostComments returns comments-per-day across the business's posts (zero-filled).
+func (r *businessRepository) GetDailyPostComments(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(c.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT pc.created_at::date AS day, COUNT(*) AS cnt
+		   FROM post_comments pc
+		   JOIN posts p ON p.id = pc.post_id AND p.business_id = $1 AND p.deleted_at IS NULL
+		   WHERE pc.deleted_at IS NULL AND pc.created_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) c ON c.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// GetDailyPostViews returns unique post views per day across the business's
+// posts (zero-filled) — the owner's "post reach".
+func (r *businessRepository) GetDailyPostViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	return r.queryDailyCounts(ctx,
+		`SELECT d::date, COALESCE(v.cnt, 0)
+		 FROM generate_series(CURRENT_DATE - ($2::int - 1), CURRENT_DATE, '1 day') AS d
+		 LEFT JOIN (
+		   SELECT pv.created_at::date AS day, COUNT(*) AS cnt
+		   FROM post_views pv
+		   JOIN posts p ON p.id = pv.post_id AND p.business_id = $1 AND p.deleted_at IS NULL
+		   WHERE pv.created_at >= CURRENT_DATE - ($2::int - 1)
+		   GROUP BY 1
+		 ) v ON v.day = d::date
+		 ORDER BY d`,
+		businessID, days,
+	)
+}
+
+// GetRatingDistribution returns visible-review counts keyed by star (1-5);
+// stars with no reviews are filled with 0.
+func (r *businessRepository) GetRatingDistribution(ctx context.Context, businessID string) (map[int]int, error) {
+	rows, err := r.db.Pool.Query(ctx,
+		`SELECT rating, COUNT(*)
+		 FROM business_reviews
+		 WHERE business_profile_id = $1 AND NOT is_hidden
+		 GROUP BY rating`,
+		businessID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	dist := map[int]int{1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
+	for rows.Next() {
+		var rating, count int
+		if err := rows.Scan(&rating, &count); err != nil {
+			return nil, err
+		}
+		dist[rating] = count
+	}
+	return dist, rows.Err()
 }
 
 // queryDailyCounts runs a (date, count) query and scans it into DailyCount

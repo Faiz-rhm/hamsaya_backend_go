@@ -953,6 +953,38 @@ func (m *MockBusinessRepository) GetDailyNewReviews(ctx context.Context, busines
 	return args.Get(0).([]models.DailyCount), args.Error(1)
 }
 
+func (m *MockBusinessRepository) GetDailyPostLikes(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	args := m.Called(ctx, businessID, days)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.DailyCount), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetDailyPostComments(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	args := m.Called(ctx, businessID, days)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.DailyCount), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetDailyPostViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error) {
+	args := m.Called(ctx, businessID, days)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.DailyCount), args.Error(1)
+}
+
+func (m *MockBusinessRepository) GetRatingDistribution(ctx context.Context, businessID string) (map[int]int, error) {
+	args := m.Called(ctx, businessID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(map[int]int), args.Error(1)
+}
+
 // MockNotificationRepository is a mock implementation of NotificationRepository
 type MockNotificationRepository struct {
 	mock.Mock

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -831,15 +832,45 @@ func (s *BusinessService) GetBusinessInsights(ctx context.Context, businessID, u
 		s.logger.Error("Failed to get daily reviews", zap.String("business_id", businessID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get insights", err)
 	}
+	likes, err := s.businessRepo.GetDailyPostLikes(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily post likes", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	comments, err := s.businessRepo.GetDailyPostComments(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily post comments", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	postViews, err := s.businessRepo.GetDailyPostViews(ctx, businessID, days)
+	if err != nil {
+		s.logger.Error("Failed to get daily post views", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	distribution, err := s.businessRepo.GetRatingDistribution(ctx, businessID)
+	if err != nil {
+		s.logger.Error("Failed to get rating distribution", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
+	// JSON object keys are strings; convert star ints for the payload.
+	dist := make(map[string]int, len(distribution))
+	for star, count := range distribution {
+		dist[strconv.Itoa(star)] = count
+	}
 
 	return &models.BusinessInsightsResponse{
-		Days:           days,
-		Views:          views,
-		Followers:      followers,
-		Reviews:        reviews,
-		TotalViews:     business.TotalViews,
-		TotalFollowers: business.TotalFollow,
-		TotalReviews:   business.ReviewCount,
+		Days:               days,
+		Views:              views,
+		Followers:          followers,
+		Reviews:            reviews,
+		Likes:              likes,
+		Comments:           comments,
+		PostViews:          postViews,
+		RatingDistribution: dist,
+		AvgRating:          business.AvgRating,
+		TotalViews:         business.TotalViews,
+		TotalFollowers:     business.TotalFollow,
+		TotalReviews:       business.ReviewCount,
 	}, nil
 }
 
