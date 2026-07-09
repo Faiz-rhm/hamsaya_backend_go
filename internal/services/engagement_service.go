@@ -72,7 +72,8 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 	pc := s.sendProfileCompletion(ctx)
 	vr := s.sendVerificationReminder(ctx)
 	fp := s.sendFirstPostNudge(ctx)
-	if ev+wb+sx+ud+pc+vr+fp > 0 {
+	mr := s.sendMonthlyBusinessReport(ctx)
+	if ev+wb+sx+ud+pc+vr+fp+mr > 0 {
 		s.logger.Info("engagement run complete",
 			zap.Int("event_reminders", ev),
 			zap.Int("winback", wb),
@@ -81,6 +82,7 @@ func (s *EngagementService) RunHourly(ctx context.Context) error {
 			zap.Int("profile_completion", pc),
 			zap.Int("verification_reminder", vr),
 			zap.Int("first_post_nudge", fp),
+			zap.Int("monthly_report", mr),
 		)
 	}
 	return nil
@@ -430,6 +432,91 @@ func (s *EngagementService) sendUnreadDigest(ctx context.Context) int {
 }
 
 // sendEventReminders notifies RSVP'd users 24h and 1h before an event starts.
+// sendMonthlyBusinessReport notifies every business owner with a summary of
+// last month's performance (profile views, new followers, items sold, event
+// RSVPs) and deep-links to the insights screen. Fires only during the first
+// 3 days of each month (retry window for downtime on the 1st); deduped per
+// (business, month) against the notifications table, so hourly runs send at
+// most one report per business per month.
+func (s *EngagementService) sendMonthlyBusinessReport(ctx context.Context) int {
+	now := time.Now()
+	if now.Day() > 3 {
+		return 0
+	}
+	monthStart := time.Date(now.Year(), now.Month(), 1, 0, 0, 0, 0, now.Location())
+	prevStart := monthStart.AddDate(0, -1, 0)
+	monthKey := prevStart.Format("2006-01") // e.g. "2026-06"
+
+	rows, err := s.db.Pool.Query(ctx, `
+		SELECT b.id, b.user_id, b.name,
+		  COALESCE((SELECT SUM(v.views) FROM business_profile_daily_views v
+		            WHERE v.business_id = b.id AND v.day >= $2::date AND v.day < $3::date), 0),
+		  (SELECT COUNT(*) FROM business_profile_followers f
+		   WHERE f.business_id = b.id AND f.created_at >= $2 AND f.created_at < $3),
+		  (SELECT COUNT(*) FROM posts sp
+		   WHERE sp.user_id = b.user_id AND sp.type = 'SELL' AND sp.sold
+		     AND sp.deleted_at IS NULL AND sp.sold_at >= $2 AND sp.sold_at < $3),
+		  (SELECT COUNT(*) FROM event_interests ei
+		   JOIN posts ep ON ep.id = ei.post_id AND ep.business_id = b.id AND ep.deleted_at IS NULL
+		   WHERE ei.event_state = 'going' AND ei.created_at >= $2 AND ei.created_at < $3)
+		FROM business_profiles b
+		WHERE b.deleted_at IS NULL
+		  AND b.created_at < $3
+		  AND NOT EXISTS (
+			SELECT 1 FROM notifications n
+			WHERE n.user_id = b.user_id
+			  AND n.type = 'MONTHLY_REPORT'
+			  AND n.data->>'business_id' = b.id::text
+			  AND n.data->>'month' = $1
+		  )
+	`, monthKey, prevStart, monthStart)
+	if err != nil {
+		s.logger.Error("monthly report query failed", zap.Error(err))
+		return 0
+	}
+	type target struct {
+		businessID, ownerID, name        string
+		views, follows, sold, eventRSVPs int
+	}
+	var targets []target
+	for rows.Next() {
+		var t target
+		if err := rows.Scan(&t.businessID, &t.ownerID, &t.name, &t.views, &t.follows, &t.sold, &t.eventRSVPs); err != nil {
+			s.logger.Error("scan monthly report row", zap.Error(err))
+			continue
+		}
+		targets = append(targets, t)
+	}
+	rows.Close()
+
+	total := 0
+	for _, t := range targets {
+		title := fmt.Sprintf("%s — %s report", t.name, prevStart.Format("January"))
+		msg := fmt.Sprintf(
+			"Last month: %d profile views, %d new followers, %d items sold, %d event RSVPs. Tap to see your full insights.",
+			t.views, t.follows, t.sold, t.eventRSVPs,
+		)
+		if _, err := s.notif.CreateNotification(ctx, &models.CreateNotificationRequest{
+			UserID:  t.ownerID,
+			Type:    models.NotificationTypeMonthlyReport,
+			Title:   &title,
+			Message: &msg,
+			Data: map[string]interface{}{
+				"type":        string(models.NotificationTypeMonthlyReport),
+				"business_id": t.businessID,
+				"month":       monthKey,
+				"action":      "view_insights",
+			},
+		}); err != nil {
+			s.logger.Error("create monthly report notification",
+				zap.String("business_id", t.businessID), zap.Error(err))
+			continue
+		}
+		total++
+	}
+	return total
+}
+
 func (s *EngagementService) sendEventReminders(ctx context.Context) int {
 	type window struct {
 		key, label, fromExpr, toExpr string
