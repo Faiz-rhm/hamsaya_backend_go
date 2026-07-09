@@ -621,13 +621,14 @@ func main() {
 		// Post routes
 		posts := v1.Group("/posts")
 		{
-			// Require auth for feed and post detail so engagement fields are always user-scoped
-			posts.GET("", authMiddleware.RequireAuth(), postHandler.GetFeed)
+			// Feed + detail reads are public (guest browsing); engagement fields
+			// (liked_by_me etc.) are only populated when a token is present.
+			posts.GET("", authMiddleware.OptionalAuth(), postHandler.GetFeed)
 			// /posts/feed must be registered before /:post_id to avoid the param route catching it
 			posts.GET("/feed", authMiddleware.RequireAuth(), postHandler.GetPersonalizedFeed)
 			// Daily limit usage — must come before /:post_id for the same reason.
 			posts.GET("/daily-limits", authMiddleware.RequireAuth(), dailyLimitHandler.GetMyDailyLimits)
-			posts.GET("/:post_id", authMiddleware.RequireAuth(), postHandler.GetPost)
+			posts.GET("/:post_id", authMiddleware.OptionalAuth(), postHandler.GetPost)
 			// Users who liked a post (for the "liked by" sheet).
 			posts.GET("/:post_id/likes", authMiddleware.RequireAuth(), postHandler.GetPostLikes)
 			// Record a unique post view (feeds the total-views count).
@@ -649,11 +650,11 @@ func main() {
 			posts.POST("/:post_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportPost)
 
 			// Comment routes
-			posts.GET("/:post_id/comments", authMiddleware.RequireAuth(), commentHandler.GetPostComments)
+			posts.GET("/:post_id/comments", authMiddleware.OptionalAuth(), commentHandler.GetPostComments)
 			posts.POST("/:post_id/comments", verifiedAuth, commentHandler.CreateComment)
 
 			// Poll routes
-			posts.GET("/:post_id/polls", authMiddleware.RequireAuth(), pollHandler.GetPostPoll)
+			posts.GET("/:post_id/polls", authMiddleware.OptionalAuth(), pollHandler.GetPostPoll)
 			posts.POST("/:post_id/polls", verifiedAuth, pollHandler.CreatePoll)
 		}
 
@@ -691,17 +692,17 @@ func main() {
 		businesses := v1.Group("/businesses")
 		{
 			// Static and more specific routes first (before /:business_id)
-			businesses.GET("/search", authMiddleware.RequireAuth(), businessHandler.ListBusinesses)
-			businesses.GET("/categories", authMiddleware.RequireAuth(), businessHandler.GetCategories)
+			businesses.GET("/search", authMiddleware.OptionalAuth(), businessHandler.ListBusinesses)
+			businesses.GET("/categories", authMiddleware.OptionalAuth(), businessHandler.GetCategories)
 			businesses.GET("/:business_id/hours", businessHandler.GetBusinessHours)
-			businesses.GET("/:business_id/attachments", authMiddleware.RequireAuth(), businessHandler.GetGallery)
+			businesses.GET("/:business_id/attachments", authMiddleware.OptionalAuth(), businessHandler.GetGallery)
 			businesses.GET("/:business_id/insights", authMiddleware.RequireAuth(), businessHandler.GetBusinessInsights)
 
 			// Business verification (owner submits documents; requires verified email)
 			businesses.POST("/:business_id/verification", verifiedAuth, businessVerificationHandler.SubmitVerification)
 			businesses.GET("/:business_id/verification", authMiddleware.RequireAuth(), businessVerificationHandler.GetVerificationStatus)
 
-			businesses.GET("/:business_id", authMiddleware.RequireAuth(), businessHandler.GetBusiness)
+			businesses.GET("/:business_id", authMiddleware.OptionalAuth(), businessHandler.GetBusiness)
 
 			// Protected routes (require verified email)
 			businesses.GET("", authMiddleware.RequireAuth(), businessHandler.GetMyBusinesses)
@@ -738,7 +739,7 @@ func main() {
 		// Category routes (marketplace categories)
 		categories := v1.Group("/categories")
 		{
-			categories.GET("", authMiddleware.RequireAuth(), categoryHandler.ListCategories)
+			categories.GET("", authMiddleware.OptionalAuth(), categoryHandler.ListCategories)
 			categories.GET("/:category_id", authMiddleware.RequireAuth(), categoryHandler.GetCategory)
 		}
 
