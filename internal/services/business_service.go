@@ -852,6 +852,11 @@ func (s *BusinessService) GetBusinessInsights(ctx context.Context, businessID, u
 		s.logger.Error("Failed to get rating distribution", zap.String("business_id", businessID), zap.Error(err))
 		return nil, utils.NewInternalError("Failed to get insights", err)
 	}
+	postCounts, err := s.businessRepo.GetOwnerPostCounts(ctx, businessID, userID)
+	if err != nil {
+		s.logger.Error("Failed to get owner post counts", zap.String("business_id", businessID), zap.Error(err))
+		return nil, utils.NewInternalError("Failed to get insights", err)
+	}
 	// JSON object keys are strings; convert star ints for the payload.
 	dist := make(map[string]int, len(distribution))
 	for star, count := range distribution {
@@ -871,6 +876,7 @@ func (s *BusinessService) GetBusinessInsights(ctx context.Context, businessID, u
 		TotalViews:         business.TotalViews,
 		TotalFollowers:     business.TotalFollow,
 		TotalReviews:       business.ReviewCount,
+		PostCounts:         postCounts,
 	}, nil
 }
 

@@ -236,4 +236,17 @@ type BusinessInsightsResponse struct {
 	TotalViews         int            `json:"total_views"`
 	TotalFollowers     int            `json:"total_followers"`
 	TotalReviews       int            `json:"total_reviews"`
+	// Content counts for the dashboard (business posts + owner's listings).
+	PostCounts *BusinessOwnerPostCounts `json:"post_counts,omitempty"`
+}
+
+// BusinessOwnerPostCounts summarizes the owner's content for the dashboard:
+// the business's updates/events/polls plus the owner's marketplace listings
+// (SELL posts are user-authored under the business-updates rule).
+type BusinessOwnerPostCounts struct {
+	UpcomingEvents int `json:"upcoming_events"`
+	Updates        int `json:"updates"`
+	Polls          int `json:"polls"`
+	ActiveSells    int `json:"active_sells"`
+	SoldSells      int `json:"sold_sells"`
 }

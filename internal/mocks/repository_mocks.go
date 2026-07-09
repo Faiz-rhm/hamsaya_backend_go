@@ -985,6 +985,14 @@ func (m *MockBusinessRepository) GetRatingDistribution(ctx context.Context, busi
 	return args.Get(0).(map[int]int), args.Error(1)
 }
 
+func (m *MockBusinessRepository) GetOwnerPostCounts(ctx context.Context, businessID, ownerID string) (*models.BusinessOwnerPostCounts, error) {
+	args := m.Called(ctx, businessID, ownerID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.BusinessOwnerPostCounts), args.Error(1)
+}
+
 // MockNotificationRepository is a mock implementation of NotificationRepository
 type MockNotificationRepository struct {
 	mock.Mock

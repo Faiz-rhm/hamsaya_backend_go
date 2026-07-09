@@ -62,6 +62,9 @@ type BusinessRepository interface {
 	GetDailyPostViews(ctx context.Context, businessID string, days int) ([]models.DailyCount, error)
 	// GetRatingDistribution returns visible-review counts keyed by star (1-5).
 	GetRatingDistribution(ctx context.Context, businessID string) (map[int]int, error)
+	// GetOwnerPostCounts returns dashboard content counts: the business's
+	// updates/events/polls plus the owner's SELL listings.
+	GetOwnerPostCounts(ctx context.Context, businessID, ownerID string) (*models.BusinessOwnerPostCounts, error)
 }
 
 type businessRepository struct {
@@ -1093,6 +1096,28 @@ func (r *businessRepository) GetRatingDistribution(ctx context.Context, business
 		dist[rating] = count
 	}
 	return dist, rows.Err()
+}
+
+// GetOwnerPostCounts returns dashboard content counts in one query: the
+// business's updates/upcoming-events/polls plus the owner's SELL listings
+// (SELL posts are user-authored under the business-updates rule).
+func (r *businessRepository) GetOwnerPostCounts(ctx context.Context, businessID, ownerID string) (*models.BusinessOwnerPostCounts, error) {
+	var counts models.BusinessOwnerPostCounts
+	err := r.db.Pool.QueryRow(ctx,
+		`SELECT
+		   COUNT(*) FILTER (WHERE p.business_id = $1 AND p.type = 'EVENT' AND p.start_date >= CURRENT_DATE),
+		   COUNT(*) FILTER (WHERE p.business_id = $1 AND p.type = 'FEED'),
+		   COUNT(*) FILTER (WHERE p.business_id = $1 AND p.type = 'PULL'),
+		   COUNT(*) FILTER (WHERE p.user_id = $2 AND p.type = 'SELL' AND NOT p.sold),
+		   COUNT(*) FILTER (WHERE p.user_id = $2 AND p.type = 'SELL' AND p.sold)
+		 FROM posts p
+		 WHERE p.deleted_at IS NULL AND (p.business_id = $1 OR p.user_id = $2)`,
+		businessID, ownerID,
+	).Scan(&counts.UpcomingEvents, &counts.Updates, &counts.Polls, &counts.ActiveSells, &counts.SoldSells)
+	if err != nil {
+		return nil, err
+	}
+	return &counts, nil
 }
 
 // queryDailyCounts runs a (date, count) query and scans it into DailyCount
