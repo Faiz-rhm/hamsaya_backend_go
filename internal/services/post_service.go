@@ -1171,6 +1171,7 @@ func (s *PostService) buildPostResponse(
 				Province:     business.Province,
 				District:     business.District,
 				Neighborhood: business.Neighborhood,
+				IsVerified:   business.IsVerified,
 			}
 		}
 	}
@@ -1344,6 +1345,7 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 				Province:     business.Province,
 				District:     business.District,
 				Neighborhood: business.Neighborhood,
+				IsVerified:   business.IsVerified,
 			}
 		}()
 	}
@@ -1526,6 +1528,7 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 				Province:     business.Province,
 				District:     business.District,
 				Neighborhood: business.Neighborhood,
+				IsVerified:   business.IsVerified,
 			}
 		}
 	}

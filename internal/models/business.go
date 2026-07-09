@@ -32,6 +32,7 @@ type BusinessProfile struct {
 	TotalFollow     int           `json:"total_follow"`
 	AvgRating       float64       `json:"avg_rating"`
 	ReviewCount     int           `json:"review_count"`
+	IsVerified      bool          `json:"is_verified"`
 	CreatedAt       time.Time     `json:"created_at"`
 	UpdatedAt       time.Time     `json:"updated_at"`
 	DeletedAt       *time.Time    `json:"-"`
@@ -188,6 +189,7 @@ type BusinessResponse struct {
 	Hours           []BusinessHoursResponse `json:"hours,omitempty"`
 	Gallery         []GalleryItem           `json:"gallery,omitempty"`
 	IsFollowing     bool                    `json:"is_following"`
+	IsVerified      bool                    `json:"is_verified"`
 	CreatedAt       time.Time               `json:"created_at"`
 	UpdatedAt       time.Time               `json:"updated_at"`
 }
@@ -253,4 +255,44 @@ type BusinessOwnerPostCounts struct {
 	Polls          int `json:"polls"`
 	ActiveSells    int `json:"active_sells"`
 	SoldSells      int `json:"sold_sells"`
+}
+
+// Business verification -------------------------------------------------------
+
+// VerificationStatus values for business_verification_requests.status.
+const (
+	VerificationStatusPending  = "PENDING"
+	VerificationStatusApproved = "APPROVED"
+	VerificationStatusRejected = "REJECTED"
+)
+
+// BusinessVerificationRequest is one owner-submitted verification attempt.
+type BusinessVerificationRequest struct {
+	ID              string     `json:"id"`
+	BusinessID      string     `json:"business_id"`
+	UserID          string     `json:"user_id"`
+	LicenseNo       *string    `json:"license_no,omitempty"`
+	Note            *string    `json:"note,omitempty"`
+	Documents       []Photo    `json:"documents"`
+	Status          string     `json:"status"`
+	RejectionReason *string    `json:"rejection_reason,omitempty"`
+	ReviewedBy      *string    `json:"reviewed_by,omitempty"`
+	ReviewedAt      *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
+}
+
+// BusinessVerificationListItem is the admin queue row: request + business
+// context for review without extra fetches.
+type BusinessVerificationListItem struct {
+	BusinessVerificationRequest
+	BusinessName   string  `json:"business_name"`
+	BusinessAvatar *Photo  `json:"business_avatar,omitempty"`
+	OwnerEmail     *string `json:"owner_email,omitempty"`
+}
+
+// ReviewBusinessVerificationRequest is the admin approve/reject payload.
+type ReviewBusinessVerificationRequest struct {
+	Action string  `json:"action" validate:"required,oneof=approve reject"`
+	Reason *string `json:"reason,omitempty" validate:"omitempty,max=1000"`
 }

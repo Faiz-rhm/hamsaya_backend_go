@@ -183,7 +183,7 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
-			show_location, total_views, total_follow, avg_rating, review_count, created_at, updated_at
+			show_location, total_views, total_follow, avg_rating, review_count, is_verified, created_at, updated_at
 		FROM business_profiles
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -216,6 +216,7 @@ func (r *businessRepository) GetByID(ctx context.Context, businessID string) (*m
 		&business.TotalFollow,
 		&business.AvgRating,
 		&business.ReviewCount,
+		&business.IsVerified,
 		&business.CreatedAt,
 		&business.UpdatedAt,
 	)
@@ -243,7 +244,7 @@ func (r *businessRepository) GetByIDs(ctx context.Context, businessIDs []string)
 			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
-			show_location, total_views, total_follow, avg_rating, review_count, created_at, updated_at
+			show_location, total_views, total_follow, avg_rating, review_count, is_verified, created_at, updated_at
 		FROM business_profiles
 		WHERE id = ANY($1) AND deleted_at IS NULL
 	`
@@ -284,6 +285,7 @@ func (r *businessRepository) GetByIDs(ctx context.Context, businessIDs []string)
 			&business.TotalFollow,
 			&business.AvgRating,
 			&business.ReviewCount,
+			&business.IsVerified,
 			&business.CreatedAt,
 			&business.UpdatedAt,
 		); err != nil {
@@ -304,7 +306,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 			email, website, avatar, avatar_color, cover, status, additional_info,
 			ST_X(address_location::geometry), ST_Y(address_location::geometry),
 			country, province, district, neighborhood,
-			show_location, total_views, total_follow, avg_rating, review_count, created_at, updated_at
+			show_location, total_views, total_follow, avg_rating, review_count, is_verified, created_at, updated_at
 		FROM business_profiles
 		WHERE user_id = $1 AND deleted_at IS NULL
 		ORDER BY created_at DESC
@@ -347,6 +349,7 @@ func (r *businessRepository) GetByUserID(ctx context.Context, userID string, lim
 			&business.TotalFollow,
 			&business.AvgRating,
 			&business.ReviewCount,
+			&business.IsVerified,
 			&business.CreatedAt,
 			&business.UpdatedAt,
 		)
@@ -503,7 +506,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 			bp.additional_info, ST_X(bp.address_location::geometry), ST_Y(bp.address_location::geometry),
 			bp.country, bp.province,
 			bp.district, bp.neighborhood, bp.show_location, bp.total_views,
-			bp.total_follow, bp.avg_rating, bp.review_count, bp.created_at, bp.updated_at
+			bp.total_follow, bp.avg_rating, bp.review_count, bp.is_verified, bp.created_at, bp.updated_at
 		FROM business_profiles bp
 	`
 
@@ -595,6 +598,7 @@ func (r *businessRepository) List(ctx context.Context, filter *models.BusinessLi
 			&business.TotalFollow,
 			&business.AvgRating,
 			&business.ReviewCount,
+			&business.IsVerified,
 			&business.CreatedAt,
 			&business.UpdatedAt,
 		)

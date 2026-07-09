@@ -31,6 +31,9 @@ const (
 
 	// Business growth
 	NotificationTypeBusinessMilestone NotificationType = "BUSINESS_MILESTONE" // follower-count milestones (10, 25, 50, …)
+	// Business verification lifecycle
+	NotificationTypeBusinessVerified             NotificationType = "BUSINESS_VERIFIED"              // admin approved — tick granted
+	NotificationTypeBusinessVerificationRejected NotificationType = "BUSINESS_VERIFICATION_REJECTED" // admin rejected w/ reason
 
 	// Account / security
 	NotificationTypeWelcome            NotificationType = "WELCOME"

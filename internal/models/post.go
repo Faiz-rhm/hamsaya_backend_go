@@ -313,6 +313,7 @@ type BusinessInfo struct {
 	Province     *string `json:"province,omitempty"`
 	District     *string `json:"district,omitempty"`
 	Neighborhood *string `json:"neighborhood,omitempty"`
+	IsVerified   bool    `json:"is_verified"`
 }
 
 // LocationInfo represents location information

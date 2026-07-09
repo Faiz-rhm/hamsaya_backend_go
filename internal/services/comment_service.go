@@ -640,7 +640,7 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 	}
 
 	// If comment was posted as a business, attach business_id and business_profile
-		if comment.BusinessID != nil && *comment.BusinessID != "" {
+	if comment.BusinessID != nil && *comment.BusinessID != "" {
 		response.BusinessID = comment.BusinessID
 		business, err := s.businessRepo.GetByID(ctx, *comment.BusinessID)
 		if err == nil {
@@ -662,6 +662,7 @@ func (s *CommentService) enrichComment(ctx context.Context, comment *models.Post
 				Province:     business.Province,
 				District:     business.District,
 				Neighborhood: business.Neighborhood,
+				IsVerified:   business.IsVerified,
 			}
 		}
 	}

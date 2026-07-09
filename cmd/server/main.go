@@ -287,6 +287,7 @@ func main() {
 	eventRepo := repositories.NewEventRepository(db)
 	businessRepo := repositories.NewBusinessRepository(db)
 	businessReviewRepo := repositories.NewBusinessReviewRepository(db)
+	businessVerificationRepo := repositories.NewBusinessVerificationRepository(db)
 	categoryRepo := repositories.NewCategoryRepository(db)
 	conversationRepo := repositories.NewConversationRepository(db)
 	messageRepo := repositories.NewMessageRepository(db)
@@ -331,6 +332,7 @@ func main() {
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger).
 		WithCache(cache.New(redisClient, "businesses", logger))
 	businessReviewService := services.NewBusinessReviewService(businessReviewRepo, businessRepo, userRepo, notificationService, logger)
+	businessVerificationService := services.NewBusinessVerificationService(businessVerificationRepo, businessRepo, notificationService, logger)
 	categoryService := services.NewCategoryService(categoryRepo, logger).
 		WithCache(cache.New(redisClient, "categories", logger))
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
@@ -449,6 +451,7 @@ func main() {
 	eventHandler := handlers.NewEventHandler(eventService, validator, logger)
 	businessHandler := handlers.NewBusinessHandler(businessService, storageService, validator, logger)
 	businessReviewHandler := handlers.NewBusinessReviewHandler(businessReviewService, userRepo, validator, logger)
+	businessVerificationHandler := handlers.NewBusinessVerificationHandler(businessVerificationService, storageService, validator, logger)
 	categoryHandler := handlers.NewCategoryHandler(categoryService, validator, logger)
 	chatHandler := handlers.NewChatHandler(chatService, wsHub, validator, logger, cfg)
 	notificationHandler := handlers.NewNotificationHandler(notificationService, validator, logger)
@@ -693,6 +696,10 @@ func main() {
 			businesses.GET("/:business_id/attachments", authMiddleware.RequireAuth(), businessHandler.GetGallery)
 			businesses.GET("/:business_id/insights", authMiddleware.RequireAuth(), businessHandler.GetBusinessInsights)
 
+			// Business verification (owner submits documents; requires verified email)
+			businesses.POST("/:business_id/verification", verifiedAuth, businessVerificationHandler.SubmitVerification)
+			businesses.GET("/:business_id/verification", authMiddleware.RequireAuth(), businessVerificationHandler.GetVerificationStatus)
+
 			businesses.GET("/:business_id", authMiddleware.RequireAuth(), businessHandler.GetBusiness)
 
 			// Protected routes (require verified email)
@@ -876,6 +883,10 @@ func main() {
 			admin.GET("/businesses/:business_id", adminHandler.GetBusinessDetail)
 			admin.PUT("/businesses/:business_id/status", adminHandler.UpdateBusinessStatus)
 			admin.DELETE("/businesses/:business_id", adminOnly, adminHandler.DeleteBusiness)
+
+			// Business verification review queue
+			admin.GET("/business-verifications", businessVerificationHandler.ListVerifications)
+			admin.PATCH("/business-verifications/:request_id", businessVerificationHandler.ReviewVerification)
 
 			// Categories — admin-only (platform config).
 			admin.GET("/categories", adminOnly, categoryHandler.GetAllCategories)

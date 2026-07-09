@@ -950,6 +950,7 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 		ShowLocation:   business.ShowLocation,
 		TotalViews:     business.TotalViews,
 		TotalFollow:    business.TotalFollow,
+		IsVerified:     business.IsVerified,
 		CreatedAt:      business.CreatedAt,
 		UpdatedAt:      business.UpdatedAt,
 	}
