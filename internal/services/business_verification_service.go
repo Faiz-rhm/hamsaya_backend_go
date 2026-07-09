@@ -9,6 +9,7 @@ import (
 	"github.com/hamsaya/backend/internal/models"
 	"github.com/hamsaya/backend/internal/repositories"
 	"github.com/hamsaya/backend/internal/utils"
+	"github.com/hamsaya/backend/pkg/cache"
 	"go.uber.org/zap"
 )
 
@@ -19,6 +20,18 @@ type BusinessVerificationService struct {
 	businessRepo     repositories.BusinessRepository
 	notification     *NotificationService
 	logger           *zap.Logger
+
+	// Optional — the business-profile cache namespace (same one
+	// BusinessService uses). Busted on approval so the verified tick shows
+	// immediately instead of after the 5-minute profile TTL.
+	businessCache *cache.Cache
+}
+
+// WithBusinessCache attaches the business-profile cache namespace so
+// approvals invalidate cached profiles. Call once at startup.
+func (s *BusinessVerificationService) WithBusinessCache(c *cache.Cache) *BusinessVerificationService {
+	s.businessCache = c
+	return s
 }
 
 // NewBusinessVerificationService constructs the service.
@@ -138,6 +151,11 @@ func (s *BusinessVerificationService) Review(ctx context.Context, requestID, rev
 			s.logger.Error("Failed to set business verified",
 				zap.String("business_id", req.BusinessID), zap.Error(err))
 			return nil, utils.NewInternalError("Failed to mark business verified", err)
+		}
+		// Bust every cached profile variant so the tick is visible on the
+		// very next fetch (profile cache TTL is 5 minutes otherwise).
+		if s.businessCache != nil {
+			s.businessCache.DelPattern(ctx, req.BusinessID+":*")
 		}
 	}
 

@@ -332,7 +332,8 @@ func main() {
 	businessService := services.NewBusinessService(businessRepo, userRepo, notificationService, logger).
 		WithCache(cache.New(redisClient, "businesses", logger))
 	businessReviewService := services.NewBusinessReviewService(businessReviewRepo, businessRepo, userRepo, notificationService, logger)
-	businessVerificationService := services.NewBusinessVerificationService(businessVerificationRepo, businessRepo, notificationService, logger)
+	businessVerificationService := services.NewBusinessVerificationService(businessVerificationRepo, businessRepo, notificationService, logger).
+		WithBusinessCache(cache.New(redisClient, "businesses", logger))
 	categoryService := services.NewCategoryService(categoryRepo, logger).
 		WithCache(cache.New(redisClient, "categories", logger))
 	fanoutService := services.NewFanoutService(fanoutRepo, logger)
