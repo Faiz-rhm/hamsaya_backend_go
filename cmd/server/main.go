@@ -602,7 +602,7 @@ func main() {
 			users.GET("/me/export", verifiedAuth, rateLimiter.LimitDataExport(), profileHandler.ExportData)
 
 			// Require auth for user profile and relationship views
-			users.GET("/:user_id", authMiddleware.RequireAuth(), profileHandler.GetUserProfile)
+			users.GET("/:user_id", authMiddleware.OptionalAuth(), profileHandler.GetUserProfile)
 
 			// Relationship routes (require authentication)
 			users.POST("/:user_id/follow", verifiedAuth, relationshipsHandler.FollowUser)
