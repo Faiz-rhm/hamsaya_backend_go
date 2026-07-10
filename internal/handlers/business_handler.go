@@ -895,7 +895,14 @@ func (h *BusinessHandler) ListBusinesses(c *gin.Context) {
 		return
 	}
 
-	utils.SendSuccess(c, http.StatusOK, "Businesses retrieved successfully", businesses)
+	// Search/directory cards only render a slim subset — trimming here keeps
+	// the payload small (full profiles shipped hours/contact/counters too).
+	cards := make([]*models.BusinessCardResponse, 0, len(businesses))
+	for _, b := range businesses {
+		cards = append(cards, models.NewBusinessCardResponse(b))
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Businesses retrieved successfully", cards)
 }
 
 // GetCategories godoc

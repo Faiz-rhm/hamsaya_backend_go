@@ -194,6 +194,40 @@ type BusinessResponse struct {
 	UpdatedAt       time.Time               `json:"updated_at"`
 }
 
+// BusinessCardResponse is the trimmed payload for business list/search cards.
+// Only the fields the mobile search + directory cards actually render — full
+// detail (hours, contact info, cover, counters) comes from GET /businesses/:id.
+type BusinessCardResponse struct {
+	ID              string             `json:"id"`
+	UserID          string             `json:"user_id"`
+	Name            string             `json:"name"`
+	Avatar          *Photo             `json:"avatar,omitempty"`
+	AvatarColor     *string            `json:"avatar_color,omitempty"`
+	AddressLocation *string            `json:"address_location"`
+	Province        *string            `json:"province"`
+	District        *string            `json:"district"`
+	Neighborhood    *string            `json:"neighborhood"`
+	Categories      []BusinessCategory `json:"categories"`
+	IsVerified      bool               `json:"is_verified"`
+}
+
+// NewBusinessCardResponse trims a full BusinessResponse down to card fields.
+func NewBusinessCardResponse(b *BusinessResponse) *BusinessCardResponse {
+	return &BusinessCardResponse{
+		ID:              b.ID,
+		UserID:          b.UserID,
+		Name:            b.Name,
+		Avatar:          b.Avatar,
+		AvatarColor:     b.AvatarColor,
+		AddressLocation: b.AddressLocation,
+		Province:        b.Province,
+		District:        b.District,
+		Neighborhood:    b.Neighborhood,
+		Categories:      b.Categories,
+		IsVerified:      b.IsVerified,
+	}
+}
+
 // BusinessHoursResponse represents business hours in API responses
 type BusinessHoursResponse struct {
 	Day       string  `json:"day"`
