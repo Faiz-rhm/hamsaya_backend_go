@@ -786,14 +786,15 @@ func main() {
 			notifications.DELETE("/apns-token", authMiddleware.RequireAuth(), notificationHandler.UnregisterAPNsToken)
 		}
 
-		// Search and discovery routes (require auth + rate limit — full-text +
-		// geospatial queries are the most expensive read path).
+		// Search and discovery routes — public reads for guest browsing, but
+		// rate-limited (full-text + geospatial queries are the most expensive
+		// read path). /search/users stays auth-only (user directory).
 		searchRL := rateLimiter.LimitByType("search")
-		v1.GET("/search", authMiddleware.RequireAuth(), searchRL, searchHandler.Search)
-		v1.GET("/search/posts", authMiddleware.RequireAuth(), searchRL, searchHandler.SearchPosts)
+		v1.GET("/search", authMiddleware.OptionalAuth(), searchRL, searchHandler.Search)
+		v1.GET("/search/posts", authMiddleware.OptionalAuth(), searchRL, searchHandler.SearchPosts)
 		v1.GET("/search/users", authMiddleware.RequireAuth(), searchRL, searchHandler.SearchUsers)
-		v1.GET("/search/businesses", authMiddleware.RequireAuth(), searchRL, searchHandler.SearchBusinesses)
-		v1.GET("/discover", authMiddleware.RequireAuth(), searchRL, searchHandler.Discover)
+		v1.GET("/search/businesses", authMiddleware.OptionalAuth(), searchRL, searchHandler.SearchBusinesses)
+		v1.GET("/discover", authMiddleware.OptionalAuth(), searchRL, searchHandler.Discover)
 
 		// Feedback routes (require verified email to submit)
 		feedback := v1.Group("/feedback")
