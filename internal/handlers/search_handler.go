@@ -75,6 +75,11 @@ func (h *SearchHandler) Search(c *gin.Context) {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
 		}
+	} else if pageStr := c.Query("page"); pageStr != "" {
+		// Mobile paginates with "page" (0-based): offset = page * limit.
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			offset = p * limit
+		}
 	}
 
 	// Parse optional location parameters
@@ -165,6 +170,11 @@ func (h *SearchHandler) SearchPosts(c *gin.Context) {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
 		}
+	} else if pageStr := c.Query("page"); pageStr != "" {
+		// Mobile paginates with "page" (0-based): offset = page * limit.
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			offset = p * limit
+		}
 	}
 
 	// Parse optional location parameters
@@ -243,6 +253,11 @@ func (h *SearchHandler) SearchUsers(c *gin.Context) {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
 		}
+	} else if pageStr := c.Query("page"); pageStr != "" {
+		// Mobile paginates with "page" (0-based): offset = page * limit.
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			offset = p * limit
+		}
 	}
 
 	req := &models.SearchRequest{
@@ -302,6 +317,11 @@ func (h *SearchHandler) SearchBusinesses(c *gin.Context) {
 	if offsetStr := c.Query("offset"); offsetStr != "" {
 		if o, err := strconv.Atoi(offsetStr); err == nil && o >= 0 {
 			offset = o
+		}
+	} else if pageStr := c.Query("page"); pageStr != "" {
+		// Mobile paginates with "page" (0-based): offset = page * limit.
+		if p, err := strconv.Atoi(pageStr); err == nil && p >= 0 {
+			offset = p * limit
 		}
 	}
 
