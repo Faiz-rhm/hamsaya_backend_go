@@ -180,6 +180,20 @@ func (s *RelationshipsService) GetFollowers(ctx context.Context, userID string, 
 	return followers, nil
 }
 
+// RemoveFollower removes followerID from userID's followers — the reverse
+// edge of UnfollowUser. No-op if the edge doesn't exist.
+func (s *RelationshipsService) RemoveFollower(ctx context.Context, userID, followerID string) error {
+	if userID == followerID {
+		return utils.NewBadRequestError("Cannot remove yourself", nil)
+	}
+	if err := s.relationshipsRepo.UnfollowUser(ctx, followerID, userID); err != nil {
+		s.logger.Error("Failed to remove follower",
+			zap.String("user_id", userID), zap.String("follower_id", followerID), zap.Error(err))
+		return utils.NewInternalError("Failed to remove follower", err)
+	}
+	return nil
+}
+
 // GetFollowing gets users that a user is following with profile information
 func (s *RelationshipsService) GetFollowing(ctx context.Context, userID string, viewerID *string, limit, offset int) ([]*models.FollowingResponse, error) {
 	// Get following

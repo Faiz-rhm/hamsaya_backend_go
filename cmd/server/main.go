@@ -611,6 +611,9 @@ func main() {
 			users.POST("/:user_id/follow", verifiedAuth, relationshipsHandler.FollowUser)
 			users.DELETE("/:user_id/follow", verifiedAuth, relationshipsHandler.UnfollowUser)
 			users.GET("/:user_id/followers", authMiddleware.RequireAuth(), relationshipsHandler.GetFollowers)
+			// Gin can't mix "me" literal with :user_id wildcard at the same
+			// segment — reuse the wildcard and treat it as the follower id.
+			users.DELETE("/:user_id/follower", authMiddleware.RequireAuth(), relationshipsHandler.RemoveFollower)
 			users.GET("/:user_id/following", authMiddleware.RequireAuth(), relationshipsHandler.GetFollowing)
 			users.POST("/:user_id/block", verifiedAuth, relationshipsHandler.BlockUser)
 			users.DELETE("/:user_id/block", verifiedAuth, relationshipsHandler.UnblockUser)

@@ -102,6 +102,33 @@ func (h *RelationshipsHandler) UnfollowUser(c *gin.Context) {
 // @Success 200 {object} utils.Response{data=[]models.FollowerResponse}
 // @Failure 401 {object} utils.Response
 // @Failure 500 {object} utils.Response
+// RemoveFollower removes a user from the authenticated user's followers
+// (Instagram-style "Remove"). DELETE /users/:user_id/follower — the path
+// param is the follower to remove; implemented as the reverse unfollow
+// (deletes the follower→me edge).
+// @Summary Remove a follower
+// @Tags relationships
+// @Produce json
+// @Param user_id path string true "Follower user ID to remove"
+// @Success 200 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /users/{user_id}/follower [delete]
+func (h *RelationshipsHandler) RemoveFollower(c *gin.Context) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.SendError(c, http.StatusUnauthorized, "User not authenticated", utils.ErrUnauthorized)
+		return
+	}
+	followerID := c.Param("user_id")
+
+	if err := h.relationshipsService.RemoveFollower(c.Request.Context(), userID.(string), followerID); err != nil {
+		h.handleError(c, err)
+		return
+	}
+
+	utils.SendSuccess(c, http.StatusOK, "Follower removed successfully", nil)
+}
+
 // @Router /users/{user_id}/followers [get]
 func (h *RelationshipsHandler) GetFollowers(c *gin.Context) {
 	// Get target user ID from path
