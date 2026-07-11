@@ -94,6 +94,27 @@ func (s *ProfileService) GetProfile(ctx context.Context, userID string, viewerID
 	}
 	response.PostsCount = postsCount
 
+	// PII lockdown. Contact/identity data is owner-only: email, phone, DOB,
+	// exact home coordinates, and MFA status must never ship to other users
+	// (they previously did). Anonymous callers additionally get coarse
+	// location only (province — no district/neighborhood).
+	isSelf := viewerID != nil && *viewerID == userID
+	if !isSelf {
+		response.Email = ""
+		response.Phone = nil
+		response.PhoneCountryCode = nil
+		response.DOB = nil
+		response.Latitude = nil
+		response.Longitude = nil
+		response.MFAEnabled = false
+		response.CompletionPercent = 0
+		response.MissingFields = nil
+	}
+	if viewerID == nil || *viewerID == "" {
+		response.District = nil
+		response.Neighborhood = nil
+	}
+
 	// Populate relationship status (is_blocked, has_blocked_me) if viewer is authenticated
 	if viewerID != nil && *viewerID != "" && *viewerID != userID {
 		status, err := s.relationshipsRepo.GetRelationshipStatus(ctx, *viewerID, userID)

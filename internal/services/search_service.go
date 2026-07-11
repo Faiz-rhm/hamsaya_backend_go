@@ -23,14 +23,14 @@ const discoverTTL = 30 * time.Second
 
 // SearchService handles search and discovery operations
 type SearchService struct {
-	searchRepo       repositories.SearchRepository
-	postRepo         repositories.PostRepository
-	userRepo         repositories.UserRepository
-	businessRepo     repositories.BusinessRepository
-	categoryRepo     repositories.CategoryRepository
+	searchRepo        repositories.SearchRepository
+	postRepo          repositories.PostRepository
+	userRepo          repositories.UserRepository
+	businessRepo      repositories.BusinessRepository
+	categoryRepo      repositories.CategoryRepository
 	relationshipsRepo repositories.RelationshipsRepository
-	logger           *zap.Logger
-	cache            *cache.Cache // optional; nil = no discover caching
+	logger            *zap.Logger
+	cache             *cache.Cache // optional; nil = no discover caching
 }
 
 // NewSearchService creates a new search service
@@ -44,13 +44,13 @@ func NewSearchService(
 	logger *zap.Logger,
 ) *SearchService {
 	return &SearchService{
-		searchRepo:       searchRepo,
-		postRepo:         postRepo,
-		userRepo:         userRepo,
-		businessRepo:     businessRepo,
-		categoryRepo:     categoryRepo,
+		searchRepo:        searchRepo,
+		postRepo:          postRepo,
+		userRepo:          userRepo,
+		businessRepo:      businessRepo,
+		categoryRepo:      categoryRepo,
 		relationshipsRepo: relationshipsRepo,
-		logger:           logger,
+		logger:            logger,
 	}
 }
 
@@ -200,7 +200,7 @@ func (s *SearchService) Discover(ctx context.Context, userID *string, req *model
 		if err != nil {
 			s.logger.Error("Failed to get discover posts", zap.Error(err))
 		} else {
-			response.Posts = s.enrichDiscoverPosts(ctx, posts)
+			response.Posts = s.enrichDiscoverPosts(ctx, posts, userID == nil || *userID == "")
 		}
 	}
 
@@ -210,7 +210,7 @@ func (s *SearchService) Discover(ctx context.Context, userID *string, req *model
 		if err != nil {
 			s.logger.Error("Failed to get discover businesses", zap.Error(err))
 		} else {
-			response.Businesses = s.enrichDiscoverBusinesses(ctx, businesses)
+			response.Businesses = s.enrichDiscoverBusinesses(ctx, businesses, userID == nil || *userID == "")
 		}
 	}
 
@@ -391,7 +391,7 @@ func (s *SearchService) enrichBusinesses(ctx context.Context, businesses []*mode
 // enrichDiscoverPosts enriches discover post results. Fetches first
 // attachment per post in a single batched query so the mobile client doesn't
 // have to issue one /posts/{id}/attachments request per marker card.
-func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models.Post) []*models.DiscoverPost {
+func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models.Post, anon bool) []*models.DiscoverPost {
 	results := make([]*models.DiscoverPost, 0, len(posts))
 
 	// Batched fetch of first attachment per post.
@@ -411,9 +411,16 @@ func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models
 	for _, post := range posts {
 		var location *models.Location
 		if post.AddressLocation != nil && post.AddressLocation.Valid {
+			lat, lng := post.AddressLocation.P.Y, post.AddressLocation.P.X
+			if anon {
+				// Anonymous map browsing gets area-level pins (~1 km), not
+				// exact seller/home coordinates.
+				lat = math.Round(lat*100) / 100
+				lng = math.Round(lng*100) / 100
+			}
 			location = &models.Location{
-				Latitude:  post.AddressLocation.P.Y,
-				Longitude: post.AddressLocation.P.X,
+				Latitude:  lat,
+				Longitude: lng,
 				Country:   post.Country,
 				Province:  post.Province,
 				District:  post.District,
@@ -461,7 +468,7 @@ func (s *SearchService) enrichDiscoverPosts(ctx context.Context, posts []*models
 // category-name lists for all businesses in a single batched query so the
 // mobile client doesn't have to issue one /businesses/{id}/categories
 // request per marker card.
-func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses []*models.BusinessProfile) []*models.DiscoverBusiness {
+func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses []*models.BusinessProfile, anon bool) []*models.DiscoverBusiness {
 	results := make([]*models.DiscoverBusiness, 0, len(businesses))
 
 	businessIDs := make([]string, 0, len(businesses))
@@ -480,9 +487,14 @@ func (s *SearchService) enrichDiscoverBusinesses(ctx context.Context, businesses
 	for _, business := range businesses {
 		var location *models.Location
 		if business.AddressLocation != nil && business.AddressLocation.Valid {
+			lat, lng := business.AddressLocation.P.Y, business.AddressLocation.P.X
+			if anon {
+				lat = math.Round(lat*100) / 100
+				lng = math.Round(lng*100) / 100
+			}
 			location = &models.Location{
-				Latitude:  business.AddressLocation.P.Y,
-				Longitude: business.AddressLocation.P.X,
+				Latitude:  lat,
+				Longitude: lng,
 				Country:   business.Country,
 				Province:  business.Province,
 				District:  business.District,

@@ -57,6 +57,16 @@ var DefaultRateLimits = map[string]RateLimitConfig{
 		Window:      time.Minute,
 		KeyPrefix:   "ratelimit:default:",
 	},
+	// public-read: IP-keyed cap on the unauthenticated read surface
+	// (/posts, /discover, /businesses/search, /users/:id, …). 240/min leaves
+	// generous headroom for real browsing (a feed page load is a handful of
+	// calls, NAT'd IPs share the pool) while making full-catalog scraping
+	// impractically slow.
+	"public-read": {
+		MaxRequests: 240,
+		Window:      time.Minute,
+		KeyPrefix:   "ratelimit:publicread:",
+	},
 	// auth: 10/min/IP — 5/min was tripping shared-IP users (NAT, carrier).
 	// Still throttles credential-stuffing scripts well below useful speed.
 	"auth": {

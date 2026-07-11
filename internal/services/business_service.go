@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -1050,6 +1051,23 @@ func (s *BusinessService) enrichBusiness(ctx context.Context, business *models.B
 	}
 
 	wg.Wait()
+
+	// Anonymous callers must not scrape contact PII or exact pins — the
+	// mobile app masks these in the UI, but this is the real boundary.
+	// Coordinates round to 2 decimals (~1 km) so guest map browsing still
+	// places the business in the right area.
+	if viewerID == nil || *viewerID == "" {
+		response.Email = nil
+		response.PhoneNumber = nil
+		if response.Location != nil && response.Location.Latitude != nil && response.Location.Longitude != nil {
+			lat := math.Round(*response.Location.Latitude*100) / 100
+			lng := math.Round(*response.Location.Longitude*100) / 100
+			response.Location.Latitude = &lat
+			response.Location.Longitude = &lng
+			addrLoc := fmt.Sprintf("(%.2f,%.2f)", lat, lng)
+			response.AddressLocation = &addrLoc
+		}
+	}
 
 	return response, nil
 }

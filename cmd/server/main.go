@@ -366,6 +366,9 @@ func main() {
 	// verifiedAuth requires email verification; use for create/update/delete (post, comment, follow, etc.)
 	verifiedAuth := authMiddleware.RequireVerifiedEmail()
 	rateLimiter := middleware.NewRateLimiter(redisClient, logger)
+	// IP-keyed cap for the unauthenticated read surface — makes catalog
+	// scraping impractical while leaving real browsing untouched.
+	publicReadRL := rateLimiter.LimitByType("public-read")
 	banMiddleware := middleware.NewBanMiddleware(adminRepo, logger)
 
 	// Set Gin mode
@@ -602,7 +605,7 @@ func main() {
 			users.GET("/me/export", verifiedAuth, rateLimiter.LimitDataExport(), profileHandler.ExportData)
 
 			// Require auth for user profile and relationship views
-			users.GET("/:user_id", authMiddleware.OptionalAuth(), profileHandler.GetUserProfile)
+			users.GET("/:user_id", authMiddleware.OptionalAuth(), publicReadRL, profileHandler.GetUserProfile)
 
 			// Relationship routes (require authentication)
 			users.POST("/:user_id/follow", verifiedAuth, relationshipsHandler.FollowUser)
@@ -623,12 +626,12 @@ func main() {
 		{
 			// Feed + detail reads are public (guest browsing); engagement fields
 			// (liked_by_me etc.) are only populated when a token is present.
-			posts.GET("", authMiddleware.OptionalAuth(), postHandler.GetFeed)
+			posts.GET("", authMiddleware.OptionalAuth(), publicReadRL, postHandler.GetFeed)
 			// /posts/feed must be registered before /:post_id to avoid the param route catching it
 			posts.GET("/feed", authMiddleware.RequireAuth(), postHandler.GetPersonalizedFeed)
 			// Daily limit usage — must come before /:post_id for the same reason.
 			posts.GET("/daily-limits", authMiddleware.RequireAuth(), dailyLimitHandler.GetMyDailyLimits)
-			posts.GET("/:post_id", authMiddleware.OptionalAuth(), postHandler.GetPost)
+			posts.GET("/:post_id", authMiddleware.OptionalAuth(), publicReadRL, postHandler.GetPost)
 			// Users who liked a post (for the "liked by" sheet).
 			posts.GET("/:post_id/likes", authMiddleware.RequireAuth(), postHandler.GetPostLikes)
 			// Record a unique post view (feeds the total-views count).
@@ -650,11 +653,11 @@ func main() {
 			posts.POST("/:post_id/report", verifiedAuth, rateLimiter.LimitReports(), reportHandler.ReportPost)
 
 			// Comment routes
-			posts.GET("/:post_id/comments", authMiddleware.OptionalAuth(), commentHandler.GetPostComments)
+			posts.GET("/:post_id/comments", authMiddleware.OptionalAuth(), publicReadRL, commentHandler.GetPostComments)
 			posts.POST("/:post_id/comments", verifiedAuth, commentHandler.CreateComment)
 
 			// Poll routes
-			posts.GET("/:post_id/polls", authMiddleware.OptionalAuth(), pollHandler.GetPostPoll)
+			posts.GET("/:post_id/polls", authMiddleware.OptionalAuth(), publicReadRL, pollHandler.GetPostPoll)
 			posts.POST("/:post_id/polls", verifiedAuth, pollHandler.CreatePoll)
 		}
 
@@ -692,17 +695,17 @@ func main() {
 		businesses := v1.Group("/businesses")
 		{
 			// Static and more specific routes first (before /:business_id)
-			businesses.GET("/search", authMiddleware.OptionalAuth(), businessHandler.ListBusinesses)
+			businesses.GET("/search", authMiddleware.OptionalAuth(), publicReadRL, businessHandler.ListBusinesses)
 			businesses.GET("/categories", authMiddleware.OptionalAuth(), businessHandler.GetCategories)
 			businesses.GET("/:business_id/hours", businessHandler.GetBusinessHours)
-			businesses.GET("/:business_id/attachments", authMiddleware.OptionalAuth(), businessHandler.GetGallery)
+			businesses.GET("/:business_id/attachments", authMiddleware.OptionalAuth(), publicReadRL, businessHandler.GetGallery)
 			businesses.GET("/:business_id/insights", authMiddleware.RequireAuth(), businessHandler.GetBusinessInsights)
 
 			// Business verification (owner submits documents; requires verified email)
 			businesses.POST("/:business_id/verification", verifiedAuth, businessVerificationHandler.SubmitVerification)
 			businesses.GET("/:business_id/verification", authMiddleware.RequireAuth(), businessVerificationHandler.GetVerificationStatus)
 
-			businesses.GET("/:business_id", authMiddleware.OptionalAuth(), businessHandler.GetBusiness)
+			businesses.GET("/:business_id", authMiddleware.OptionalAuth(), publicReadRL, businessHandler.GetBusiness)
 
 			// Protected routes (require verified email)
 			businesses.GET("", authMiddleware.RequireAuth(), businessHandler.GetMyBusinesses)

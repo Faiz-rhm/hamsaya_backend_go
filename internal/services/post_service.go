@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -1250,6 +1251,10 @@ func (s *PostService) buildPostResponse(
 		}
 	}
 
+	if viewerID == nil || *viewerID == "" {
+		maskPostResponseForAnon(response)
+	}
+
 	return response
 }
 
@@ -1459,6 +1464,10 @@ func (s *PostService) enrichPost(ctx context.Context, post *models.Post, viewerI
 		}
 	}
 
+	if viewerID == nil || *viewerID == "" {
+		maskPostResponseForAnon(response)
+	}
+
 	return response, nil
 }
 
@@ -1623,6 +1632,10 @@ func (s *PostService) enrichPostSimple(ctx context.Context, post *models.Post, v
 	}
 
 	// Note: OriginalPost is NOT enriched here to prevent infinite recursion
+
+	if viewerID == nil || *viewerID == "" {
+		maskPostResponseForAnon(response)
+	}
 
 	return response, nil
 }
@@ -2028,4 +2041,23 @@ func (s *PostService) ProcessExpiredSellPosts(ctx context.Context) (int, error) 
 		zap.Int("count", len(expiredIDs)),
 	)
 	return len(expiredIDs), nil
+}
+
+// maskPostResponseForAnon strips PII that unauthenticated callers must not
+// scrape from the public read endpoints: seller phone numbers and precise
+// coordinates. Coordinates are rounded to 2 decimals (~1 km) so map browsing
+// stays useful without exposing an exact home/shop pin. Client-side gating
+// is cosmetic — this is the real boundary.
+func maskPostResponseForAnon(response *models.PostResponse) {
+	response.ContactNo = nil
+	if response.Location != nil && response.Location.Latitude != nil && response.Location.Longitude != nil {
+		lat := math.Round(*response.Location.Latitude*100) / 100
+		lng := math.Round(*response.Location.Longitude*100) / 100
+		response.Location.Latitude = &lat
+		response.Location.Longitude = &lng
+	}
+	if response.Business != nil {
+		response.Business.PhoneNumber = nil
+		response.Business.Email = nil
+	}
 }
