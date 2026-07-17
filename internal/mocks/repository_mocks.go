@@ -251,6 +251,14 @@ func (m *MockPostRepository) Create(ctx context.Context, post *models.Post) erro
 	return args.Error(0)
 }
 
+func (m *MockPostRepository) GetByClientToken(ctx context.Context, userID, clientToken string) (*models.Post, error) {
+	args := m.Called(ctx, userID, clientToken)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Post), args.Error(1)
+}
+
 func (m *MockPostRepository) Update(ctx context.Context, post *models.Post) error {
 	args := m.Called(ctx, post)
 	return args.Error(0)

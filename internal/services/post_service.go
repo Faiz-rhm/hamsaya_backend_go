@@ -117,6 +117,19 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		return nil, err
 	}
 
+	// Idempotency: the mobile durable upload queue retries a post job until it
+	// records success. A create that succeeded but whose ack was lost (app
+	// killed before the client removed the job) would otherwise be replayed
+	// into a duplicate. If the same (user, client_token) already produced a
+	// post, return it instead of creating another — no daily-limit consumed.
+	if req.ClientToken != nil && *req.ClientToken != "" {
+		if existing, lookupErr := s.postRepo.GetByClientToken(ctx, userID, *req.ClientToken); lookupErr == nil && existing != nil {
+			s.logger.Info("CreatePost idempotent hit; returning existing post",
+				zap.String("user_id", userID), zap.String("post_id", existing.ID))
+			return s.GetPost(ctx, existing.ID, &userID)
+		}
+	}
+
 	// Product rule (opt-in): normal users only create marketplace (SELL)
 	// listings; FEED/EVENT/PULL are business updates requiring business_id.
 	// OFF by default so existing users on OLD app versions keep posting as
@@ -221,6 +234,7 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 		Visibility:  models.VisibilityPublic,
 		CreatedAt:   now,
 		UpdatedAt:   now,
+		ClientToken: req.ClientToken,
 	}
 
 	// Set visibility if provided
@@ -285,6 +299,17 @@ func (s *PostService) CreatePost(ctx context.Context, userID string, req *models
 
 	// Create post in database first (needed before creating poll)
 	if err := s.postRepo.Create(ctx, post); err != nil {
+		// Concurrent replay of the same job: another request already inserted
+		// this client_token and tripped the partial unique index. Treat as an
+		// idempotent hit — return the winning post, refund the slot we took.
+		if req.ClientToken != nil && *req.ClientToken != "" {
+			if existing, lookupErr := s.postRepo.GetByClientToken(ctx, userID, *req.ClientToken); lookupErr == nil && existing != nil {
+				if s.dailyLimitService != nil {
+					s.dailyLimitService.Refund(ctx, userID, string(req.Type))
+				}
+				return s.GetPost(ctx, existing.ID, &userID)
+			}
+		}
 		s.logger.Error("Failed to create post", zap.String("user_id", userID), zap.Error(err))
 		// Refund the daily-limit slot we pre-incremented above so the user
 		// is not punished for a backend failure outside their control.

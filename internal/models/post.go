@@ -85,6 +85,9 @@ type Post struct {
 	TotalLikes       int             `json:"total_likes"`
 	TotalShares      int             `json:"total_shares"`
 
+	// Client-generated idempotency token (see migration add_post_client_token).
+	ClientToken      *string         `json:"client_token,omitempty"`
+
 	// Timestamps
 	CreatedAt        time.Time       `json:"created_at"`
 	UpdatedAt        time.Time       `json:"updated_at"`
@@ -160,6 +163,11 @@ type CreatePostRequest struct {
 
 	// Business post: when set, post is attributed to this business
 	BusinessID *string `json:"business_id,omitempty" validate:"omitempty,uuid"`
+
+	// ClientToken makes creation idempotent: the mobile app persists a durable
+	// post job and retries it until acked, so a stable per-job UUID lets the
+	// server dedupe a replayed create into the original post instead of a copy.
+	ClientToken *string `json:"client_token,omitempty" validate:"omitempty,max=64"`
 }
 
 // CreatePostLocation is the nested location format sent by the app.

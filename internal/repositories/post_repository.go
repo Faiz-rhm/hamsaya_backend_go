@@ -18,6 +18,10 @@ type PostRepository interface {
 	// Post CRUD
 	Create(ctx context.Context, post *models.Post) error
 	GetByID(ctx context.Context, postID string) (*models.Post, error)
+	// GetByClientToken returns an existing post created with the given
+	// idempotency token for the user, or (nil, nil) if none. Backs the
+	// idempotent create path for the mobile durable upload queue.
+	GetByClientToken(ctx context.Context, userID, clientToken string) (*models.Post, error)
 	Update(ctx context.Context, post *models.Post) error
 	Delete(ctx context.Context, postID string) error
 
@@ -133,7 +137,7 @@ func (r *postRepository) Create(ctx context.Context, post *models.Post) error {
 			start_date, start_time, end_date, end_time, event_state, interested_count, going_count, expired_at,
 			address_location, user_location, country, province, district, neighborhood,
 			total_comments, total_likes, total_shares,
-			created_at, updated_at
+			created_at, updated_at, client_token
 		) VALUES (
 			$1, $2, $3, $4, $5,
 			$6, $7, $8, $9, $10,
@@ -141,7 +145,7 @@ func (r *postRepository) Create(ctx context.Context, post *models.Post) error {
 			$20, $21, $22, $23, $24, $25, $26, $27,
 			ST_GeogFromText($28), ST_GeogFromText($29), $30, $31, $32, $33,
 			$34, $35, $36,
-			$37, $38
+			$37, $38, $39
 		)
 	`
 
@@ -152,10 +156,29 @@ func (r *postRepository) Create(ctx context.Context, post *models.Post) error {
 		post.StartDate, post.StartTime, post.EndDate, post.EndTime, post.EventState, post.InterestedCount, post.GoingCount, post.ExpiredAt,
 		pointToWKT(post.AddressLocation), pointToWKT(post.UserLocation), post.Country, post.Province, post.District, post.Neighborhood,
 		post.TotalComments, post.TotalLikes, post.TotalShares,
-		post.CreatedAt, post.UpdatedAt,
+		post.CreatedAt, post.UpdatedAt, post.ClientToken,
 	)
 
 	return err
+}
+
+// GetByClientToken returns the user's post created with the given idempotency
+// token, or (nil, nil) when none exists. Used to dedupe replayed creates from
+// the mobile durable upload queue.
+func (r *postRepository) GetByClientToken(ctx context.Context, userID, clientToken string) (*models.Post, error) {
+	var postID string
+	err := r.db.Pool.QueryRow(ctx, `
+		SELECT id FROM posts
+		WHERE user_id = $1 AND client_token = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`, userID, clientToken).Scan(&postID)
+	if err == pgx.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return r.GetByID(ctx, postID)
 }
 
 // GetByID gets a post by ID
