@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/hamsaya/backend/internal/models"
@@ -631,6 +632,9 @@ func (s *EngagementService) sendWinback(ctx context.Context) int {
 	total := 0
 	for _, t := range targets {
 		recent := 0
+		// Newest post in the user's province — tapping the winback notification
+		// deep-links straight to this post's detail screen (not just the feed).
+		var newestPostID, newestPostType string
 		if t.province != "" {
 			_ = s.db.Pool.QueryRow(ctx, `
 				SELECT COUNT(*) FROM posts
@@ -638,6 +642,15 @@ func (s *EngagementService) sendWinback(ctx context.Context) int {
 				  AND created_at > NOW() - INTERVAL '7 days'
 				  AND province ILIKE $1
 			`, t.province).Scan(&recent)
+
+			_ = s.db.Pool.QueryRow(ctx, `
+				SELECT id::text, COALESCE(post_type, '')
+				FROM posts
+				WHERE deleted_at IS NULL
+				  AND province ILIKE $1
+				ORDER BY created_at DESC
+				LIMIT 1
+			`, t.province).Scan(&newestPostID, &newestPostType)
 		}
 
 		title := "Your neighborhood missed you"
@@ -654,15 +667,24 @@ func (s *EngagementService) sendWinback(ctx context.Context) int {
 			msg = "See what's new in your neighborhood on Hamsaya."
 		}
 
+		data := map[string]interface{}{
+			"type":   string(models.NotificationTypeWinback),
+			"action": "open_feed",
+		}
+		if newestPostID != "" {
+			data["post_id"] = newestPostID
+			data["action"] = "open_post"
+			if newestPostType != "" {
+				data["post_type"] = strings.ToUpper(newestPostType)
+			}
+		}
+
 		if _, err := s.notif.CreateNotification(ctx, &models.CreateNotificationRequest{
 			UserID:  t.userID,
 			Type:    models.NotificationTypeWinback,
 			Title:   &title,
 			Message: &msg,
-			Data: map[string]interface{}{
-				"type":   string(models.NotificationTypeWinback),
-				"action": "open_feed",
-			},
+			Data:    data,
 		}); err != nil {
 			s.logger.Error("create winback", zap.String("user_id", t.userID), zap.Error(err))
 			continue
